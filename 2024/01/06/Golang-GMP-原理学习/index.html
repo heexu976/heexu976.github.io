@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang GMP 原理学习</title>
+<meta name="keywords" content="Golang GMP 原理学习, HeXu">
+<meta name="description" content="前言通过写博客的方法学习一下 Golang 的各种机制和特性，顺便锻炼锻炼表达能力，这个是第一篇，先尽量让自己看懂吧。
+1. 概念1.1 线程线程已经很熟悉了，面试时八股文必考点之一，下面再简单总结一下：
+通常所说的线程，一般是指内核级别的">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang GMP 原理学习">
+<meta property="og:description" content="前言通过写博客的方法学习一下 Golang 的各种机制和特性，顺便锻炼锻炼表达能力，这个是第一篇，先尽量让自己看懂吧。
+1. 概念1.1 线程线程已经很熟悉了，面试时八股文必考点之一，下面再简单总结一下：
+通常所说的线程，一般是指内核级别的">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang GMP 原理学习</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-06</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>通过写博客的方法学习一下 Golang 的各种机制和特性，顺便锻炼锻炼表达能力，这个是第一篇，先尽量让自己看懂吧。</p>
+<h2 id="1-概念"><a href="#1-概念" class="headerlink" title="1. 概念"></a>1. 概念</h2><h3 id="1-1-线程"><a href="#1-1-线程" class="headerlink" title="1.1 线程"></a>1.1 线程</h3><p>线程已经很熟悉了，面试时八股文必考点之一，下面再简单总结一下：</p>
+<p>通常所说的线程，一般是指内核级别的线程，面试时常常用来和进程来进行比较，下面是线程和进程之间的区别：</p>
+<ul>
+<li><p><strong>线程</strong>：</p>
+<ul>
+<li>线程是进程内的轻量级执行单位，<strong>是操作系统最小调度单元</strong>；</li>
+<li>一个进程中可以存在多个线程。</li>
+<li>线程共享相同的内存和资源。</li>
+<li>线程在进程内创建，共享地址空间。</li>
+<li><strong>创建、销毁、调度交由内核完成，CPU 需完成用户态与内核态间的切换；</strong></li>
+<li>创建和切换线程的开销较小。</li>
+<li>线程可以在多个处理器核心上并行运行。</li>
+<li>一个线程崩溃可能导致整个进程终止。</li>
+<li>线程用于并发编程和提高应用程序响应性。</li>
+</ul>
+</li>
+<li><p><strong>进程</strong>：</p>
+<ul>
+<li>进程是正在执行的程序的实例。</li>
+<li>每个进程都是独立的，与其他进程隔离。</li>
+<li>进程拥有自己的内存和资源，需要使用进程间通信机制。</li>
+<li>进程由操作系统创建，拥有自己的地址空间。</li>
+<li>进程由操作系统的进程调度器调度和执行。</li>
+<li>创建和切换进程的开销较大。</li>
+<li>进程可以在多个处理器或多台机器上并行运行。</li>
+<li>一个进程崩溃不会影响其他进程。</li>
+<li>进程用于运行独立任务、资源隔离和系统稳定性。</li>
+</ul>
+</li>
+</ul>
+<h3 id="1-2-协程"><a href="#1-2-协程" class="headerlink" title="1.2 协程"></a>1.2 协程</h3><p>协程也比较好理解，相比于<strong>线程诞生于内核，协程是诞生于用户空间的</strong>，但是诞生于用户态的协程们需要收到内核线程的管理，也就是存在一个映射关系 N：1，创建、销毁、调度在用户态完成，对内核透明，所以协程更轻。</p>
+<p>但是也会带来问题：从属同一个内核级线程，无法并行，一个协程的阻塞，会导致从属于这个线程的所有协程阻塞。</p>
+<h3 id="1-3-Goroutine"><a href="#1-3-Goroutine" class="headerlink" title="1.3 Goroutine"></a>1.3 Goroutine</h3><p>基于以上问题，Golang 提出了 Goroutine，简单来说就是经过“优化”的协程，特点如下：</p>
+<ol>
+<li>用户态协程和内核级线程之间的映射关系为 M：N；</li>
+<li>创建、调度、销毁在用户态完成，对内核透明，非常轻量；</li>
+<li>利用多个线程，所以可以并行；</li>
+<li>栈空间大小是灵活可变的。</li>
+</ol>
+<p><a class="simple-lightbox" href="/../images/Golang-GMP-%E5%8E%9F%E7%90%86%E5%AD%A6%E4%B9%A0/go-gmp-goroutine.png"><img   src="/images/loading.svg" data-src="/../images/Golang-GMP-%E5%8E%9F%E7%90%86%E5%AD%A6%E4%B9%A0/go-gmp-goroutine.png"  alt="goroutine" lazyload></a><br>(not end … )</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%89%8D%E8%A8%80"><span class="top-box-text">前言</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-%E6%A6%82%E5%BF%B5"><span class="top-box-text">1. 概念</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-1-%E7%BA%BF%E7%A8%8B"><span class="top-box-text">1.1 线程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-2-%E5%8D%8F%E7%A8%8B"><span class="top-box-text">1.2 协程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-3-Goroutine"><span class="top-box-text">1.3 Goroutine</span></a></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
