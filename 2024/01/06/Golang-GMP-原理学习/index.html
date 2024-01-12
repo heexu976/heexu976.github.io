@@ -165,12 +165,79 @@
 <li>当M需要调度G的时候，优先从P本地队列取，再从全局队列取，最后从wait队列取；这样的好处是取P本地队列的时候，近似于无锁化，减少全局锁竞争；</li>
 <li>为了防止不同的P之间工作压力茶语过大，设立了<strong>work-stealing</strong>机制，本地队列为空的P可以从其他P本地队列中偷取一半的G到自身队列中；</li>
 </ol>
-<p>(not end … )</p>
+<h2 id="源码数据结构"><a href="#源码数据结构" class="headerlink" title="源码数据结构"></a>源码数据结构</h2><p>GMP 数据结构定义在 runtime&#x2F;runtime2.go 文件中。只摘取核心字段</p>
+<h2 id="3-1-G"><a href="#3-1-G" class="headerlink" title="3.1 G"></a>3.1 G</h2><pre class="line-numbers language-none"><code class="language-none">type g struct &#123;
+    &#x2F;&#x2F; ...
+    m         *m   &#x2F;&#x2F;负责执行当前G的M   
+    &#x2F;&#x2F; ...
+    sched     gobuf &#x2F;&#x2F;调度器
+    &#x2F;&#x2F; ...
+&#125;
+
+
+type gobuf struct &#123;
+    sp   uintptr &#x2F;&#x2F; CPU rsp 寄存器的值，指向函数调用栈的栈顶
+    pc   uintptr &#x2F;&#x2F; CPU rip 寄存器的值，指向下一条指令的地址
+    ret  uintptr &#x2F;&#x2F; 保存系统调用的返回值
+    bp   uintptr &#x2F;&#x2F; CPU rbp 寄存器的值，存储函数栈帧的起始位置
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>G的生命周期：</p>
+<pre class="line-numbers language-none"><code class="language-none">const(
+  _Gidle &#x3D; itoa &#x2F;&#x2F; 0 协程开始创建的状态
+  _Grunnable    &#x2F;&#x2F; 1 协程在待执行队列，等待被执行
+  _Grunning     &#x2F;&#x2F; 2 协程正在执行，一个P中一个G处于此状态
+  _Gsyscall     &#x2F;&#x2F; 3 协程正在执行系统调用
+  _Gwaiting     &#x2F;&#x2F; 4 协程处于挂起态，需要等待被唤醒。gc，channel通信是会经常进入这种状态
+  _Gdead        &#x2F;&#x2F; 6 协程刚初始化完成或者已经被销毁
+  _Gcopystack   &#x2F;&#x2F; 8 协程正在栈扩容中
+  _Gpreempted   &#x2F;&#x2F; 9 协程被抢占
+)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="3-2-M"><a href="#3-2-M" class="headerlink" title="3.2 M"></a>3.2 M</h3><pre class="line-numbers language-none"><code class="language-none">type m struct &#123;
+    g0      *g     &#x2F;&#x2F; 一种特殊的调度协程，不会执行用户函数，执行g的调度，和m数量1:1
+    &#x2F;&#x2F; ...
+    tls           [tlsSlots]uintptr &#x2F;&#x2F; thread-local storage 线程本地存储内容，存储的内容只对本线程可见
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="3-3-P"><a href="#3-3-P" class="headerlink" title="3.3 P"></a>3.3 P</h3><pre class="line-numbers language-none"><code class="language-none">type p struct &#123;
+    &#x2F;&#x2F; ...
+    runqhead uint32        &#x2F;&#x2F; 队列头部
+    runqtail uint32        &#x2F;&#x2F; 队列尾部
+    runq     [256]guintptr &#x2F;&#x2F; 本地 goroutine 队列，最大长度 256
+    runnext guintptr       &#x2F;&#x2F; 下一个可执行的 goroutine
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="3-4-schedt"><a href="#3-4-schedt" class="headerlink" title="3.4 schedt"></a>3.4 schedt</h3><p>schedt 是全局 goroutine 队列的封装</p>
+<pre class="line-numbers language-none"><code class="language-none">type schedt struct &#123;
+    &#x2F;&#x2F; ...
+    lock mutex      &#x2F;&#x2F; 操作全剧队列的锁
+    &#x2F;&#x2F; ...
+    runq     gQueue &#x2F;&#x2F; 全剧队列
+    runqsize int32  &#x2F;&#x2F; 队列容量
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="调度流程"><a href="#调度流程" class="headerlink" title="调度流程"></a>调度流程</h2><h3 id="4-1-两种G的转换"><a href="#4-1-两种G的转换" class="headerlink" title="4.1 两种G的转换"></a>4.1 两种G的转换</h3><p>goroutine 有两大类：</p>
+<ol>
+<li>g0: 负责调度普通的g，执行固定的调度流程</li>
+<li>g : 执行用户函数的普通g</li>
+</ol>
+<p>m通过p来调度执行的goroutine永远在普通g和g0之间切换，当g0找到可执行的g时，会调用**gogo()**，调度g执行用户定义的任务；当g需要主动让渡或者被动调度的时候会触发 **mcall()**，将执行权交回g0。</p>
+<h3 id="4-2-调度类型"><a href="#4-2-调度类型" class="headerlink" title="4.2 调度类型"></a>4.2 调度类型</h3><p>通常，调度指的是由g0按照特定策略找到下一个可以执行的g的过程。本小节指的是调度器p实现从一个g切换到另外一个g。<br>本小结“调度”的集中类型：</p>
+<ol>
+<li>主动调度</li>
+<li>被动调度</li>
+<li>正常调度</li>
+<li>抢占调度</li>
+</ol>
 
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%89%8D%E8%A8%80"><span class="top-box-text">前言</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-%E6%A6%82%E5%BF%B5"><span class="top-box-text">1. 概念</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-1-%E7%BA%BF%E7%A8%8B"><span class="top-box-text">1.1 线程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-2-%E5%8D%8F%E7%A8%8B"><span class="top-box-text">1.2 协程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-3-Goroutine"><span class="top-box-text">1.3 Goroutine</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-GMP-%E6%A8%A1%E5%9E%8B"><span class="top-box-text">2. GMP 模型</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-1-G"><span class="top-box-text">2.1 G</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-2-P"><span class="top-box-text">2.2 P</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-3-M"><span class="top-box-text">2.3 M</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-4-GMP"><span class="top-box-text">2.4 GMP</span></a></li></ol></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%89%8D%E8%A8%80"><span class="top-box-text">前言</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-%E6%A6%82%E5%BF%B5"><span class="top-box-text">1. 概念</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-1-%E7%BA%BF%E7%A8%8B"><span class="top-box-text">1.1 线程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-2-%E5%8D%8F%E7%A8%8B"><span class="top-box-text">1.2 协程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-3-Goroutine"><span class="top-box-text">1.3 Goroutine</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-GMP-%E6%A8%A1%E5%9E%8B"><span class="top-box-text">2. GMP 模型</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-1-G"><span class="top-box-text">2.1 G</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-2-P"><span class="top-box-text">2.2 P</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-3-M"><span class="top-box-text">2.3 M</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-4-GMP"><span class="top-box-text">2.4 GMP</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%BA%90%E7%A0%81%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">源码数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-G"><span class="top-box-text">3.1 G</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-2-M"><span class="top-box-text">3.2 M</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-3-P"><span class="top-box-text">3.3 P</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-4-schedt"><span class="top-box-text">3.4 schedt</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%B0%83%E5%BA%A6%E6%B5%81%E7%A8%8B"><span class="top-box-text">调度流程</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-1-%E4%B8%A4%E7%A7%8DG%E7%9A%84%E8%BD%AC%E6%8D%A2"><span class="top-box-text">4.1 两种G的转换</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-2-%E8%B0%83%E5%BA%A6%E7%B1%BB%E5%9E%8B"><span class="top-box-text">4.2 调度类型</span></a></li></ol></li></ol>
         </div>
           
       </div>
