@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Redis管窥</title>
+<meta name="keywords" content="Redis管窥, HeXu">
+<meta name="description" content="0 简介Redis 是完全开源免费的，是一个高性能的key-value内存数据库。
+Redis 有三个主要的特点, 有别于其它很多竞争对手 ：
+
+Redis支持数据的持久化，可以将内存中的数据保持在磁盘中，重启的时候可以再次加载进行使用；
+">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Redis管窥">
+<meta property="og:description" content="0 简介Redis 是完全开源免费的，是一个高性能的key-value内存数据库。
+Redis 有三个主要的特点, 有别于其它很多竞争对手 ：
+
+Redis支持数据的持久化，可以将内存中的数据保持在磁盘中，重启的时候可以再次加载进行使用；
+">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Redis管窥</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-16</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Redis/">
+              Redis
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="0-简介"><a href="#0-简介" class="headerlink" title="0 简介"></a>0 简介</h1><p>Redis 是完全开源免费的，是一个高性能的<strong>key-value</strong>内存数据库。</p>
+<p>Redis 有三个主要的特点, 有别于其它很多竞争对手 ：</p>
+<ol>
+<li><strong>Redis支持数据的持久化</strong>，可以将内存中的数据保持在磁盘中，重启的时候可以再次加载进行使用；</li>
+<li>Redis不仅仅支持简单的<strong>key-value</strong>类型的数据，同时还提供<strong>list</strong>，<strong>set</strong>，<strong>zset</strong>，<strong>hash</strong>等数据结构的存储；</li>
+<li>Redis支持数据的备份，即<strong>master-slave</strong>模式的数据备份。</li>
+</ol>
+<p>Redis优点：</p>
+<ul>
+<li><strong>性能极高</strong> – Redis能读的速度是110000次&#x2F;s,写的速度是81000次&#x2F;s 。</li>
+<li><strong>支持丰富的数据类型</strong> - Redis支持最大多数开发人员已经知道如列表，集合，可排序集合，哈希等数据类型。 这使得在应用中很容易解决的各种问题，因为我们知道哪些问题处理, 使用哪种数据类型更好解决。</li>
+<li><strong>操作都是原子的</strong> - 所有 Redis 的操作都是原子，从而确保当两个客户同时访问 Redis 服务器得到的是更新后的值（最新值）。 原子性（atomicity）：一个事务是一个不可分割的最小工作单位，事务中包括的诸操作要么都做，要么都不做。 Redis所有单个命令的执行都是原子性的，这与它的单线程机制有关；</li>
+</ul>
+<p>Redis 的优点：</p>
+<ul>
+<li>缓存</li>
+<li>消息传递队列中使用（Redis原生支持发布&#x2F;订阅）</li>
+<li>在应用程序中，如：Web应用程序会话，网站页面点击数等任何短暂的数据</li>
+</ul>
+<h1 id="1-常用数据结构"><a href="#1-常用数据结构" class="headerlink" title="1 常用数据结构"></a>1 常用数据结构</h1><table>
+<thead>
+<tr>
+<th align="center">结构类型</th>
+<th>结构存储的值</th>
+<th>应用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">string 字符串</td>
+<td>字符串、整数、浮点数</td>
+<td>缓存对象、常规计数、分布式锁、共享 session 信息等</td>
+</tr>
+<tr>
+<td align="center">List列表</td>
+<td>一个链表，链表上每个节点一个字符串</td>
+<td>消息队列（但是有个问题：1. 生产者需要自行实现全局唯一 ID；2. 不能以消费组形式消费数据）</td>
+</tr>
+<tr>
+<td align="center">Set集合</td>
+<td>字符串的无序集合</td>
+<td>聚合计算（并集、交集、差集）场景，比如点赞、共同关注、抽奖活动等</td>
+</tr>
+<tr>
+<td align="center">Hash散列</td>
+<td>包含键值对的无序散列表</td>
+<td>缓存对象、购物车等</td>
+</tr>
+<tr>
+<td align="center">Zset有序集合</td>
+<td>和散列一样，存储键值对</td>
+<td>序场景，比如排行榜、电话和姓名排序</td>
+</tr>
+</tbody></table>
+<p>后续新增数据结构：</p>
+<ol>
+<li>BitMap（2.2 版新增）：二值状态统计的场景，比如签到、判断用户登陆状态、连续签到用户总数等；</li>
+<li>HyperLogLog（2.8 版新增）：海量数据基数统计的场景，比如百万级网页 UV 计数等；</li>
+<li>GEO（3.2 版新增）：存储地理位置信息的场景，比如滴滴叫车；</li>
+<li>Stream（5.0 版新增）：消息队列，相比于基于 List 类型实现的消息队列，有这两个特有的特性：自动生成全局唯一消息ID，支持以消费组形式消费数据。</li>
+</ol>
+<p>(数据结构的详细实现挖个坑)</p>
+<h1 id="2-Redis-线程模型"><a href="#2-Redis-线程模型" class="headerlink" title="2 Redis 线程模型"></a>2 Redis 线程模型</h1><h2 id="Redis的单线程"><a href="#Redis的单线程" class="headerlink" title="Redis的单线程"></a>Redis的单线程</h2><p>Redis 单线程指的是「接收客户端请求-&gt;解析请求 -&gt;进行数据读写等操作-&gt;发送数据给客户端」这个过程是由一个线程（主线程）来完成的。</p>
+<p>但是，Redis 程序并不是单线程的，Redis 在启动的时候，是会启动后台线程（BIO）的：</p>
+<ul>
+<li>Redis 在 2.6 版本，会启动 2 个后台线程，分别处理关闭文件、AOF 刷盘这两个任务；</li>
+<li>Redis 在 4.0 版本之后，新增了一个新的后台线程，用来异步释放 Redis 内存，也就是 lazyfree 线程。</li>
+</ul>
+<p>之所以 Redis 为「关闭文件、AOF 刷盘、释放内存」这些任务创建单独的线程来处理，是因为这些任务的操作都是很耗时的，如果把这些任务都放在主线程来处理，那么 Redis 主线程就很容易发生阻塞，这样就无法处理后续的请求了。<br>后台线程相当于一个消费者，生产者把耗时任务丢到任务队列中，消费者（BIO）不停轮询这个队列，拿出任务就去执行对应的方法即可。</p>
+<p><a class="simple-lightbox" href="/../images/Redis%E7%AE%A1%E7%AA%A5/image.png"><img   src="/images/loading.svg" data-src="/../images/Redis%E7%AE%A1%E7%AA%A5/image.png"  alt="redis-thread" lazyload></a><br>关闭文件、AOF 刷盘、释放内存这三个任务都有各自的任务队列：</p>
+<p>BIO_CLOSE_FILE，关闭文件任务队列：当队列有任务后，后台线程会调用 close(fd) ，将文件关闭；<br>BIO_AOF_FSYNC，AOF刷盘任务队列：当 AOF 日志配置成 everysec 选项后，主线程会把 AOF 写日志操作封装成一个任务，也放到队列中。当发现队列有任务后，后台线程会调用 fsync(fd)，将 AOF 文件刷盘，<br>BIO_LAZY_FREE，lazy free 任务队列：当队列有任务后，后台线程会 free(obj) 释放对象 &#x2F; free(dict) 删除数据库所有对象 &#x2F; free(skiplist) 释放跳表对象；</p>
+<h1 id="3-Redis-持久化"><a href="#3-Redis-持久化" class="headerlink" title="3 Redis 持久化"></a>3 Redis 持久化</h1><p>Redis 的读写操作都是在内存中，所以 Redis 性能才会高，但是当 Redis 重启后，内存中的数据就会丢失，那为了保证内存中的数据不会丢失，Redis 实现了数据持久化的机制，这个机制会把数据存储到磁盘，这样在 Redis 重启就能够从磁盘中恢复原有的数据。</p>
+<p>Redis 共有三种数据持久化的方式：</p>
+<ul>
+<li>AOF 日志：每执行一条写操作命令，就把该命令以追加的方式写入到一个文件里；</li>
+<li>RDB 快照：将某一时刻的内存数据，以二进制的方式写入磁盘；</li>
+<li>混合持久化方式：Redis 4.0 新增的方式，集成了 AOF 和 RBD 的优点；</li>
+</ul>
+<h1 id="4-Redis-集群"><a href="#4-Redis-集群" class="headerlink" title="4 Redis 集群"></a>4 Redis 集群</h1><h2 id="Redis-如何实现服务高可用？"><a href="#Redis-如何实现服务高可用？" class="headerlink" title="Redis 如何实现服务高可用？"></a>Redis 如何实现服务高可用？</h2><p>要想设计一个高可用的 Redis 服务，一定要从 Redis 的多服务节点来考虑，比如 Redis 的主从复制、哨兵模式、切片集群。</p>
+<h3 id="主从复制"><a href="#主从复制" class="headerlink" title="主从复制"></a>主从复制</h3><p>主从复制是 Redis 高可用服务的最基础的保证，实现方案就是将从前的一台 Redis 服务器，同步数据到多台从 Redis 服务器上，即一主多从的模式，且主从服务器之间采用的是「读写分离」的方式。</p>
+<p>主服务器可以进行读写操作，当发生写操作时自动将写操作同步给从服务器，而从服务器一般是只读，并接受主服务器同步过来写操作命令，然后执行这条命令。</p>
+<h3 id="哨兵模式"><a href="#哨兵模式" class="headerlink" title="哨兵模式"></a>哨兵模式</h3><p>在使用 Redis 主从服务的时候，会有一个问题，就是当 Redis 的主从服务器出现故障宕机时，需要手动进行恢复。</p>
+<p>为了解决这个问题，Redis 增加了哨兵模式（Redis Sentinel），因为哨兵模式做到了可以监控主从服务器，并且提供主从节点故障转移的功能。</p>
+<h3 id="切片集群模式"><a href="#切片集群模式" class="headerlink" title="切片集群模式"></a>切片集群模式</h3><p>当 Redis 缓存数据量大到一台服务器无法缓存时，就需要使用 Redis 切片集群（Redis Cluster ）方案，它将数据分布在不同的服务器上，以此来降低系统对单主节点的依赖，从而提高 Redis 服务的读写性能。</p>
+<h2 id="集群脑裂导致数据丢失怎么办？"><a href="#集群脑裂导致数据丢失怎么办？" class="headerlink" title="集群脑裂导致数据丢失怎么办？"></a>集群脑裂导致数据丢失怎么办？</h2><h3 id="什么是脑裂"><a href="#什么是脑裂" class="headerlink" title="什么是脑裂"></a>什么是脑裂</h3><p>由于网络问题，集群节点之间失去联系。主从数据不同步；重新平衡选举，产生两个主服务。等网络恢复，旧主节点会降级为从节点，再与新主节点进行同步复制的时候，由于会从节点会清空自己的缓冲区，所以导致之前客户端写入的数据丢失了。</p>
+<h3 id="解决方案"><a href="#解决方案" class="headerlink" title="解决方案"></a>解决方案</h3><p>当主节点发现从节点下线或者通信超时的总数量小于阈值时，那么禁止主节点进行写数据，直接把错误返回给客户端。</p>
+<h1 id="Redis-过期删除与内存淘汰"><a href="#Redis-过期删除与内存淘汰" class="headerlink" title="Redis 过期删除与内存淘汰"></a>Redis 过期删除与内存淘汰</h1><h2 id="Redis-使用的过期删除策略"><a href="#Redis-使用的过期删除策略" class="headerlink" title="Redis 使用的过期删除策略"></a>Redis 使用的过期删除策略</h2><p>Redis 使用的过期删除策略是「<strong>惰性删除+定期删除</strong>」这两种策略配和使用</p>
+<h3 id="惰性删除策略"><a href="#惰性删除策略" class="headerlink" title="惰性删除策略"></a>惰性删除策略</h3><p>不主动删除过期键，每次从数据库访问 key 时，都检测 key 是否过期，如果过期则删除该 key。</p>
+<h3 id="定期删除策略"><a href="#定期删除策略" class="headerlink" title="定期删除策略"></a>定期删除策略</h3><p>每隔一段时间「随机」从数据库中取出一定数量的 key 进行检查，并删除其中的过期key。</p>
+<h2 id="Redis-持久化时，对过期键会如何处理的？"><a href="#Redis-持久化时，对过期键会如何处理的？" class="headerlink" title="Redis 持久化时，对过期键会如何处理的？"></a>Redis 持久化时，对过期键会如何处理的？</h2><p>Redis 持久化文件有两种格式：RDB（Redis Database）和 AOF（Append Only File），下面我们分别来看过期键在这两种格式中的呈现状态。</p>
+<p>RDB 文件分为两个阶段，<strong>RDB文件生成阶段</strong>和<strong>加载阶段</strong>。</p>
+<ul>
+<li><strong>RDB 文件生成阶段</strong>：从内存状态持久化成 RDB（文件）的时候，会对 key 进行过期检查，过期的键「不会」被保存到新的 RDB 文件中，因此 Redis 中的过期键不会对生成新 RDB 文件产生任何影响。</li>
+<li><strong>RDB 加载阶段</strong>：RDB 加载阶段时，要看服务器是主服务器还是从服务器，分别对应以下两种情况：<ul>
+<li><strong>如果 Redis 是「主服务器」运行模式的话，在载入 RDB 文件时，程序会对文件中保存的键进行检查，过期键「不会」被载入到数据库中</strong>。所以过期键不会对载入 RDB 文件的主服务器造成影响；</li>
+<li><strong>如果 Redis 是「从服务器」运行模式的话，在载入 RDB 文件时，不论键是否过期都会被载入到数据库中。</strong> 但由于主从服务器在进行数据同步时，从服务器的数据会被清空。所以一般来说，过期键对载入 RDB 文件的从服务器也不会造成影响。</li>
+</ul>
+</li>
+</ul>
+<p>AOF 文件分为两个阶段，<strong>AOF文件写入阶段</strong>和 <strong>AOF重写阶段</strong>。</p>
+<ul>
+<li><strong>AOF 文件写入阶段</strong>：当 Redis 以 AOF 模式持久化时，如果数据库某个过期键还没被删除，那么 AOF 文件会保留此过期键，当此过期键被删除后，Redis 会向 AOF 文件追加一条 DEL 命令来显式地删除该键值。</li>
+<li><strong>AOF 重写阶段</strong>：执行 AOF 重写时，会对 Redis 中的键值对进行检查，已过期的键不会被保存到重写后的 AOF 文件中，因此不会对 AOF 重写造成任何影响。</li>
+</ul>
+<h2 id="Redis-主从模式中，对过期键会如何处理？"><a href="#Redis-主从模式中，对过期键会如何处理？" class="headerlink" title="Redis 主从模式中，对过期键会如何处理？"></a>Redis 主从模式中，对过期键会如何处理？</h2><p>当 Redis 运行在主从模式下时，<strong>从库不会进行过期扫描，从库对过期的处理是被动的</strong>。也就是即使从库中的 key 过期了，如果有客户端访问从库时，依然可以得到 key 对应的值，像未过期的键值对一样返回。</p>
+<p>从库的过期键处理依靠主服务器控制，<strong>主库在 key 到期时，会在 AOF 文件里增加一条 del 指令，同步到所有的从库</strong>，从库通过执行这条 del 指令来删除过期的 key。</p>
+<h2 id="Redis-内存满了，会发生什么？"><a href="#Redis-内存满了，会发生什么？" class="headerlink" title="Redis 内存满了，会发生什么？"></a>Redis 内存满了，会发生什么？</h2><p>在 Redis 的运行内存达到了某个阀值，就会触发内存淘汰机制，这个阀值就是我们设置的最大运行内存，此值在 Redis 的配置文件中可以找到，配置项为 <strong>maxmemory。</strong></p>
+<h2 id="Redis-内存淘汰策略有哪些？"><a href="#Redis-内存淘汰策略有哪些？" class="headerlink" title="Redis 内存淘汰策略有哪些？"></a>Redis 内存淘汰策略有哪些？</h2><p>针对「进行数据淘汰」这一类策略，又可以细分为「在设置了过期时间的数据中进行淘汰」和「在所有数据范围内进行淘汰」这两类策略。 在设置了过期时间的数据中进行淘汰：</p>
+<ul>
+<li><strong>volatile-random</strong>：随机淘汰设置了过期时间的任意键值</li>
+<li><strong>volatile-ttl</strong>：优先淘汰更早过期的键值。</li>
+<li><strong>volatile-lru</strong>（Redis3.0 之前，默认的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最久未使用的键值；</li>
+<li><strong>volatile-lfu</strong>（Redis 4.0 后新增的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最少使用的键值；</li>
+</ul>
+<p>在所有数据范围内进行淘汰：</p>
+<ul>
+<li><strong>allkeys-random</strong>：随机淘汰任意键值;</li>
+<li><strong>allkeys-lru</strong>：淘汰整个键值中最久未使用的键值；</li>
+<li><strong>allkeys-lfu</strong>（Redis 4.0 后新增的内存淘汰策略）：淘汰整个键值中最少使用的键值。</li>
+</ul>
+<h2 id="LRU-算法和-LFU-算法有什么区别？"><a href="#LRU-算法和-LFU-算法有什么区别？" class="headerlink" title="LRU 算法和 LFU 算法有什么区别？"></a>LRU 算法和 LFU 算法有什么区别？</h2><p>LRU 全称是 Least Recently Used 翻译为<strong>最近最少使用</strong>，会选择淘汰最近最少使用的数据。<br>LFU 全称是 Least Frequently Used 翻译为<strong>最近最不常用的</strong>，LFU 算法是根据数据访问次数来淘汰数据的，它的核心思想是“如果数据过去被访问多次，那么将来被访问的频率也更高”。</p>
+<h1 id="5-Redis-缓存设计"><a href="#5-Redis-缓存设计" class="headerlink" title="5 Redis 缓存设计"></a>5 Redis 缓存设计</h1><h2 id="如何避免缓存雪崩、缓存击穿、缓存穿透？"><a href="#如何避免缓存雪崩、缓存击穿、缓存穿透？" class="headerlink" title="如何避免缓存雪崩、缓存击穿、缓存穿透？"></a>如何避免缓存雪崩、缓存击穿、缓存穿透？</h2><h3 id="缓存雪崩（大量数据同时失效）"><a href="#缓存雪崩（大量数据同时失效）" class="headerlink" title="缓存雪崩（大量数据同时失效）"></a>缓存雪崩（大量数据同时失效）</h3><p>大量缓存数据在同一时间过期（失效）时，如果此时有大量的用户请求，都无法在 Redis 中处理，于是全部请求都直接访问数据库，从而导致数据库的压力骤增，严重的会造成数据库宕机，从而形成一系列连锁反应，造成整个系统崩溃，这就是缓存雪崩。</p>
+<p>对于缓存雪崩问题，我们可以采用两种方案解决：</p>
+<ul>
+<li>将缓存失效时间随机打散： 我们可以在原有的失效时间基础上增加一个随机值（比如 1 到 10 分钟）这样每个缓存的过期时间都不重复了，也就降低了缓存集体失效的概率。</li>
+<li>设置缓存不过期： 我们可以通过后台服务来更新缓存数据，从而避免因为缓存失效造成的缓存雪崩，也可以在一定程度上避免缓存并发问题。</li>
+</ul>
+<h3 id="缓存击穿（单个数据过期，又被频繁访问）"><a href="#缓存击穿（单个数据过期，又被频繁访问）" class="headerlink" title="缓存击穿（单个数据过期，又被频繁访问）"></a>缓存击穿（单个数据过期，又被频繁访问）</h3><p>如果缓存中的某个热点数据过期了，此时大量的请求访问了该热点数据，就无法从缓存中读取，直接访问数据库，数据库很容易就被高并发的请求冲垮，这就是缓存击穿的问题。</p>
+<p>可以发现缓存击穿跟缓存雪崩很相似，你可以认为缓存击穿是缓存雪崩的一个子集。 应对缓存击穿可以采取前面说到两种方案：</p>
+<ul>
+<li><strong>互斥锁方案</strong>（Redis 中使用 setNX 方法设置一个状态位，表示这是一种锁定状态），保证同一时间只有一个业务线程请求缓存，未能获取互斥锁的请求，要么等待锁释放后重新读取缓存，要么就返回空值或者默认值。</li>
+<li><strong>不给热点数据设置过期时间</strong>，由后台异步更新缓存，或者在热点数据准备要过期前，提前通知后台线程更新缓存以及重新设置过期时间；</li>
+</ul>
+<h3 id="缓存穿透（既不在缓存中，也不在数据库中）"><a href="#缓存穿透（既不在缓存中，也不在数据库中）" class="headerlink" title="缓存穿透（既不在缓存中，也不在数据库中）"></a>缓存穿透（既不在缓存中，也不在数据库中）</h3><p>当用户访问的数据，既不在缓存中，也不在数据库中，导致请求在访问缓存时，发现缓存缺失，再去访问数据库时，发现数据库中也没有要访问的数据，没办法构建缓存数据，来服务后续的请求。那么当有大量这样的请求到来时，数据库的压力骤增，这就是缓存穿透的问题。</p>
+<p>缓存穿透的发生一般有这两种情况：</p>
+<ul>
+<li>业务误操作，缓存中的数据和数据库中的数据都被误删除了，所以导致缓存和数据库中都没有数据；</li>
+<li>黑客恶意攻击，故意大量访问某些读取不存在数据的业务；</li>
+</ul>
+<p>应对缓存穿透的方案，常见的方案有三种。</p>
+<ul>
+<li>非法请求的限制：当有大量恶意请求访问不存在的数据的时候，也会发生缓存穿透，因此在 API 入口处我们要判断求请求参数是否合理，请求参数是否含有非法值、请求字段是否存在，如果判断出是恶意请求就直接返回错误，避免进一步访问缓存和数据库。</li>
+<li>设置空值或者默认值：当我们线上业务发现缓存穿透的现象时，可以针对查询的数据，在缓存中设置一个空值或者默认值，这样后续请求就可以从缓存中读取到空值或者默认值，返回给应用，而不会继续查询数据库。</li>
+<li>使用布隆过滤器快速判断数据是否存在，避免通过查询数据库来判断数据是否存在：我们可以在写入数据库数据时，使用布隆过滤器做个标记，然后在用户请求到来时，业务线程确认缓存失效后，可以通过查询布隆过滤器快速判断数据是否存在，如果不存在，就不用通过查询数据库来判断数据是否存在，即使发生了缓存穿透，大量请求只会查询 Redis 和布隆过滤器，而不会查询数据库，保证了数据库能正常运行，Redis 自身也是支持布隆过滤器的。</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#0-%E7%AE%80%E4%BB%8B"><span class="top-box-text">0 简介</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E5%B8%B8%E7%94%A8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">1 常用数据结构</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-Redis-%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B"><span class="top-box-text">2 Redis 线程模型</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#Redis%E7%9A%84%E5%8D%95%E7%BA%BF%E7%A8%8B"><span class="top-box-text">Redis的单线程</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-Redis-%E6%8C%81%E4%B9%85%E5%8C%96"><span class="top-box-text">3 Redis 持久化</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-Redis-%E9%9B%86%E7%BE%A4"><span class="top-box-text">4 Redis 集群</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#Redis-%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%9C%8D%E5%8A%A1%E9%AB%98%E5%8F%AF%E7%94%A8%EF%BC%9F"><span class="top-box-text">Redis 如何实现服务高可用？</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6"><span class="top-box-text">主从复制</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%93%A8%E5%85%B5%E6%A8%A1%E5%BC%8F"><span class="top-box-text">哨兵模式</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%88%87%E7%89%87%E9%9B%86%E7%BE%A4%E6%A8%A1%E5%BC%8F"><span class="top-box-text">切片集群模式</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%9B%86%E7%BE%A4%E8%84%91%E8%A3%82%E5%AF%BC%E8%87%B4%E6%95%B0%E6%8D%AE%E4%B8%A2%E5%A4%B1%E6%80%8E%E4%B9%88%E5%8A%9E%EF%BC%9F"><span class="top-box-text">集群脑裂导致数据丢失怎么办？</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E8%84%91%E8%A3%82"><span class="top-box-text">什么是脑裂</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88"><span class="top-box-text">解决方案</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#Redis-%E8%BF%87%E6%9C%9F%E5%88%A0%E9%99%A4%E4%B8%8E%E5%86%85%E5%AD%98%E6%B7%98%E6%B1%B0"><span class="top-box-text">Redis 过期删除与内存淘汰</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#Redis-%E4%BD%BF%E7%94%A8%E7%9A%84%E8%BF%87%E6%9C%9F%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5"><span class="top-box-text">Redis 使用的过期删除策略</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%83%B0%E6%80%A7%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5"><span class="top-box-text">惰性删除策略</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%AE%9A%E6%9C%9F%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5"><span class="top-box-text">定期删除策略</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#Redis-%E6%8C%81%E4%B9%85%E5%8C%96%E6%97%B6%EF%BC%8C%E5%AF%B9%E8%BF%87%E6%9C%9F%E9%94%AE%E4%BC%9A%E5%A6%82%E4%BD%95%E5%A4%84%E7%90%86%E7%9A%84%EF%BC%9F"><span class="top-box-text">Redis 持久化时，对过期键会如何处理的？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#Redis-%E4%B8%BB%E4%BB%8E%E6%A8%A1%E5%BC%8F%E4%B8%AD%EF%BC%8C%E5%AF%B9%E8%BF%87%E6%9C%9F%E9%94%AE%E4%BC%9A%E5%A6%82%E4%BD%95%E5%A4%84%E7%90%86%EF%BC%9F"><span class="top-box-text">Redis 主从模式中，对过期键会如何处理？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#Redis-%E5%86%85%E5%AD%98%E6%BB%A1%E4%BA%86%EF%BC%8C%E4%BC%9A%E5%8F%91%E7%94%9F%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="top-box-text">Redis 内存满了，会发生什么？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#Redis-%E5%86%85%E5%AD%98%E6%B7%98%E6%B1%B0%E7%AD%96%E7%95%A5%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">Redis 内存淘汰策略有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#LRU-%E7%AE%97%E6%B3%95%E5%92%8C-LFU-%E7%AE%97%E6%B3%95%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">LRU 算法和 LFU 算法有什么区别？</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#5-Redis-%E7%BC%93%E5%AD%98%E8%AE%BE%E8%AE%A1"><span class="top-box-text">5 Redis 缓存设计</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E9%81%BF%E5%85%8D%E7%BC%93%E5%AD%98%E9%9B%AA%E5%B4%A9%E3%80%81%E7%BC%93%E5%AD%98%E5%87%BB%E7%A9%BF%E3%80%81%E7%BC%93%E5%AD%98%E7%A9%BF%E9%80%8F%EF%BC%9F"><span class="top-box-text">如何避免缓存雪崩、缓存击穿、缓存穿透？</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E7%BC%93%E5%AD%98%E9%9B%AA%E5%B4%A9%EF%BC%88%E5%A4%A7%E9%87%8F%E6%95%B0%E6%8D%AE%E5%90%8C%E6%97%B6%E5%A4%B1%E6%95%88%EF%BC%89"><span class="top-box-text">缓存雪崩（大量数据同时失效）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E7%BC%93%E5%AD%98%E5%87%BB%E7%A9%BF%EF%BC%88%E5%8D%95%E4%B8%AA%E6%95%B0%E6%8D%AE%E8%BF%87%E6%9C%9F%EF%BC%8C%E5%8F%88%E8%A2%AB%E9%A2%91%E7%B9%81%E8%AE%BF%E9%97%AE%EF%BC%89"><span class="top-box-text">缓存击穿（单个数据过期，又被频繁访问）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E7%BC%93%E5%AD%98%E7%A9%BF%E9%80%8F%EF%BC%88%E6%97%A2%E4%B8%8D%E5%9C%A8%E7%BC%93%E5%AD%98%E4%B8%AD%EF%BC%8C%E4%B9%9F%E4%B8%8D%E5%9C%A8%E6%95%B0%E6%8D%AE%E5%BA%93%E4%B8%AD%EF%BC%89"><span class="top-box-text">缓存穿透（既不在缓存中，也不在数据库中）</span></a></li></ol></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/16/Golang-%E7%9A%84%E5%8D%95%E6%9C%BA%E9%94%81%E5%AE%9E%E7%8E%B0/">
+          <h3 class="post-title">
+            下一篇：Golang 的单机锁实现
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
