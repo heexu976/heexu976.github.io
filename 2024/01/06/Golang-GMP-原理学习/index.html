@@ -228,16 +228,578 @@ type gobuf struct &#123;
 <p>m通过p来调度执行的goroutine永远在普通g和g0之间切换，当g0找到可执行的g时，会调用**gogo()**，调度g执行用户定义的任务；当g需要主动让渡或者被动调度的时候会触发 **mcall()**，将执行权交回g0。</p>
 <h3 id="4-2-调度类型"><a href="#4-2-调度类型" class="headerlink" title="4.2 调度类型"></a>4.2 调度类型</h3><p>通常，调度指的是由g0按照特定策略找到下一个可以执行的g的过程。本小节指的是调度器p实现从一个g切换到另外一个g。<br>本小结“调度”的集中类型：</p>
 <ol>
-<li>主动调度</li>
-<li>被动调度</li>
-<li>正常调度</li>
-<li>抢占调度</li>
+<li>主动调度<br>用户主动执行让渡，主要方式是用户在执行代码中调用了<strong>runtime.Gosched</strong>。这是g回让出当前的执行权，主动进行队列等待等待下次被调度执行。</li>
+<li>被动调度<br>当前不满足某些条件，g回陷入阻塞态而无法被调度，直到关注的条件达成后，g才会在阻塞状态中唤醒，重新进入可执行队列等待被调度。<br>常见的被动调度触发方式是因channel操作或者互斥锁操作陷入阻塞等操作，底层会进入到<strong>gopark</strong> 方法。<br>  <strong>goready</strong>和<strong>gopark</strong>方法经常成对出现，能够将g从阻塞态中恢复，重新进入等待执行的状态。</li>
+<li>正常调度<br>g执行的任务已经完成，g0会将当前g置为死亡状态，等待下一轮的调度；</li>
+<li>抢占调度<br>倘若g执行系统调用的时间过长，且全局的p资源比较紧缺，此时将p和g解绑，抢占出来用于其他g的调度。等g完成系统调用后，会重新进入可执行队列中等待被调度。</li>
 </ol>
+<p>值得一提的是，前三种调度都是由m下的g0完成，唯独抢占调度不同。</p>
+<p>因为发起了系统调用时需要打破用户态进入内核态，此时m也会因系统调用而陷入僵直，无法主动完成抢调度的行为。<br>因此golang会有一个一个全局监控进程monitor g 的存在，这个g会越过p直接与一个m绑定，不断轮询对所有的p的执行状况进行监控，倘若法子安满足抢占调度条件，则会从第三方的角度出手干预，主动发起该动作。</p>
+<h3 id="4-3-宏观的调度流程"><a href="#4-3-宏观的调度流程" class="headerlink" title="4.3 宏观的调度流程"></a>4.3 宏观的调度流程</h3><p>先对gmp的宏观调度流程进行整体串联：</p>
+<ol>
+<li>以 g0 -&gt; g -&gt; g0的一轮循环为例进行串联；</li>
+<li>g0执行schedule()函数，寻找到用于执行的g;</li>
+<li>g0执行execute()方法，更新当前的g、p状态信息，并调用gogo()方法，将执行权交给g；</li>
+<li>g因主动让渡（gosche_m()）、被动调度（park_m()）、正常结束（goexit()）等原因，调用m_call函数，执行权重新回到了g0手中；</li>
+<li>g0重新执行schedule()函数，开启新一轮循环。</li>
+</ol>
+<h3 id="4-4-schedule"><a href="#4-4-schedule" class="headerlink" title="4.4 schedule"></a>4.4 schedule</h3><p>调度流程的主干方法是位于 runtime&#x2F;proc.go 中的 schedule 函数，此时的执行权位于 g0 手中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func schedule() &#123;
+    &#x2F;&#x2F; ...
+    gp, inheritTime, tryWakeP :&#x3D; findRunnable() &#x2F;&#x2F; blocks until work is available
+
+
+    &#x2F;&#x2F; ...
+    execute(gp, inheritTime)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<ol>
+<li>寻找一个可执行的g</li>
+<li>执行该g</li>
+</ol>
+<h3 id="4-5-findRunnable"><a href="#4-5-findRunnable" class="headerlink" title="4.5 findRunnable"></a>4.5 findRunnable</h3><p>调度流程中，一个非常核心的步骤，就是为 m 寻找到下一个执行的 g，这部分内容位于 runtime&#x2F;proc.go 的 findRunnable 方法中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func findRunnable() (gp *g, inheritTime, tryWakeP bool) &#123;
+    _g_ :&#x3D; getg()
+
+
+top:
+    _p_ :&#x3D; _g_.m.p.ptr()
+    &#x2F;&#x2F; ...
+
+     &#x2F;&#x2F; p每调度61次，会从全局队列获取一个goroutine进行执行，并将一个全局队列中的g转移到p的本地队列中，让全局队列中的g也得到更充分的执行机会；
+    if _p_.schedtick%61 &#x3D;&#x3D; 0 &amp;&amp; sched.runqsize &gt; 0 &#123;
+        lock(&amp;sched.lock)
+        gp &#x3D; globrunqget(_p_, 1) &#x2F;&#x2F; 全局队列中获取一个g之外，还取一个g从全局队列移动到p的本地队列（下面有原理分析）
+        unlock(&amp;sched.lock)
+        if gp !&#x3D; nil &#123;
+            return gp, false, false
+        &#125;
+    &#125;
+    
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 尝试从p本地队列取一个可执行的g（下面有原理分析）
+    if gp, inheritTime :&#x3D; runqget(_p_); gp !&#x3D; nil &#123;
+        return gp, inheritTime, false
+    &#125;
+    
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 倘若队列中没有可执行的g，会从全局队列中获取
+    if sched.runqsize !&#x3D; 0 &#123;
+        lock(&amp;sched.lock)
+        gp :&#x3D; globrunqget(_p_, 0)
+        unlock(&amp;sched.lock)
+        if gp !&#x3D; nil &#123;
+            return gp, false, false
+        &#125;
+    &#125;
+  
+  &#x2F;&#x2F; 倘若全局队列中和本地队列中都没有g，会获取准备就绪的网络协程
+    if netpollinited() &amp;&amp; atomic.Load(&amp;netpollWaiters) &gt; 0 &amp;&amp; atomic.Load64(&amp;sched.lastpoll)!&#x3D; 0 &#123;
+        if list :&#x3D; netpoll(0); !list.empty() &#123; &#x2F;&#x2F; non-blocking
+            gp :&#x3D; list.pop()
+            injectglist(&amp;list)
+            casgstatus(gp, _Gwaiting, _Grunnable)
+            return gp, false, false
+        &#125;
+    &#125;
+
+
+    &#x2F;&#x2F; ...
+    procs :&#x3D; uint32(gomaxprocs)
+    if _g_.m.spinning || 2*atomic.Load(&amp;sched.nmspinning) &lt; procs-atomic.Load(&amp;sched.npidle) &#123;
+        if !_g_.m.spinning &#123;
+            _g_.m.spinning &#x3D; true
+            atomic.Xadd(&amp;sched.nmspinning, 1)
+        &#125;
+
+        &#x2F;&#x2F; 从其他p中偷取g（下面有原理分析）
+        gp, inheritTime, tnow, w, newWork :&#x3D; stealWork(now)
+              now &#x3D; tnow
+              if gp !&#x3D; nil &#123;
+                  &#x2F;&#x2F; Successfully stole.
+                  return gp, inheritTime, false
+              &#125;
+              if newWork &#123;
+                  &#x2F;&#x2F; There may be new timer or GC work; restart to
+                  &#x2F;&#x2F; discover.
+                  goto top
+              &#125;
+              if w !&#x3D; 0 &amp;&amp; (pollUntil &#x3D;&#x3D; 0 || w &lt; pollUntil) &#123;
+                  &#x2F;&#x2F; Earlier timer to wait for.
+                  pollUntil &#x3D; w
+              &#125;
+          &#125;
+&#125;
+    &#x2F;&#x2F;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<p><strong>globrunqget：</strong></p>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; 除了从全局队列中取一个g用于执行，还会额外将一个g从全局队列转移到p的本地队列
+func globrunqget(_p_ *p, max int32) *g &#123;
+    if sched.runqsize &#x3D;&#x3D; 0 &#123;
+        return nil
+    &#125;
+    n :&#x3D; sched.runqsize&#x2F;gomaxprocs + 1
+    if n &gt; sched.runqsize &#123;
+        n &#x3D; sched.runqsize
+    &#125;
+    if max &gt; 0 &amp;&amp; n &gt; max &#123;
+        n &#x3D; max
+    &#125;
+    if n &gt; int32(len(_p_.runq))&#x2F;2 &#123;
+        n &#x3D; int32(len(_p_.runq)) &#x2F; 2
+    &#125;
+    sched.runqsize -&#x3D; n
+    gp :&#x3D; sched.runq.pop()
+    n--
+    for ; n &gt; 0; n-- &#123;
+        gp1 :&#x3D; sched.runq.pop()
+        runqput(_p_, gp1, false)
+    &#125;
+    return gp
+  &#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>将一个 g 由全局队列转移到 p 本地队列的执行逻辑位于 runqput 方法中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func runqput(_p_ *p, gp *g, next bool) &#123;
+    &#x2F;&#x2F; ...
+
+retry:
+    &#x2F;&#x2F; 取本地队列队首的索引，并加锁
+    h :&#x3D; atomic.LoadAcq(&amp;_p_.runqhead) &#x2F;&#x2F; load-acquire, synchronize with consumers
+    t :&#x3D; _p_.runqtail
+
+    &#x2F;&#x2F; 如果p的局部队列没有满，就把取到的g放入到局部队列中，并将p的队尾对饮加1，并解锁队列
+    if t-h &lt; uint32(len(_p_.runq)) &#123;
+        _p_.runq[t%uint32(len(_p_.runq))].set(gp)
+        atomic.StoreRel(&amp;_p_.runqtail, t+1) &#x2F;&#x2F; store-release, makes the item available for consumption
+        return
+    &#125;
+
+    &#x2F;&#x2F; 倘若本地队列满了，就把本地队列的一半g放回到全局队列中，缓解此p的压力
+    if runqputslow(_p_, gp, h, t) &#123;
+        return
+    &#125;
+    &#x2F;&#x2F; the queue is not full, now the put above must succeed
+    goto retry
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>runqputslow</p>
+<pre class="line-numbers language-none"><code class="language-none">func runqputslow(_p_ *p, gp *g, h, t uint32) bool &#123;
+    var batch [len(_p_.runq)&#x2F;2 + 1]*g
+    &#x2F;&#x2F; First, grab a batch from local queue.
+    n :&#x3D; t - h
+    n &#x3D; n &#x2F; 2
+    
+    &#x2F;&#x2F; ...
+    for i :&#x3D; uint32(0); i &lt; n; i++ &#123;
+        batch[i] &#x3D; _p_.runq[(h+i)%uint32(len(_p_.runq))].ptr()
+    &#125;
+    if !atomic.CasRel(&amp;_p_.runqhead, h, h+n) &#123; &#x2F;&#x2F; cas-release, commits consume
+        return false
+    &#125;
+    
+    batch[n] &#x3D; gp
+
+
+    &#x2F;&#x2F; Link the goroutines.
+    for i :&#x3D; uint32(0); i &lt; n; i++ &#123;
+        batch[i].schedlink.set(batch[i+1])
+    &#125;
+    var q gQueue
+    q.head.set(batch[0])
+    q.tail.set(batch[n])
+
+
+    &#x2F;&#x2F; Now put the batch on global queue.
+    lock(&amp;sched.lock)
+    globrunqputbatch(&amp;q, int32(n+1))
+    unlock(&amp;sched.lock)
+    return true<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>尝试从 p 本地队列中获取一个可执行的 goroutine，核心逻辑位于 runqget 方法中：</p>
+<pre class="line-numbers language-none"><code class="language-none">if gp, inheritTime :&#x3D; runqget(_p_); gp !&#x3D; nil &#123;
+        return gp, inheritTime, false
+    &#125;
+
+
+func runqget(_p_ *p) (gp *g, inheritTime bool) &#123;
+    &#x2F;&#x2F; 倘若当前的p的runnext非空，直接获取即可
+    if next !&#x3D; 0 &amp;&amp; _p_.runnext.cas(next, 0) &#123;
+        return next.ptr(), true
+    &#125;
+
+    &#x2F;&#x2F; 加锁从本地队列中获取g
+    for &#123;
+        &#x2F;&#x2F; 如果本地队列为空，直接终止并返回
+        h :&#x3D; atomic.LoadAcq(&amp;_p_.runqhead) &#x2F;&#x2F; load-acquire, synchronize with other consumers
+        t :&#x3D; _p_.runqtail
+        if t &#x3D;&#x3D; h &#123;
+            return nil, false
+        &#125;
+        &#x2F;&#x2F; 本地队列里有g，从队首取出来，返回
+        gp :&#x3D; _p_.runq[h%uint32(len(_p_.runq))].ptr()
+        if atomic.CasRel(&amp;_p_.runqhead, h, h+1) &#123; &#x2F;&#x2F; cas-release, commits consume
+            return gp, false
+        &#125;
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>倘若本地队列没有可执行的g，会从全局队列中获取：</p>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; 加锁，尝试并从全局队列中取队首的元素.
+if sched.runqsize !&#x3D; 0 &#123;
+        lock(&amp;sched.lock)
+        gp :&#x3D; globrunqget(_p_, 0)
+        unlock(&amp;sched.lock)
+        if gp !&#x3D; nil &#123;
+            return gp, false, false
+        &#125;
+    &#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>倘若本地队列和全局队列都没有 g，则会获取准备就绪的网络协程：</p>
+<pre class="line-numbers language-none"><code class="language-none">if netpollinited() &amp;&amp; atomic.Load(&amp;netpollWaiters) &gt; 0 &amp;&amp; atomic.Load64(&amp;sched.lastpoll) !&#x3D; 0 &#123;
+        if list :&#x3D; netpoll(0); !list.empty() &#123; &#x2F;&#x2F; non-blocking
+            gp :&#x3D; list.pop()
+            injectglist(&amp;list)
+            &#x2F;&#x2F; 需要注意的是，刚获取网络协程时，g 的状态是处于 waiting 的，因此需要先更新为 runnable 状态.
+            casgstatus(gp, _Gwaiting, _Grunnable)
+            return gp, false, false
+        &#125;
+  &#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>work-stealing: 从其他 p 中偷取 g</p>
+<pre class="line-numbers language-none"><code class="language-none">func stealWork(now int64) (gp *g, inheritTime bool, rnow, pollUntil int64, newWork bool) &#123;
+    pp :&#x3D; getg().m.p.ptr()
+    ranTimer :&#x3D; false
+    const stealTries &#x3D; 4
+    &#x2F;&#x2F; 偷取操作至多会遍历全局的 p 队列 4 次，过程中只要找到可窃取的 p 则会立即返回.
+    for i :&#x3D; 0; i &lt; stealTries; i++ &#123;
+        stealTimersOrRunNextG :&#x3D; i &#x3D;&#x3D; stealTries-1
+        for enum :&#x3D; stealOrder.start(fastrand()); !enum.done(); enum.next() &#123;
+            &#x2F;&#x2F; ...
+        &#125;
+    &#125;
+    return nil, false, now, pollUntil, ranTime<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>为保证窃取行为的公平性，遍历的起点是随机的. 窃取动作的核心逻辑位于 runqgrab 方法当中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func runqgrab(_p_ *p, batch *[256]guintptr, batchHead uint32, stealRunNextG bool) uint32 &#123;
+    for &#123;
+        &#x2F;&#x2F; 每次对一个 p 尝试窃取前，会对其局部队列加锁
+        h :&#x3D; atomic.LoadAcq(&amp;_p_.runqhead) &#x2F;&#x2F; load-acquire, synchronize with other consumers
+        t :&#x3D; atomic.LoadAcq(&amp;_p_.runqtail) &#x2F;&#x2F; load-acquire, synchronize with the producer
+        &#x2F;&#x2F; 尝试偷取其现有的一半 g，并且返回实际偷取的数量.
+        n :&#x3D; t - h
+        n &#x3D; n - n&#x2F;2
+        if n &#x3D;&#x3D; 0 &#123;
+            if stealRunNextG &#123;
+                &#x2F;&#x2F; Try to steal from _p_.runnext.
+                if next :&#x3D; _p_.runnext; next !&#x3D; 0 &#123;
+                    if _p_.status &#x3D;&#x3D; _Prunning &#123;
+                        
+                        if GOOS !&#x3D; &quot;windows&quot; &amp;&amp; GOOS !&#x3D; &quot;openbsd&quot; &amp;&amp; GOOS !&#x3D; &quot;netbsd&quot; &#123;
+                            usleep(3)
+                        &#125; else &#123;
+                            osyield()
+                        &#125;
+                    &#125;
+                    if !_p_.runnext.cas(next, 0) &#123;
+                        continue
+                    &#125;
+                    batch[batchHead%uint32(len(batch))] &#x3D; next
+                    return 1
+                &#125;
+            &#125;
+            return 0
+        &#125;
+        if n &gt; uint32(len(_p_.runq)&#x2F;2) &#123; &#x2F;&#x2F; read inconsistent h and t
+            continue
+        &#125;
+        for i :&#x3D; uint32(0); i &lt; n; i++ &#123;
+            g :&#x3D; _p_.runq[(h+i)%uint32(len(_p_.runq))]
+            batch[(batchHead+i)%uint32(len(batch))] &#x3D; g
+        &#125;
+        if atomic.CasRel(&amp;_p_.runqhead, h, h+n) &#123; &#x2F;&#x2F; cas-release, commits consume
+            return n
+        &#125;
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="4-6-execute"><a href="#4-6-execute" class="headerlink" title="4.6 execute"></a>4.6 execute</h3><p>当 g0 为 m 寻找到可执行的 g 之后，接下来就开始执行 g. 这部分内容位于 runtime&#x2F;proc.go 的 execute 方法中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func execute(gp *g, inheritTime bool) &#123;
+    _g_ :&#x3D; getg()
+    _g_.m.curg &#x3D; gp
+    gp.m &#x3D; _g_.m
+    &#x2F;&#x2F; 更新g的状态，建立g与m之间的绑定关系
+    casgstatus(gp, _Grunnable, _Grunning)
+    gp.waitsince &#x3D; 0
+    gp.preempt &#x3D; false
+    gp.stackguard0 &#x3D; gp.stack.lo + _StackGuard
+    &#x2F;&#x2F; 更新 p 的总调度次数
+    if !inheritTime &#123;
+        _g_.m.p.ptr().schedtick++
+    &#125;
+
+    &#x2F;&#x2F; 调用gogo方法，执行goroutine中的任务
+    gogo(&amp;gp.sched)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="4-7-gosched-m"><a href="#4-7-gosched-m" class="headerlink" title="4.7 gosched_m"></a>4.7 gosched_m</h3><p>g 执行主动让渡时，会调用 mcall 方法将执行权归还给 g0，并由 g0 调用 gosched_m 方法，位于 runtime&#x2F;proc.go 文件中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func Gosched() &#123;
+    &#x2F;&#x2F; ...
+    mcall(gosched_m)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func gosched_m(gp *g) &#123;
+    goschedImpl(gp)
+&#125;
+func goschedImpl(gp *g) &#123;
+    status :&#x3D; readgstatus(gp)
+    if status&amp;^_Gscan !&#x3D; _Grunning &#123;
+        dumpgstatus(gp)
+        throw(&quot;bad g status&quot;)
+    &#125;
+    &#x2F;&#x2F; 将当前 g 的状态由执行中切换为待执行 _Grunnable
+    casgstatus(gp, _Grunning, _Grunnable)
+    &#x2F;&#x2F; 调用 dropg() 方法，将当前的 m 和 g 解绑
+    dropg()
+    &#x2F;&#x2F; 将 g 添加到全局队列当中
+    lock(&amp;sched.lock)
+    globrunqput(gp)
+    unlock(&amp;sched.lock)
+    &#x2F;&#x2F; 开始新一轮的调度
+    schedule()
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="4-8-park-m-和-ready"><a href="#4-8-park-m-和-ready" class="headerlink" title="4.8 park_m 和 ready"></a>4.8 park_m 和 ready</h3><p>g 需要被动调度时，会调用 mcall 方法切换至 g0，并调用 park_m 方法将 g 置为阻塞态，执行流程位于 runtime&#x2F;proc.go 的 gopark 方法当中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func gopark(unlockf func(*g, unsafe.Pointer) bool, lock unsafe.Pointer, reason waitReason, traceEv byte, traceskip int) &#123;
+    &#x2F;&#x2F; ...
+    mcall(park_m)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func park_m(gp *g) &#123;
+    _g_ :&#x3D; getg()
+    &#x2F;&#x2F; 将当前 g 的状态由 running 改为 waiting
+    casgstatus(gp, _Grunning, _Gwaiting)
+    &#x2F;&#x2F; 将 g 与 m 解绑
+    dropg()
+    &#x2F;&#x2F; ...
+    &#x2F;&#x2F;执行新一轮的调度 schedule
+    schedule()
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>当因被动调度陷入阻塞态的 g 需要被唤醒时，会由其他协程执行 goready 方法将 g 重新置为可执行的状态，方法位于 runtime&#x2F;proc.go .</p>
+<p>被动调度如果需要唤醒，则会其他 g 负责将 g 的状态由 waiting 改为 runnable，然后会将其添加到唤醒者的 p 的本地队列中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func goready(gp *g, traceskip int) &#123;
+    systemstack(func() &#123;
+        ready(gp, traceskip, true)
+    &#125;)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func ready(gp *g, traceskip int, next bool) &#123;
+    &#x2F;&#x2F; ...
+    _g_ :&#x3D; getg()
+    &#x2F;&#x2F; ...
+    &#x2F;&#x2F; 将 g 的状态从阻塞态改为可执行的状态
+    casgstatus(gp, _Gwaiting, _Grunnable)
+    &#x2F;&#x2F; 调用 runqput 将当前 g 添加到唤醒者 p 的本地队列中，如果队列满了，会连带 g 一起将一半的元素转移到全局队列
+    runqput(_g_.m.p.ptr(), gp, next)
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="4-9-goexit0"><a href="#4-9-goexit0" class="headerlink" title="4.9 goexit0"></a>4.9 goexit0</h3><p>当 g 执行完成时，会先执行 mcall 方法切换至 g0，然后调用 goexit0 方法，内容为 runtime&#x2F;proc.go：</p>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; Finishes execution of the current goroutine.
+func goexit1() &#123;
+    &#x2F;&#x2F; ...
+    mcall(goexit0)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func goexit0(gp *g) &#123;
+    _g_ :&#x3D; getg()
+    _p_ :&#x3D; _g_.m.p.ptr()
+
+    &#x2F;&#x2F; 将 g 状态置为 dead
+    casgstatus(gp, _Grunning, _Gdead)
+    &#x2F;&#x2F; ...
+    gp.m &#x3D; nil
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 解绑 g 和 m
+    dropg()
+
+
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 开启新一轮的调度
+    schedule()
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="4-10-retake"><a href="#4-10-retake" class="headerlink" title="4.10 retake"></a>4.10 retake</h3><p>与 4.7-4.9 小节的区别在于，抢占调度的执行者不是 g0，而是一个全局的 monitor g，代码位于 runtime&#x2F;proc.go 的 retake 方法中：</p>
+<pre class="line-numbers language-none"><code class="language-none">func retake(now int64) uint32 &#123;
+    n :&#x3D; 0
+    &#x2F;&#x2F; 加锁后，遍历全局的 p 队列，寻找需要被抢占的目标：
+    lock(&amp;allpLock)
+    for i :&#x3D; 0; i &lt; len(allp); i++ &#123;
+        _p_ :&#x3D; allp[i]
+        if _p_ &#x3D;&#x3D; nil &#123;
+            &#x2F;&#x2F; This can happen if procresize has grown
+            &#x2F;&#x2F; allp but not yet created new Ps.
+            continue
+        &#125;
+        pd :&#x3D; &amp;_p_.sysmontick
+        &#x2F;&#x2F; ...
+
+        &#x2F;&#x2F; 倘若某个 p 同时满足下述条件，则会进行抢占调度：
+        &#x2F;&#x2F; 1. 执行系统调用超过10ms；
+        &#x2F;&#x2F; 2. p本地队列有等待执行的g；
+        &#x2F;&#x2F; 3. 或者当前没有空闲的p或者m。
+        if s &#x3D;&#x3D; _Psyscall &#123;            
+            &#x2F;&#x2F; ...
+            if runqempty(_p_) &amp;&amp; atomic.Load(&amp;sched.nmspinning)+atomic.Load(&amp;sched.npidle) &gt; 0 &amp;&amp; pd.syscallwhen+10*1000*1000 &gt; now &#123;
+                continue
+            &#125;
+            unlock(&amp;allpLock)
+            &#x2F;&#x2F; 抢占调度的步骤，先将当前p的状态更新为idle，然后步入handoffp方法中，判断是否需要为p村找一个接管的m（原m正在执行系统调用）
+            if atomic.Cas(&amp;_p_.status, s, _Pidle) &#123;
+                n++
+                _p_.syscalltick++
+                handoffp(_p_)
+            &#125;
+            incidlelocked(1)
+            lock(&amp;allpLock)
+        &#125;
+    &#125;
+    unlock(&amp;allpLock)
+    return uint32(n)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>当以下四个条件满足其一时，则需要为 p 获取新的 m：</p>
+<ol>
+<li>当前 p 本地队列还有待执行的 g；</li>
+<li>全局繁忙（没有空闲的 p 和 m，全局 g 队列为空）；</li>
+<li>需要处理网络 socket 读写请求。<pre class="line-numbers language-none"><code class="language-none">func handoffp(_p_ *p) &#123;
+    if !runqempty(_p_) || sched.runqsize !&#x3D; 0 &#123;
+        startm(_p_, false)
+        return
+    &#125;
+
+
+    if atomic.Load(&amp;sched.nmspinning)+atomic.Load(&amp;sched.npidle) &#x3D;&#x3D; 0 &amp;&amp; atomic.Cas(&amp;sched.nmspinning, 0, 1) &#123;
+        startm(_p_, true)
+        return
+    &#125;
+    
+    lock(&amp;sched.lock)
+    &#x2F;&#x2F; ...
+    if sched.runqsize !&#x3D; 0 &#123;
+        unlock(&amp;sched.lock)
+        startm(_p_, false)
+        return
+    &#125;
+    &#x2F;&#x2F; If this is the last running P and nobody is polling network,
+    &#x2F;&#x2F; need to wakeup another M to poll network.
+    if sched.npidle &#x3D;&#x3D; uint32(gomaxprocs-1) &amp;&amp; atomic.Load64(&amp;sched.lastpoll) !&#x3D; 0 &#123;
+        unlock(&amp;sched.lock)
+        startm(_p_, false)
+        return
+    &#125;
+
+
+    &#x2F;&#x2F; ...<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre></li>
+</ol>
+<p>获取 m 时，会先尝试获取已有的空闲的 m，若不存在，则会创建一个新的 m.</p>
+<pre class="line-numbers language-none"><code class="language-none">func startm(_p_ *p, spinning bool) &#123;
+    
+    mp :&#x3D; acquirem()
+    lock(&amp;sched.lock)
+    &#x2F;&#x2F; ...
+    
+    nmp :&#x3D; mget()
+    if nmp &#x3D;&#x3D; nil &#123;
+        id :&#x3D; mReserveID()
+        unlock(&amp;sched.lock)
+
+
+        var fn func()
+        &#x2F;&#x2F; ...
+        newm(fn, _p_, id)
+        &#x2F;&#x2F; ...
+        return
+    &#125;
+    unlock(&amp;sched.lock)
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="4-11-reentersyscall-和-exitsyscall"><a href="#4-11-reentersyscall-和-exitsyscall" class="headerlink" title="4.11 reentersyscall 和 exitsyscall"></a>4.11 reentersyscall 和 exitsyscall</h3><p>本小节同样与 g 的系统调用有关，但是视角切换回发生系统调用前，与 g 绑定的原 m 当中.<br>在 m 需要执行系统调用前，会先执行位于 runtime&#x2F;proc.go 的 reentersyscall 的方法：</p>
+<pre class="line-numbers language-none"><code class="language-none">func reentersyscall(pc, sp uintptr) &#123;
+    &#x2F;&#x2F; 此时执行权同样位于 m 的 g0 手中；
+    _g_ :&#x3D; getg()
+    &#x2F;&#x2F; ...
+    &#x2F;&#x2F; 保存当前 g 的执行环境；
+    save(pc, sp)
+    _g_.syscallsp &#x3D; sp
+    _g_.syscallpc &#x3D; pc
+    &#x2F;&#x2F; 将 g 和 p 的状态更新为 syscall
+    casgstatus(_g_, _Grunning, _Gsyscall)
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 解除 p 和 当前 m 之间的绑定，因为 m 即将进入系统调用而导致短暂不可用；
+    pp :&#x3D; _g_.m.p.ptr()
+    pp.m &#x3D; 0
+    &#x2F;&#x2F; 将 p 添加到 当前 m 的 oldP 容器当中，后续 m 恢复后，会优先寻找旧的 p 重新建立绑定关系.
+    _g_.m.oldp.set(pp)
+    _g_.m.p &#x3D; 0
+    atomic.Store(&amp;pp.status, _Psyscall)
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>当 m 完成了内核态的系统调用之后，此时会步入位于 runtime&#x2F;proc.go 的 exitsyscall 函数中，尝试寻找 p 重新开始运作</p>
+<pre class="line-numbers language-none"><code class="language-none">func exitsyscall() &#123;
+    &#x2F;&#x2F; 方法执行之初，此时的执行权是普通 g.倘若此前设置的 oldp 仍然可用，则重新和 oldP 绑定，将当前 g 重新置为 running 状态，然后开始执行后续的用户函数；
+    _g_ :&#x3D; getg()
+    
+    &#x2F;&#x2F; ...
+    if exitsyscallfast(oldp) &#123;
+        &#x2F;&#x2F; ...
+        casgstatus(_g_, _Gsyscall, _Grunning)
+        &#x2F;&#x2F; ...
+        return
+    &#125;
+
+
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; old 绑定失败，则调用 mcall 方法切换到 m 的 g0，并执行 exitsyscall0 方法
+    mcall(exitsyscall0)
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-none"><code class="language-none">func exitsyscall0(gp *g) &#123;
+    &#x2F;&#x2F; 将 g 由系统调用状态切换为可运行态，并解绑 g 和 m 的关系
+    casgstatus(gp, _Gsyscall, _Grunnable)
+    dropg()
+    &#x2F;&#x2F; 从全局 p 队列获取可用的 p，如果获取到了，则执行 g：
+    lock(&amp;sched.lock)
+    var _p_ *p
+    if schedEnabled(gp) &#123;
+        _p_, _ &#x3D; pidleget(0)
+    &#125;
+    
+    &#x2F;&#x2F; 如若无 p 可用，则将 g 添加到全局队列，当前 m 陷入沉睡. 直到被唤醒后才会继续发起调度.
+    var locked bool
+    if _p_ &#x3D;&#x3D; nil &#123;
+        globrunqput(gp)
+    &#125; 
+    
+    unlock(&amp;sched.lock)
+    if _p_ !&#x3D; nil &#123;
+        acquirep(_p_)
+        execute(gp, false) &#x2F;&#x2F; Never returns.
+    &#125;
+    
+    &#x2F;&#x2F; ...
+    
+    stopm()
+    schedule() &#x2F;&#x2F; Never returns.
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>(end)</p>
 
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%89%8D%E8%A8%80"><span class="top-box-text">前言</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-%E6%A6%82%E5%BF%B5"><span class="top-box-text">1. 概念</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-1-%E7%BA%BF%E7%A8%8B"><span class="top-box-text">1.1 线程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-2-%E5%8D%8F%E7%A8%8B"><span class="top-box-text">1.2 协程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-3-Goroutine"><span class="top-box-text">1.3 Goroutine</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-GMP-%E6%A8%A1%E5%9E%8B"><span class="top-box-text">2. GMP 模型</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-1-G"><span class="top-box-text">2.1 G</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-2-P"><span class="top-box-text">2.2 P</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-3-M"><span class="top-box-text">2.3 M</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-4-GMP"><span class="top-box-text">2.4 GMP</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%BA%90%E7%A0%81%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">源码数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-G"><span class="top-box-text">3.1 G</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-2-M"><span class="top-box-text">3.2 M</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-3-P"><span class="top-box-text">3.3 P</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-4-schedt"><span class="top-box-text">3.4 schedt</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%B0%83%E5%BA%A6%E6%B5%81%E7%A8%8B"><span class="top-box-text">调度流程</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-1-%E4%B8%A4%E7%A7%8DG%E7%9A%84%E8%BD%AC%E6%8D%A2"><span class="top-box-text">4.1 两种G的转换</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-2-%E8%B0%83%E5%BA%A6%E7%B1%BB%E5%9E%8B"><span class="top-box-text">4.2 调度类型</span></a></li></ol></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%89%8D%E8%A8%80"><span class="top-box-text">前言</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-%E6%A6%82%E5%BF%B5"><span class="top-box-text">1. 概念</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-1-%E7%BA%BF%E7%A8%8B"><span class="top-box-text">1.1 线程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-2-%E5%8D%8F%E7%A8%8B"><span class="top-box-text">1.2 协程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-3-Goroutine"><span class="top-box-text">1.3 Goroutine</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-GMP-%E6%A8%A1%E5%9E%8B"><span class="top-box-text">2. GMP 模型</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-1-G"><span class="top-box-text">2.1 G</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-2-P"><span class="top-box-text">2.2 P</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-3-M"><span class="top-box-text">2.3 M</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-4-GMP"><span class="top-box-text">2.4 GMP</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%BA%90%E7%A0%81%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">源码数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-G"><span class="top-box-text">3.1 G</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-2-M"><span class="top-box-text">3.2 M</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-3-P"><span class="top-box-text">3.3 P</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-4-schedt"><span class="top-box-text">3.4 schedt</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%B0%83%E5%BA%A6%E6%B5%81%E7%A8%8B"><span class="top-box-text">调度流程</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-1-%E4%B8%A4%E7%A7%8DG%E7%9A%84%E8%BD%AC%E6%8D%A2"><span class="top-box-text">4.1 两种G的转换</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-2-%E8%B0%83%E5%BA%A6%E7%B1%BB%E5%9E%8B"><span class="top-box-text">4.2 调度类型</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-3-%E5%AE%8F%E8%A7%82%E7%9A%84%E8%B0%83%E5%BA%A6%E6%B5%81%E7%A8%8B"><span class="top-box-text">4.3 宏观的调度流程</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-4-schedule"><span class="top-box-text">4.4 schedule</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-5-findRunnable"><span class="top-box-text">4.5 findRunnable</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-6-execute"><span class="top-box-text">4.6 execute</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-7-gosched-m"><span class="top-box-text">4.7 gosched_m</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-8-park-m-%E5%92%8C-ready"><span class="top-box-text">4.8 park_m 和 ready</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-9-goexit0"><span class="top-box-text">4.9 goexit0</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-10-retake"><span class="top-box-text">4.10 retake</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-11-reentersyscall-%E5%92%8C-exitsyscall"><span class="top-box-text">4.11 reentersyscall 和 exitsyscall</span></a></li></ol></li></ol>
         </div>
           
       </div>
