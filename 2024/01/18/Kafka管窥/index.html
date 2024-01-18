@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Kafka管窥</title>
+<meta name="keywords" content="Kafka管窥, HeXu">
+<meta name="description" content="前言Kafka最初是由Linkedin公司开发的，是一个分布式的、可扩展的、容错的、支持分区的（Partition）、多副本的（replica）、基于Zookeeper框架的发布-订阅消息系统，Kafka适合离线和在线消息消费。它是分布式应">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Kafka管窥">
+<meta property="og:description" content="前言Kafka最初是由Linkedin公司开发的，是一个分布式的、可扩展的、容错的、支持分区的（Partition）、多副本的（replica）、基于Zookeeper框架的发布-订阅消息系统，Kafka适合离线和在线消息消费。它是分布式应">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Kafka管窥</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-18</span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>Kafka最初是由Linkedin公司开发的，是一个<strong>分布式的、可扩展的、容错的、支持分区的（Partition）、多副本的（replica</strong>）、基于<strong>Zookeeper</strong>框架的发布-订阅消息系统，Kafka适合离线和在线消息消费。它是分布式应用系统中的重要组件之一，也被广泛应用于大数据处理。Kafka是用Scala语言开发，它的Java版本称为Jafka。Linkedin于2010年将该系统贡献给了Apache基金会并成为顶级开源项目之一。</p>
+<h1 id="40道面试题学习Kafka"><a href="#40道面试题学习Kafka" class="headerlink" title="40道面试题学习Kafka"></a>40道面试题学习Kafka</h1><h2 id="1-Kafka-的设计"><a href="#1-Kafka-的设计" class="headerlink" title="1. Kafka 的设计"></a>1. Kafka 的设计</h2><p><strong>Kafka</strong> 将消息以 <strong>topic</strong> 为单位进行归纳，发布消息的程序称为 <strong>Producer</strong>，消费消息的程序称为 <strong>Consumer</strong>。它是以集群的方式运行，可以由一个或多个服务组成，每个服务叫做一个 <strong>Broker</strong>，<strong>Producer</strong> 通过网络将消息发送到 <strong>kafka</strong> 集群，集群向消费者提供消息，<strong>broker</strong> 在中间起到一个代理保存消息的中转站。</p>
+<h3 id="Kafka-的重要组件"><a href="#Kafka-的重要组件" class="headerlink" title="Kafka 的重要组件"></a>Kafka 的重要组件</h3><ol>
+<li><strong>Producer</strong>：消息生产者，发布消息到Kafka集群的终端或服务</li>
+<li><strong>Broker</strong>：一个 Kafka 节点就是一个 Broker，多个Broker可组成一个Kafka 集群。</li>
+<li><strong>Topic</strong>：消息主题，每条发布到Kafka集群的消息都会归集于此，Kafka是面向Topic 的。</li>
+<li><strong>Partition</strong>：Partition 是Topic在物理上的分区，一个Topic可以分为多个Partition，每个Partition是一个有序的不可变的记录序列。单一主题中的分区有序，但无法保证主题中所有分区的消息有序。</li>
+<li><strong>Consumer</strong>：从Kafka集群中消费消息的终端或服务</li>
+<li><strong>Consumer Group</strong>：每个Consumer都属于一个Consumer Group，每条消息只能被Consumer Group中的一个Consumer消费，但可以被多个Consumer Group消费。</li>
+<li><strong>Replica</strong>：Partition 的副本，用来保障Partition的高可用性。</li>
+<li><strong>Controller</strong>： Kafka 集群中的其中一个服务器，用来进行Leader election以及各种 Failover 操作。</li>
+<li><strong>Zookeeper</strong>：Kafka 通过Zookeeper来存储集群中的 meta 消息</li>
+</ol>
+<blockquote>
+<p>如果某个 Topic 下有 n 个Partition 且集群有 n 个Broker，那么每个 Broker会存储该 Topic 下的一个 Partition<br>如果某个 Topic 下有 n 个Partition 且集群中有 m+n 个Broker，那么只有 n 个Broker会存储该Topic下的一个 Partition<br>如果某个 Topic 下有 n 个Partition 且集群中的Broker数量小于 n，那么一个 Broker 会存储该 Topic 下的一个或多个 Partition，这种情况尽量避免，会导致集群数据不均衡</p>
+</blockquote>
+<h2 id="2-Kafka-高性能的原因"><a href="#2-Kafka-高性能的原因" class="headerlink" title="2.Kafka 高性能的原因"></a>2.Kafka 高性能的原因</h2><ol>
+<li>利用了PageCache缓存</li>
+<li>磁盘顺序写</li>
+<li>零拷贝技术</li>
+<li>pull 模式</li>
+</ol>
+<h2 id="3-Kafka-文件高效存储设计原理"><a href="#3-Kafka-文件高效存储设计原理" class="headerlink" title="3. Kafka 文件高效存储设计原理"></a>3. Kafka 文件高效存储设计原理</h2><ol>
+<li>Kafka把Topic中一个Partition大文件分成多个小文件段，通过多个小文件段，就容易定期清除或删除已经消费完成的文件，减少磁盘占用。</li>
+<li>通过索引信息可以快速定位Message和确定response的最大大小</li>
+<li>通过将索引元数据全部映射到 memory，可以避免 Segment 文件的磁盘I&#x2F;O操作</li>
+<li>通过索引文件稀疏存储，可以大幅降低索引文件元数据占用空间大小</li>
+</ol>
+<h2 id="4-Kafka-的优缺点"><a href="#4-Kafka-的优缺点" class="headerlink" title="4. Kafka 的优缺点"></a>4. Kafka 的优缺点</h2><p>优点</p>
+<ul>
+<li>高性能、高吞吐量、低延迟：Kafka 生产和消费消息的速度都达到每秒10万级</li>
+<li>高可用：所有消息持久化存储到磁盘，并支持数据备份防止数据丢失</li>
+<li>高并发：支持数千个客户端同时读写</li>
+<li>容错性：允许集群中节点失败（若副本数量为n，则允许 n-1 个节点失败）</li>
+<li>高扩展性：Kafka 集群支持热伸缩，无须停机</li>
+</ul>
+<p>缺点</p>
+<ul>
+<li>没有完整的监控工具集</li>
+<li>不支持通配符主题选择</li>
+</ul>
+<h2 id="4-Kafka-的应用场景"><a href="#4-Kafka-的应用场景" class="headerlink" title="4. Kafka 的应用场景"></a>4. Kafka 的应用场景</h2><ul>
+<li>日志聚合：可收集各种服务的日志写入kafka的消息队列进行存储</li>
+<li>消息系统：广泛用于消息中间件</li>
+<li>系统解耦：在重要操作完成后，发送消息，由别的服务系统来完成其他操作</li>
+<li>流量削峰：一般用于秒杀或抢购活动中，来缓冲网站短时间内高流量带来的压力</li>
+<li>异步处理：通过异步处理机制，可以把一个消息放入队列中，但不立即处理它，在需要的时候再进行处理</li>
+</ul>
+<h2 id="6-Kafka-中分区的概念"><a href="#6-Kafka-中分区的概念" class="headerlink" title="6. Kafka 中分区的概念"></a>6. Kafka 中分区的概念</h2><p>topic 是逻辑上的概念，还可以细分为多个分区，一个分区只属于一个主题，很多时候也会把分区称为主题分区（Topic-Partition）。同一主题下的不同分区包含的消息是不同的，分区在存储层面可以看做一个可追加的<strong>日志文件</strong> ，消息在被追加到分区日志文件的时候都会分配一个特定的偏移量（<strong>offset</strong>）。offset 是消息在分区中的唯一标识，kafka 通过它来保证消息在分区内的顺序性，不过 offset 并不跨越分区，也就是说，kafka保证的是分区有序而不是主题有序。</p>
+<p>在分区中又引入了多副本（<strong>replica</strong>）的概念，通过增加副本数量可以提高容灾能力。同一分区的不同副本中保存的是相同的消息。副本之间是一主多从的关系，其中<strong>主副本负责读写，从副本只负责消息同步</strong>。副本处于不同的 broker 中，当主副本出现异常，便会在从副本中提升一个为主副本。</p>
+<h2 id="7-Kafka的分区原则"><a href="#7-Kafka的分区原则" class="headerlink" title="7. Kafka的分区原则"></a>7. Kafka的分区原则</h2><ol>
+<li>指明 Partition的情况下，直接将指明的值作为Partition值。</li>
+<li>没有指明Partition值但有 key 的情况下，将 key 的 Hash 值与 topic 的Partition值进行取余得到Partition值</li>
+<li>既没有Partition值又没有 key 值的情况下，第一次调用时随机生成一个整数（后面每次调用在这个整数上自增），将这个值与Topic可用的Partition总数取余得到Partition值，也就是常说的 round-robin 算法</li>
+</ol>
+<h2 id="8-Kafka-为什么要把消息分区"><a href="#8-Kafka-为什么要把消息分区" class="headerlink" title="8.Kafka 为什么要把消息分区"></a>8.Kafka 为什么要把消息分区</h2><ol>
+<li>方便在集群中扩展，每个 Partition 可用通过调整以适应它所在的机器，而一个Topic又可以有多个Partition组成，因此整个集群就可以适应任意大小的数据了</li>
+<li>可以提高并发，因为可以以Partition为单位进行读写</li>
+</ol>
+<h2 id="9-Kafka中生产者的运行流程"><a href="#9-Kafka中生产者的运行流程" class="headerlink" title="9.Kafka中生产者的运行流程"></a>9.Kafka中生产者的运行流程</h2><ol>
+<li>一条消息发过来首先会被封装成一个 <strong>ProducerRecord</strong> 对象</li>
+<li>对该对象进行序列化处理（可以使用默认，也可以自定义序列化）</li>
+<li>对消息进行分区处理，分区的时候需要获取集群的元数据，决定这个消息会被发送到哪个主题的哪个分区</li>
+<li>分好区的消息不会直接发送到服务端，而是放入生产者的缓存区，多条消息会被封装成一个批次（Batch），默认一个批次的大小是 16KB</li>
+<li>Sender 线程启动以后会从缓存里面去获取可以发送的批次</li>
+<li>Sender 线程把一个一个批次发送到服务端<br><a class="simple-lightbox" href="/../images/Kafka%E7%AE%A1%E7%AA%A5/producer.png"><img   src="/images/loading.svg" data-src="/../images/Kafka%E7%AE%A1%E7%AA%A5/producer.png"  alt="producer" lazyload></a></li>
+</ol>
+<h2 id="10-Kafka的消息封装"><a href="#10-Kafka的消息封装" class="headerlink" title="10. Kafka的消息封装"></a>10. Kafka的消息封装</h2><p>在 Kafka 中 Producer 可以 Batch的方式推送数据达到提高效率的作用。Kafka Producer 可以将消息在内存中累积到一定数量后作为一个 Batch 发送请求。Batch 的数量大小可以通过 Producer 的参数进行控制，可以从三个维度进行控制：</p>
+<ul>
+<li>累计的消息的数量（如500条）</li>
+<li>累计的时间间隔（如100ms）</li>
+<li>累计的数据大小（如64KB）</li>
+</ul>
+<p>通过增加 Batch 的大小，可以减少网络请求和磁盘I&#x2F;O的频次，具体参数配置需要在效率和时效性做一个权衡。</p>
+<h2 id="11-Kafka-消息的消费模式"><a href="#11-Kafka-消息的消费模式" class="headerlink" title="11. Kafka 消息的消费模式"></a>11. Kafka 消息的消费模式</h2><blockquote>
+<p>Kafka采用大部分消息系统遵循的传统模式：Producer将消息推送到Broker，Consumer从Broker获取消息。</p>
+</blockquote>
+<p>如果采用 <strong>Push</strong> 模式，则Consumer难以处理不同速率的上游推送消息。</p>
+<p>采用 <strong>Pull</strong> 模式的好处是Consumer可以自主决定是否批量的从Broker拉取数据。Pull模式有个缺点是，如果Broker没有可供消费的消息，将导致Consumer不断在循环中轮询，直到新消息到达。为了避免这点，Kafka有个参数可以让Consumer阻塞直到新消息到达。</p>
+<h2 id="12-Kafka-如何实现负载均衡与故障转移"><a href="#12-Kafka-如何实现负载均衡与故障转移" class="headerlink" title="12. Kafka 如何实现负载均衡与故障转移"></a>12. Kafka 如何实现负载均衡与故障转移</h2><h3 id="负载均衡"><a href="#负载均衡" class="headerlink" title="负载均衡"></a>负载均衡</h3><p>Kakfa 的负载均衡就是每个 Broker 都有均等的机会为 Kafka 的客户端（生产者与消费者）提供服务，可以负载分散到所有集群中的机器上。<strong>Kafka 通过智能化的分区领导者选举来实现负载均衡</strong>，提供智能化的 Leader 选举算法，可在集群的所有机器上均匀分散各个Partition的Leader，从而整体上实现负载均衡。</p>
+<h3 id="故障转移"><a href="#故障转移" class="headerlink" title="故障转移"></a>故障转移</h3><p><strong>Kafka 的故障转移是通过使用会话机制实现的</strong>，每台 Kafka 服务器启动后会以会话的形式把自己注册到 Zookeeper 服务器上。一旦服务器运转出现问题，就会导致与Zookeeper 的会话不能维持从而超时断连，此时Kafka集群会选举出另一台服务器来完全替代这台服务器继续提供服务。</p>
+<h2 id="13-Kafka-中-Zookeeper-的作用"><a href="#13-Kafka-中-Zookeeper-的作用" class="headerlink" title="13. Kafka 中 Zookeeper 的作用"></a>13. Kafka 中 Zookeeper 的作用</h2><p>Kafka 是一个使用 <strong>Zookeeper</strong> 构建的分布式系统。<strong>Kafka 的各 Broker 在启动时都要在Zookeeper上注册，由Zookeeper统一协调管理。</strong> 如果任何节点失败，可通过Zookeeper从先前提交的偏移量中恢复，因为它会做周期性提交偏移量工作。同一个Topic的消息会被分成多个分区并将其分布在多个Broker上，这些分区信息及与Broker的对应关系也是Zookeeper在维护。</p>
+<h2 id="14-Kafka-提供了哪些系统工具"><a href="#14-Kafka-提供了哪些系统工具" class="headerlink" title="14. Kafka 提供了哪些系统工具"></a>14. Kafka 提供了哪些系统工具</h2><ul>
+<li><strong>Kafka 迁移工具</strong>：它有助于将代理从一个版本迁移到另一个版本</li>
+<li><strong>Mirror Maker</strong>：Mirror Maker 工具有助于将一个 Kafka 集群的镜像提供给另一个</li>
+<li><strong>消费者检查</strong>：对于指定的主题集和消费者组，可显示主题、分区、所有者。</li>
+</ul>
+<h2 id="15-Kafka-中消费者与消费者组的关系与负载均衡实现"><a href="#15-Kafka-中消费者与消费者组的关系与负载均衡实现" class="headerlink" title="15. Kafka 中消费者与消费者组的关系与负载均衡实现"></a>15. Kafka 中消费者与消费者组的关系与负载均衡实现</h2><p><strong>Consumer Group</strong> 是Kafka独有的可扩展且具有容错性的消费者机制。一个组内可以有多个Consumer，它们共享一个全局唯一的Group ID。<strong>组内的所有Consumer协调在一起来消费订阅主题（Topic）内的所有分区（Partition）</strong>。当然，每个Partition只能由同一个Consumer Group内的一个Consumer 来消费。消费组内的消费者可以使用多线程的方式实现，消费者的数量通常不超过分区的数量，且二者最好保持整数倍的关系，这样不会造成有空闲的消费者。</p>
+<blockquote>
+<p>Consumer 订阅的是Topic的Partition，而不是Message。所以在同一时间点上，订阅到同一个分区的Consumer必然属于不同的Consumer Group</p>
+</blockquote>
+<p>Consumer Group与Consumer的关系是动态维护的，当一个Consumer进程挂掉或者是卡住时，该Consumer所订阅的Partition会被重新分配到改组内的其他Consumer上，当一个Consumer加入到一个Consumer Group中时，同样会从其他的Consumer中分配出一个或者多个Partition到这个新加入的Consumer。</p>
+<h3 id="负载均衡-1"><a href="#负载均衡-1" class="headerlink" title="负载均衡"></a>负载均衡</h3><p>当启动一个Consumer时，会指定它要加入的Group，使用的配置项是groupId。为了维持Consumer与Consumer Group之间的关系，Consumer 会周期性地发送 hearbeat 到 coodinator（协调者），如果有 hearbeat 超时或未收到 hearbeat，coordinator 会认为该Consumer已经退出，那么它所订阅的Partition会分配到同一组内的其他Consumer上，这个过程称为 rebalance（再平衡）</p>
+<h2 id="16-Kafka-中消息偏移的作用"><a href="#16-Kafka-中消息偏移的作用" class="headerlink" title="16. Kafka 中消息偏移的作用"></a>16. Kafka 中消息偏移的作用</h2><p>生产过程中给分区中的消息提供一个顺序ID号，称之为偏移量，偏移量的主要作用为了唯一地区别分区中的每条消息。Kafka的存储文件都是按照offset.kafka来命名</p>
+<h2 id="17-生产过程中何时会发生QueueFullExpection以及如何处理"><a href="#17-生产过程中何时会发生QueueFullExpection以及如何处理" class="headerlink" title="17. 生产过程中何时会发生QueueFullExpection以及如何处理"></a>17. 生产过程中何时会发生QueueFullExpection以及如何处理</h2><h3 id="何时发生"><a href="#何时发生" class="headerlink" title="何时发生"></a>何时发生</h3><p>当生产者试图发送消息的速度快于Broker可以处理的速度时，通常会发生 <strong>QueueFullException</strong></p>
+<h3 id="如何解决"><a href="#如何解决" class="headerlink" title="如何解决"></a>如何解决</h3><p>首先先进行判断生产者是否能够降低生产速率，如果生产者不能阻止这种情况，为了处理增加的负载，用户需要添加足够的 Broker。或者选择生产阻塞，设置Queue.enQueueTimeout.ms 为 -1，通过这样处理，如果队列已满的情况，生产者将组织而不是删除消息。或者容忍这种异常，进行消息丢弃。</p>
+<h2 id="18-Consumer-如何消费指定分区消息"><a href="#18-Consumer-如何消费指定分区消息" class="headerlink" title="18. Consumer 如何消费指定分区消息"></a>18. Consumer 如何消费指定分区消息</h2><p>Cosumer 消费消息时，向Broker 发出 fetch 请求去消费特定分区的消息，Consumer 可以通过指定消息在日志中的偏移量 offset，就可以从这个位置开始消息消息，Consumer 拥有了 offset 的控制权，也可以向后回滚去重新消费之前的消息。</p>
+<p>也可以使用 seek(Long topicPartition) 来指定消费的位置。</p>
+<h2 id="19-Replica、Leader-和-Follower-三者的概念"><a href="#19-Replica、Leader-和-Follower-三者的概念" class="headerlink" title="19. Replica、Leader 和 Follower 三者的概念"></a>19. Replica、Leader 和 Follower 三者的概念</h2><blockquote>
+<p>Kafka 中的 Partition 是有序消息日志，为了实现高可用性，需要采用备份机制，将相同的数据复制到多个Broker上，而这些备份日志就是 Replica，目的是为了<strong>防止数据丢失。</strong><br>所有Partition 的副本默认情况下都会均匀地分布到所有 Broker 上,一旦领导者副本所在的Broker宕机，Kafka 会从追随者副本中选举出新的领导者继续提供服务。</p>
+</blockquote>
+<ul>
+<li><p><strong>Leader：</strong> 副本中的领导者。负责对外提供服务，与客户端进行交互。生产者总是向 Leader副本些消息，消费者总是从 Leader 读消息</p>
+</li>
+<li><p><strong>Follower：</strong> 副本中的追随者。被动地追随 Leader，不能与外界进行交付。只是向Leader发送消息，请求Leader把最新生产的消息发给它，进而保持同步。</p>
+</li>
+</ul>
+<h2 id="20-Replica-的重要性"><a href="#20-Replica-的重要性" class="headerlink" title="20. Replica 的重要性"></a>20. Replica 的重要性</h2><p>Replica 可以确保发布的消息不会丢失，保证了Kafka的高可用性。并且可以在发生任何机器错误、程序错误或软件升级、扩容时都能生产使用。</p>
+<h2 id="21-Kafka-中的-Geo-Replication-是什么"><a href="#21-Kafka-中的-Geo-Replication-是什么" class="headerlink" title="21. Kafka 中的 Geo-Replication 是什么"></a>21. Kafka 中的 Geo-Replication 是什么</h2><p>Kafka官方提供了MirrorMaker组件，作为跨集群的流数据同步方案。借助MirrorMaker，消息可以跨多个数据中心或云区域进行复制。您可以在主动&#x2F;被动场景中将其用于备份和恢复，或者在主动&#x2F;主动方案中将数据放置得更靠近用户，或支持数据本地化要求。</p>
+<p>它的实现原理比较简单，就是通过从源集群消费消息，然后将消息生产到目标集群，即普通的消息生产和消费。用户只要通过简单的Consumer配置和Producer配置，然后启动Mirror，就可以实现集群之间的准实时的数据同步.</p>
+<h2 id="22-Kafka-中-AR、ISR、OSR-三者的概念"><a href="#22-Kafka-中-AR、ISR、OSR-三者的概念" class="headerlink" title="22. Kafka 中 AR、ISR、OSR 三者的概念"></a>22. Kafka 中 AR、ISR、OSR 三者的概念</h2><ul>
+<li><strong>AR</strong>：分区中所有副本称为 AR</li>
+<li><strong>ISR</strong>：所有与主副本保持一定程度同步的副本（包括主副本）称为 ISR</li>
+<li><strong>OSR</strong>：与主副本滞后过多的副本组成 OSR</li>
+</ul>
+<h2 id="23-分区副本什么情况下会从-ISR-中剔出"><a href="#23-分区副本什么情况下会从-ISR-中剔出" class="headerlink" title="23. 分区副本什么情况下会从 ISR 中剔出"></a>23. 分区副本什么情况下会从 ISR 中剔出</h2><p>Leader 会维护一个与自己基本保持同步的Replica列表，该列表称为<strong>ISR</strong>，每个Partition都会有一个ISR，而且是由Leader动态维护。所谓动态维护，就是说如果一个Follower比一个Leader落后太多，或者超过一定时间未发起数据复制请求，则Leader将其从ISR中移除。当ISR中所有Replica都向Leader发送ACK（Acknowledgement确认）时，Leader才commit。</p>
+<h2 id="24-分区副本中的-Leader-如果宕机但-ISR-却为空该如何处理"><a href="#24-分区副本中的-Leader-如果宕机但-ISR-却为空该如何处理" class="headerlink" title="24. 分区副本中的 Leader 如果宕机但 ISR 却为空该如何处理"></a>24. 分区副本中的 Leader 如果宕机但 ISR 却为空该如何处理</h2><p>可以通过配置unclean.leader.election ：</p>
+<ul>
+<li><strong>true</strong>：允许 OSR 成为 Leader，但是 OSR 的消息较为滞后，可能会出现消息不一致的问题</li>
+<li><strong>false</strong>：会一直等待旧 leader 恢复正常，降低了可用性</li>
+</ul>
+<h2 id="25-如何判断一个-Broker-是否还有效"><a href="#25-如何判断一个-Broker-是否还有效" class="headerlink" title="25. 如何判断一个 Broker 是否还有效"></a>25. 如何判断一个 Broker 是否还有效</h2><ul>
+<li>Broker必须可以维护和ZooKeeper的连接，Zookeeper通过心跳机制检查每个结点的连接。</li>
+<li>如果Broker是个Follower，它必须能及时同步Leader的写操作，延时不能太久。</li>
+</ul>
+<h2 id="26-Kafka-可接收的消息最大默认多少字节，如何修改"><a href="#26-Kafka-可接收的消息最大默认多少字节，如何修改" class="headerlink" title="26. Kafka 可接收的消息最大默认多少字节，如何修改"></a>26. Kafka 可接收的消息最大默认多少字节，如何修改</h2><p>Kafka可以接收的最大消息默认为1000000字节，如果想调整它的大小，可在Broker中修改配置参数：Message.max.bytes的值</p>
+<blockquote>
+<p>但要注意的是，修改这个值，还要同时注意其他对应的参数值是正确的，否则就可能引发一些系统异常。首先这个值要比消费端的fetch.Message.max.bytes（默认值1MB，表示消费者能读取的最大消息的字节数）参数值要小才是正确的设置，否则Broker就会因为消费端无法使用这个消息而挂起。</p>
+</blockquote>
+<h2 id="27-Kafka-的-ACK-机制"><a href="#27-Kafka-的-ACK-机制" class="headerlink" title="27. Kafka 的 ACK 机制"></a>27. Kafka 的 ACK 机制</h2><blockquote>
+<p>Kafka的Producer有三种ack机制，参数值有0、1 和 -1</p>
+</blockquote>
+<ul>
+<li><strong>0</strong>： 相当于异步操作，<strong>Producer 不需要Leader给予回复，发送完就认为成功，继续发送下一条（批）Message</strong>。此机制具有最低延迟，但是持久性可靠性也最差，当服务器发生故障时，很可能发生数据丢失。</li>
+<li><strong>1</strong>： Kafka 默认的设置。<strong>表示 Producer 要 Leader 确认已成功接收数据才发送下一条（批）Message</strong>。不过 Leader 宕机，Follower 尚未复制的情况下，数据就会丢失。此机制提供了较好的持久性和较低的延迟性。</li>
+<li><strong>-1</strong>： <strong>Leader 接收到消息之后，还必须要求ISR列表里跟Leader保持同步的那些Follower都确认消息已同步，Producer 才发送下一条（批）Message</strong>。此机制持久性可靠性最好，但延时性最差。</li>
+</ul>
+<h2 id="28-Kafka-的-consumer-如何消费数据"><a href="#28-Kafka-的-consumer-如何消费数据" class="headerlink" title="28. Kafka 的 consumer 如何消费数据"></a>28. Kafka 的 consumer 如何消费数据</h2><p>在Kafka中，Producers将消息推送给Broker端，在Consumer和Broker建立连接之后，会主动去 Pull（或者说Fetch）消息。这种模式有些优点，首先Consumer端可以根据自己的消费能力适时的去fetch消息并处理，且可以控制消息消费的进度（offset）；此外，消费者可以控制每次消费的数，实现批量消费。</p>
+<h2 id="29-Kafka-提供的API有哪些"><a href="#29-Kafka-提供的API有哪些" class="headerlink" title="29. Kafka 提供的API有哪些"></a>29. Kafka 提供的API有哪些</h2><p>Kafka 提供了两套 Consumer API，分为 High-level API 和 Sample API</p>
+<h3 id="Sample-API"><a href="#Sample-API" class="headerlink" title="Sample API"></a>Sample API</h3><p>这是一个底层API，它维持了一个与单一 Broker 的连接，并且这个API 是完全无状态的，每次请求都需要指定 offset 值，因此这套 API 也是最灵活的。</p>
+<h3 id="High-level-API"><a href="#High-level-API" class="headerlink" title="High-level API"></a>High-level API</h3><p>该API封装了对集群中一系列Broker的访问，可以透明地消费下一个Topic，它自己维护了已消费消息的状态，即每次消费的都会下一个消息。High-level API 还支持以组的形式消费Topic，如果 Consumers 有同一个组名，那么Kafka就相当于一个队列消息服务，而各个 Consumer 均衡地消费相应Partition中的数据。若Consumers有不同的组名，那么此时Kafka就相当于一个广播服务，会把Topic中的所有消息广播到每个Consumer</p>
+<h2 id="30-Kafka-的Topic中-Partition-数据是怎么存储到磁盘的"><a href="#30-Kafka-的Topic中-Partition-数据是怎么存储到磁盘的" class="headerlink" title="30. Kafka 的Topic中 Partition 数据是怎么存储到磁盘的"></a>30. Kafka 的Topic中 Partition 数据是怎么存储到磁盘的</h2>
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%89%8D%E8%A8%80"><span class="top-box-text">前言</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#40%E9%81%93%E9%9D%A2%E8%AF%95%E9%A2%98%E5%AD%A6%E4%B9%A0Kafka"><span class="top-box-text">40道面试题学习Kafka</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-Kafka-%E7%9A%84%E8%AE%BE%E8%AE%A1"><span class="top-box-text">1. Kafka 的设计</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Kafka-%E7%9A%84%E9%87%8D%E8%A6%81%E7%BB%84%E4%BB%B6"><span class="top-box-text">Kafka 的重要组件</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-Kafka-%E9%AB%98%E6%80%A7%E8%83%BD%E7%9A%84%E5%8E%9F%E5%9B%A0"><span class="top-box-text">2.Kafka 高性能的原因</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-Kafka-%E6%96%87%E4%BB%B6%E9%AB%98%E6%95%88%E5%AD%98%E5%82%A8%E8%AE%BE%E8%AE%A1%E5%8E%9F%E7%90%86"><span class="top-box-text">3. Kafka 文件高效存储设计原理</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-Kafka-%E7%9A%84%E4%BC%98%E7%BC%BA%E7%82%B9"><span class="top-box-text">4. Kafka 的优缺点</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-Kafka-%E7%9A%84%E5%BA%94%E7%94%A8%E5%9C%BA%E6%99%AF"><span class="top-box-text">4. Kafka 的应用场景</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#6-Kafka-%E4%B8%AD%E5%88%86%E5%8C%BA%E7%9A%84%E6%A6%82%E5%BF%B5"><span class="top-box-text">6. Kafka 中分区的概念</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-Kafka%E7%9A%84%E5%88%86%E5%8C%BA%E5%8E%9F%E5%88%99"><span class="top-box-text">7. Kafka的分区原则</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#8-Kafka-%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E6%8A%8A%E6%B6%88%E6%81%AF%E5%88%86%E5%8C%BA"><span class="top-box-text">8.Kafka 为什么要把消息分区</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#9-Kafka%E4%B8%AD%E7%94%9F%E4%BA%A7%E8%80%85%E7%9A%84%E8%BF%90%E8%A1%8C%E6%B5%81%E7%A8%8B"><span class="top-box-text">9.Kafka中生产者的运行流程</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#10-Kafka%E7%9A%84%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85"><span class="top-box-text">10. Kafka的消息封装</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#11-Kafka-%E6%B6%88%E6%81%AF%E7%9A%84%E6%B6%88%E8%B4%B9%E6%A8%A1%E5%BC%8F"><span class="top-box-text">11. Kafka 消息的消费模式</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#12-Kafka-%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E4%B8%8E%E6%95%85%E9%9A%9C%E8%BD%AC%E7%A7%BB"><span class="top-box-text">12. Kafka 如何实现负载均衡与故障转移</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1"><span class="top-box-text">负载均衡</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%95%85%E9%9A%9C%E8%BD%AC%E7%A7%BB"><span class="top-box-text">故障转移</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#13-Kafka-%E4%B8%AD-Zookeeper-%E7%9A%84%E4%BD%9C%E7%94%A8"><span class="top-box-text">13. Kafka 中 Zookeeper 的作用</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#14-Kafka-%E6%8F%90%E4%BE%9B%E4%BA%86%E5%93%AA%E4%BA%9B%E7%B3%BB%E7%BB%9F%E5%B7%A5%E5%85%B7"><span class="top-box-text">14. Kafka 提供了哪些系统工具</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#15-Kafka-%E4%B8%AD%E6%B6%88%E8%B4%B9%E8%80%85%E4%B8%8E%E6%B6%88%E8%B4%B9%E8%80%85%E7%BB%84%E7%9A%84%E5%85%B3%E7%B3%BB%E4%B8%8E%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E5%AE%9E%E7%8E%B0"><span class="top-box-text">15. Kafka 中消费者与消费者组的关系与负载均衡实现</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1-1"><span class="top-box-text">负载均衡</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#16-Kafka-%E4%B8%AD%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E7%9A%84%E4%BD%9C%E7%94%A8"><span class="top-box-text">16. Kafka 中消息偏移的作用</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#17-%E7%94%9F%E4%BA%A7%E8%BF%87%E7%A8%8B%E4%B8%AD%E4%BD%95%E6%97%B6%E4%BC%9A%E5%8F%91%E7%94%9FQueueFullExpection%E4%BB%A5%E5%8F%8A%E5%A6%82%E4%BD%95%E5%A4%84%E7%90%86"><span class="top-box-text">17. 生产过程中何时会发生QueueFullExpection以及如何处理</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BD%95%E6%97%B6%E5%8F%91%E7%94%9F"><span class="top-box-text">何时发生</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3"><span class="top-box-text">如何解决</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#18-Consumer-%E5%A6%82%E4%BD%95%E6%B6%88%E8%B4%B9%E6%8C%87%E5%AE%9A%E5%88%86%E5%8C%BA%E6%B6%88%E6%81%AF"><span class="top-box-text">18. Consumer 如何消费指定分区消息</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#19-Replica%E3%80%81Leader-%E5%92%8C-Follower-%E4%B8%89%E8%80%85%E7%9A%84%E6%A6%82%E5%BF%B5"><span class="top-box-text">19. Replica、Leader 和 Follower 三者的概念</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#20-Replica-%E7%9A%84%E9%87%8D%E8%A6%81%E6%80%A7"><span class="top-box-text">20. Replica 的重要性</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#21-Kafka-%E4%B8%AD%E7%9A%84-Geo-Replication-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="top-box-text">21. Kafka 中的 Geo-Replication 是什么</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#22-Kafka-%E4%B8%AD-AR%E3%80%81ISR%E3%80%81OSR-%E4%B8%89%E8%80%85%E7%9A%84%E6%A6%82%E5%BF%B5"><span class="top-box-text">22. Kafka 中 AR、ISR、OSR 三者的概念</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#23-%E5%88%86%E5%8C%BA%E5%89%AF%E6%9C%AC%E4%BB%80%E4%B9%88%E6%83%85%E5%86%B5%E4%B8%8B%E4%BC%9A%E4%BB%8E-ISR-%E4%B8%AD%E5%89%94%E5%87%BA"><span class="top-box-text">23. 分区副本什么情况下会从 ISR 中剔出</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#24-%E5%88%86%E5%8C%BA%E5%89%AF%E6%9C%AC%E4%B8%AD%E7%9A%84-Leader-%E5%A6%82%E6%9E%9C%E5%AE%95%E6%9C%BA%E4%BD%86-ISR-%E5%8D%B4%E4%B8%BA%E7%A9%BA%E8%AF%A5%E5%A6%82%E4%BD%95%E5%A4%84%E7%90%86"><span class="top-box-text">24. 分区副本中的 Leader 如果宕机但 ISR 却为空该如何处理</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#25-%E5%A6%82%E4%BD%95%E5%88%A4%E6%96%AD%E4%B8%80%E4%B8%AA-Broker-%E6%98%AF%E5%90%A6%E8%BF%98%E6%9C%89%E6%95%88"><span class="top-box-text">25. 如何判断一个 Broker 是否还有效</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#26-Kafka-%E5%8F%AF%E6%8E%A5%E6%94%B6%E7%9A%84%E6%B6%88%E6%81%AF%E6%9C%80%E5%A4%A7%E9%BB%98%E8%AE%A4%E5%A4%9A%E5%B0%91%E5%AD%97%E8%8A%82%EF%BC%8C%E5%A6%82%E4%BD%95%E4%BF%AE%E6%94%B9"><span class="top-box-text">26. Kafka 可接收的消息最大默认多少字节，如何修改</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#27-Kafka-%E7%9A%84-ACK-%E6%9C%BA%E5%88%B6"><span class="top-box-text">27. Kafka 的 ACK 机制</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#28-Kafka-%E7%9A%84-consumer-%E5%A6%82%E4%BD%95%E6%B6%88%E8%B4%B9%E6%95%B0%E6%8D%AE"><span class="top-box-text">28. Kafka 的 consumer 如何消费数据</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#29-Kafka-%E6%8F%90%E4%BE%9B%E7%9A%84API%E6%9C%89%E5%93%AA%E4%BA%9B"><span class="top-box-text">29. Kafka 提供的API有哪些</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Sample-API"><span class="top-box-text">Sample API</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#High-level-API"><span class="top-box-text">High-level API</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#30-Kafka-%E7%9A%84Topic%E4%B8%AD-Partition-%E6%95%B0%E6%8D%AE%E6%98%AF%E6%80%8E%E4%B9%88%E5%AD%98%E5%82%A8%E5%88%B0%E7%A3%81%E7%9B%98%E7%9A%84"><span class="top-box-text">30. Kafka 的Topic中 Partition 数据是怎么存储到磁盘的</span></a></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/16/Redis%E7%AE%A1%E7%AA%A5/">
+          <h3 class="post-title">
+            下一篇：Redis管窥
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
