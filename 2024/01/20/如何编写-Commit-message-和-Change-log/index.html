@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>如何编写 Commit message 和 Change log</title>
+<meta name="keywords" content="如何编写 Commit message 和 Change log, HeXu">
+<meta name="description" content="Git 每次提交代码，都要写 Commit message（提交说明），否则就不允许提交。
+$ git commit -m &quot;hello world&quot;
+
+上面代码的-m参数，就是用来指定 commit message 的">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="如何编写 Commit message 和 Change log">
+<meta property="og:description" content="Git 每次提交代码，都要写 Commit message（提交说明），否则就不允许提交。
+$ git commit -m &quot;hello world&quot;
+
+上面代码的-m参数，就是用来指定 commit message 的">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">如何编写 Commit message 和 Change log</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-20</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Git/">
+              Git
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <p>Git 每次提交代码，都要写 Commit message（提交说明），否则就不允许提交。</p>
+<pre class="line-numbers language-none"><code class="language-none">$ git commit -m &quot;hello world&quot;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>上面代码的-m参数，就是用来指定 commit message 的。<br>如果一行不够，可以只执行git commit，就会跳出文本编辑器，让你写多行。</p>
+<pre class="line-numbers language-none"><code class="language-none">$ git commit<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>基本上，你写什么都行。<br>但是，一般来说，commit message 应该清晰明了，说明本次提交的目的。</p>
+<p>目前，社区有多种 Commit message 的写法规范。本文介绍 <strong>Angular</strong> 规范，这是目前使用最广的写法，比较合理和系统化，并且有配套的工具。</p>
+<h1 id="1-Commit-message-的作用"><a href="#1-Commit-message-的作用" class="headerlink" title="1. Commit message 的作用"></a>1. Commit message 的作用</h1><ol>
+<li>提供更多的历史信息，方便快速浏览。</li>
+<li>可以过滤某些commit（比如文档改动），便于快速查找信息。</li>
+<li>可以直接从commit生成Change log。</li>
+</ol>
+<h1 id="2-Commit-message-的格式"><a href="#2-Commit-message-的格式" class="headerlink" title="2. Commit message 的格式"></a>2. Commit message 的格式</h1><p>每次提交，Commit message 都包括三个部分：<strong>Header</strong>，<strong>Body</strong> 和 <strong>Footer</strong>。</p>
+<pre class="line-numbers language-none"><code class="language-none">&lt;type&gt;(&lt;scope&gt;): &lt;subject&gt;
+&#x2F;&#x2F; 空一行
+&lt;body&gt;
+&#x2F;&#x2F; 空一行
+&lt;footer&gt;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>其中，<strong>Header</strong> 是必需的，<strong>Body</strong> 和 <strong>Footer</strong> 可以省略。</p>
+<p>不管是哪一个部分，任何一行都不得超过72个字符（或100个字符）。这是为了避免自动换行影响美观。</p>
+<h2 id="2-1-Header"><a href="#2-1-Header" class="headerlink" title="2.1 Header"></a>2.1 Header</h2><h3 id="type"><a href="#type" class="headerlink" title="type"></a>type</h3><p><strong>type</strong> 用于说明 commit 的类别，只允许使用下面7个标识。</p>
+<blockquote>
+<ul>
+<li>feat：新功能（feature）</li>
+<li>fix：修补bug</li>
+<li>docs：文档（documentation）</li>
+<li>style： 格式（不影响代码运行的变动）</li>
+<li>refactor：重构（即不是新增功能，也不是修改bug的代码变动）</li>
+<li>test：增加测试</li>
+<li>chore：构建过程或辅助工具的变动</li>
+</ul>
+</blockquote>
+<p>如果 type 为 feat 和fix，则该 commit 将肯定出现在 Change log 之中。<br>其他情况（docs、chore、style、refactor、test）由你决定，要不要放入 Change log，建议是不要。</p>
+<h3 id="scope"><a href="#scope" class="headerlink" title="scope"></a>scope</h3><p><strong>scope</strong> 用于说明 commit 影响的范围，比如数据层、控制层、视图层等等，视项目不同而不同。</p>
+<h3 id="subject"><a href="#subject" class="headerlink" title="subject"></a>subject</h3><p><strong>subject</strong> 是 commit 目的的简短描述，不超过50个字符。</p>
+<blockquote>
+<ul>
+<li>以动词开头，使用第一人称现在时，比如change，而不是changed或changes</li>
+<li>第一个字母小写</li>
+<li>结尾不加句号（.）</li>
+</ul>
+</blockquote>
+<h2 id="2-2-Body"><a href="#2-2-Body" class="headerlink" title="2.2 Body"></a>2.2 Body</h2><p>Body 部分是对本次 commit 的详细描述，可以分成多行。下面是一个范例。</p>
+<blockquote>
+<p>More detailed explanatory text, if necessary.  Wrap it to<br>about 72 characters or so. </p>
+<p>Further paragraphs come after blank lines.</p>
+<ul>
+<li>Bullet points are okay, too</li>
+<li>Use a hanging indent</li>
+</ul>
+</blockquote>
+<p>有两个注意点。</p>
+<ol>
+<li>使用第一人称现在时，比如使用change而不是changed或changes。</li>
+<li>应该说明代码变动的动机，以及与以前行为的对比。</li>
+</ol>
+<h2 id="2-3-Footer"><a href="#2-3-Footer" class="headerlink" title="2.3 Footer"></a>2.3 Footer</h2><p>Footer 部分只用于两种情况。</p>
+<ol>
+<li>不兼容变动</li>
+</ol>
+<p>如果当前代码与上一个版本不兼容，则 Footer 部分以<strong>BREAKING CHANGE</strong>开头，后面是对变动的描述、以及变动理由和迁移方法。</p>
+<blockquote>
+<p>BREAKING CHANGE: isolate scope bindings definition has changed.</p>
+<p>   To migrate the code follow the example below:</p>
+<p>   Before:</p>
+<p>   scope: {<br>    myAttr: ‘attribute’,<br>   }</p>
+<p>   After:</p>
+<p>   scope: {<br>     myAttr: ‘@’,<br>   }<br>   The removed <code>inject</code> wasn’t generaly useful for directives so there should be no code using it.</p>
+</blockquote>
+<ol start="2">
+<li>关闭 Issue</li>
+</ol>
+<p>如果当前 commit 针对某个issue，那么可以在 Footer 部分关闭这个 issue 。</p>
+<pre class="line-numbers language-none"><code class="language-none">Closes #234<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>也可以一次关闭多个 issue 。</p>
+<pre class="line-numbers language-none"><code class="language-none">Closes #123, #245, #992<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<ol start="3">
+<li>Revert</li>
+</ol>
+<p>还有一种特殊情况，如果当前 commit 用于撤销以前的 commit，则必须以<strong>revert</strong>:开头，后面跟着被撤销 Commit 的 Header。</p>
+<blockquote>
+<p>revert: feat(pencil): add ‘graphiteWidth’ option<br>This reverts commit 667ecc1654a317a13331b17617d973392f415f02.</p>
+</blockquote>
+<p>Body部分的格式是固定的，必须写成 <code>This reverts commit &amp;lt;hash&gt;.</code>，其中的<code>hash</code>是被撤销 commit 的 SHA 标识符。</p>
+<p>如果当前 commit 与被撤销的 commit，在同一个发布（release）里面，那么它们都不会出现在 Change log 里面。<br>如果两者在不同的发布，那么当前 commit，会出现在 Change log 的<code>Reverts</code>小标题下面。</p>
+<h1 id="Commitizen"><a href="#Commitizen" class="headerlink" title="Commitizen"></a>Commitizen</h1><p><code>Commitizen</code> 是一个撰写合格 Commit message 的工具。</p>
+<p>安装命令如下。</p>
+<pre class="line-numbers language-none"><code class="language-none">$ npm install -g commitizen<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>然后，在项目目录里，运行下面的命令，使其支持 Angular 的 Commit message 格式。</p>
+<pre class="line-numbers language-none"><code class="language-none">$ commitizen init cz-conventional-changelog --save --save-exact<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>以后，凡是用到git commit命令，一律改为使用git cz。这时，就会出现选项，用来生成符合格式的 Commit message。</p>
+<p><a class="simple-lightbox" href="/../images/%E5%A6%82%E4%BD%95%E7%BC%96%E5%86%99-Commit-message-%E5%92%8C-Change-log/Commitizen.png"><img   src="/images/loading.svg" data-src="/../images/%E5%A6%82%E4%BD%95%E7%BC%96%E5%86%99-Commit-message-%E5%92%8C-Change-log/Commitizen.png"  alt="Commitizen" lazyload></a></p>
+<h1 id="4-生成-Change-log"><a href="#4-生成-Change-log" class="headerlink" title="4. 生成 Change log"></a>4. 生成 Change log</h1><p>如果你的所有 Commit 都符合 Angular 格式，那么发布新版本时， Change log 就可以用脚本自动生成。<br>生成的文档包括以下三个部分。</p>
+<blockquote>
+<ul>
+<li>New features</li>
+<li>Bug fixes</li>
+<li>Breaking changes.</li>
+</ul>
+</blockquote>
+<p>每个部分都会罗列相关的 commit ，并且有指向这些 commit 的链接。当然，生成的文档允许手动修改，所以发布前，你还可以添加其他内容。</p>
+<p><code>conventional-changelog</code> 就是生成 Change log 的工具，运行下面的命令即可。</p>
+<blockquote>
+<p>npm install -g conventional-changelog<br>cd my-project<br>conventional-changelog -p angular -i CHANGELOG.md -w</p>
+</blockquote>
+<p>为了方便使用，可以将其写入<code>package.json</code>的<code>scripts</code>字段。</p>
+<pre class="line-numbers language-none"><code class="language-none">
+&#123;
+  &quot;scripts&quot;: &#123;
+    &quot;changelog&quot;: &quot;conventional-changelog -p angular -i CHANGELOG.md -w -r 0&quot;
+  &#125;
+&#125;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>以后，直接运行下面的命令即可。</p>
+<blockquote>
+<p>npm run changelog</p>
+</blockquote>
+<p>(end)</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-Commit-message-%E7%9A%84%E4%BD%9C%E7%94%A8"><span class="top-box-text">1. Commit message 的作用</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-Commit-message-%E7%9A%84%E6%A0%BC%E5%BC%8F"><span class="top-box-text">2. Commit message 的格式</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-Header"><span class="top-box-text">2.1 Header</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#type"><span class="top-box-text">type</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#scope"><span class="top-box-text">scope</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#subject"><span class="top-box-text">subject</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-Body"><span class="top-box-text">2.2 Body</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-Footer"><span class="top-box-text">2.3 Footer</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#Commitizen"><span class="top-box-text">Commitizen</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-%E7%94%9F%E6%88%90-Change-log"><span class="top-box-text">4. 生成 Change log</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/18/Kafka%E7%AE%A1%E7%AA%A5/">
+          <h3 class="post-title">
+            下一篇：Kafka管窥
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
