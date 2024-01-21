@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>JSON Web Token 入门</title>
+<meta name="keywords" content="JSON Web Token 入门, HeXu">
+<meta name="description" content="0 前言JSON Web Token（JWT）是目前比较流行的跨域认证解决方案，本文介绍他的原理和方法。
+1 跨域认证问题互联网服务会经常遇到用户认证问题，一般的流程如下：
+
+用户向服务器发送用户名和密码；
+服务器经过验证之后，在当前对话（">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="JSON Web Token 入门">
+<meta property="og:description" content="0 前言JSON Web Token（JWT）是目前比较流行的跨域认证解决方案，本文介绍他的原理和方法。
+1 跨域认证问题互联网服务会经常遇到用户认证问题，一般的流程如下：
+
+用户向服务器发送用户名和密码；
+服务器经过验证之后，在当前对话（">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">JSON Web Token 入门</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-21</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Backend/">
+              Backend
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="0-前言"><a href="#0-前言" class="headerlink" title="0 前言"></a>0 前言</h1><p>JSON Web Token（JWT）是目前比较流行的跨域认证解决方案，本文介绍他的原理和方法。</p>
+<h1 id="1-跨域认证问题"><a href="#1-跨域认证问题" class="headerlink" title="1 跨域认证问题"></a>1 跨域认证问题</h1><p>互联网服务会经常遇到用户认证问题，一般的流程如下：</p>
+<ol>
+<li>用户向服务器发送用户名和密码；</li>
+<li>服务器经过验证之后，在当前对话（session）里保存相关的数据，比如用户角色，登录时间等等；</li>
+<li>服务器向用户返回一个 session_id, 写入用户的 cookie；</li>
+<li>用户随后的每一次请求，都会通过cookie将session_id传回服务器；</li>
+<li>服务器读取到session_id，找到前期保存的数据，由此得知用户的身份信息。</li>
+</ol>
+<p>这种模式有一个问题，扩展性（scaling）不好。单机当然没有问题，如果是服务器集群，或者是跨域的服务导向架构，就要求 session 是共享的。</p>
+<p>举例来说，A 网站和 B 网站是同一家公司的关联服务。现在要求，用户只要在其中一个网站登录，再访问另一个网站就会自动登录，请问怎么实现？</p>
+<p>一种解决方案是 <strong>session 数据持久化</strong>，写入数据库或别的持久层。各种服务收到请求后，都向持久层请求数据。这种方案的优点是架构清晰，缺点是工程量比较大。另外，持久层万一挂了，就会单点失败。</p>
+<p>另一种方案是服务器索性不保存 session 数据了，所有数据都保存在客户端，每次请求都发回服务器。<strong>JWT</strong> 就是这种方案的一个代表。</p>
+<h1 id="2-JWT-的原理"><a href="#2-JWT-的原理" class="headerlink" title="2 JWT 的原理"></a>2 JWT 的原理</h1><p>JWT 的原理是，服务器认证以后，生成一个 JSON 对象，发回给用户，就像下面这样。</p>
+<blockquote>
+<p>{<br>“姓名”: “张三”,<br>“角色”: “管理员”,<br>“到期时间”: “2018年7月1日0点0分”<br>}</p>
+</blockquote>
+<p>以后，用户与服务端通信的时候，都要发回这个 JSON 对象。服务器完全只靠这个对象认定用户身份。为了防止用户篡改数据，服务器在生成这个对象的时候，会加上签名（详见后文）。</p>
+<p>服务器就不保存任何 session 数据了，也就是说，服务器变成无状态了，从而比较容易实现扩展。</p>
+<h1 id="3-JWT-的数据结构"><a href="#3-JWT-的数据结构" class="headerlink" title="3 JWT 的数据结构"></a>3 JWT 的数据结构</h1><p>实际的 JWT 大概就像下面这样。</p>
+<p><a class="simple-lightbox" href="/../images/JSON-Web-Token-%E5%85%A5%E9%97%A8/bg2018072304.jpg"><img   src="/images/loading.svg" data-src="/../images/JSON-Web-Token-%E5%85%A5%E9%97%A8/bg2018072304.jpg"  alt="JWT" lazyload></a></p>
+<p>它是一个很长的字符串，中间用点（<code>.</code>）分隔成三个部分。注意，JWT 内部是没有换行的，这里只是为了便于展示，将它写成了几行。</p>
+<p>JWT 的三个部分依次如下:</p>
+<blockquote>
+<ul>
+<li>Header（头部）</li>
+<li>Payload（负载）</li>
+<li>Signature（签名）</li>
+</ul>
+</blockquote>
+<h2 id="3-1-Header"><a href="#3-1-Header" class="headerlink" title="3.1 Header"></a>3.1 Header</h2><p>Header 部分是一个 JSON 对象，描述 JWT 的元数据，通常是下面的样子。</p>
+<pre class="line-numbers language-none"><code class="language-none">&#123;
+  &quot;alg&quot;: &quot;HS256&quot;,
+  &quot;typ&quot;: &quot;JWT&quot;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>上面代码中，<code>alg</code>属性表示签名的算法（<code>algorithm</code>），默认是 HMAC SHA256（写成 HS256）；<code>typ</code>属性表示这个令牌（token）的类型（<code>type</code>），JWT 令牌统一写为JWT。</p>
+<p>最后，将上面的 JSON 对象使用 <code>Base64URL</code> 算法（详见后文）转成字符串。</p>
+<h2 id="3-2-Payload"><a href="#3-2-Payload" class="headerlink" title="3.2 Payload"></a>3.2 Payload</h2><p>Payload 部分也是一个 JSON 对象，用来存放实际需要传递的数据。JWT 规定了7个官方字段，供选用。</p>
+<pre class="line-numbers language-none"><code class="language-none">iss (issuer)：签发人
+exp (expiration time)：过期时间
+sub (subject)：主题
+aud (audience)：受众
+nbf (Not Before)：生效时间
+iat (Issued At)：签发时间
+jti (JWT ID)：编号<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>除了官方字段，你还可以在这个部分定义私有字段，下面就是一个例子。</p>
+<pre class="line-numbers language-none"><code class="language-none">&#123;
+  &quot;sub&quot;: &quot;1234567890&quot;,
+  &quot;name&quot;: &quot;John Doe&quot;,
+  &quot;admin&quot;: true
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>注意，JWT 默认是不加密的，任何人都可以读到，所以不要把秘密信息放在这个部分。<br>这个 JSON 对象也要使用 <code>Base64URL</code> 算法转成字符串。</p>
+<h2 id="3-3-Signature"><a href="#3-3-Signature" class="headerlink" title="3.3 Signature"></a>3.3 Signature</h2><p>Signature 部分是对前两部分的签名，防止数据篡改。</p>
+<p>首先，需要指定一个密钥（<strong>secret</strong>）。这个密钥只有服务器才知道，不能泄露给用户。然后，使用 Header 里面指定的签名算法（默认是 <code>HMAC SHA256</code>），按照下面的公式产生签名。</p>
+<p><code>HMACSHA256(   base64UrlEncode(header) + &quot;.&quot; +   base64UrlEncode(payload),   secret)</code></p>
+<p>算出签名以后，把 Header、Payload、Signature 三个部分拼成一个字符串，每个部分之间用”点”（.）分隔，就可以返回给用户。</p>
+<h2 id="3-4-Base64URL"><a href="#3-4-Base64URL" class="headerlink" title="3.4 Base64URL"></a>3.4 Base64URL</h2><p>前面提到，<code>Header</code> 和 <code>Payload</code> 串型化的算法是 <code>Base64URL</code>。这个算法跟 Base64 算法基本类似，但有一些小的不同。<br>JWT 作为一个令牌（token），有些场合可能会放到 URL（比如 api.example.com&#x2F;?token&#x3D;xxx）。Base64 有三个字符+、&#x2F;和&#x3D;，在 URL 里面有特殊含义，所以要被替换掉：<code>=被省略、+替换成-，/替换成_ </code>。这就是 Base64URL 算法。</p>
+<h1 id="4-JWT-的使用方式"><a href="#4-JWT-的使用方式" class="headerlink" title="4 JWT 的使用方式"></a>4 JWT 的使用方式</h1><p>客户端收到服务器返回的 <code>JWT</code>，可以储存在 Coo<code>kie 里面，也可以储存在 </code>localStorage<code>。 此后，客户端每次与服务器通信，都要带上这个 JWT。你可以把它放在 </code>Cookie&#96; 里面自动发送，但是这样不能跨域，所以<strong>更好的做法是放在 HTTP 请求的头信息Authorization字段里面。</strong></p>
+<pre class="line-numbers language-none"><code class="language-none">
+Authorization: Bearer &lt;token&gt;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<p>另一种做法是，跨域的时候，JWT 就放在 POST 请求的数据体里面。</p>
+<h1 id="5-JWT-的几个特点"><a href="#5-JWT-的几个特点" class="headerlink" title="5 JWT 的几个特点"></a>5 JWT 的几个特点</h1><ol>
+<li>JWT 默认是不加密，但也是可以加密的。生成原始 Token 以后，可以用密钥再加密一次。</li>
+<li>JWT 不加密的情况下，不能将秘密数据写入 JWT。</li>
+<li>JWT 不仅可以用于认证，也可以用于交换信息。有效使用 JWT，可以降低服务器查询数据库的次数。</li>
+<li><strong>JWT 的最大缺点是，由于服务器不保存 session 状态，因此无法在使用过程中废止某个 token，或者更改 token 的权限。也就是说，一旦 JWT 签发了，在到期之前就会始终有效，除非服务器部署额外的逻辑。</strong></li>
+<li>JWT 本身包含了认证信息，一旦泄露，任何人都可以获得该令牌的所有权限。为了减少盗用，JWT 的有效期应该设置得比较短。对于一些比较重要的权限，使用时应该再次对用户进行认证。</li>
+<li>为了减少盗用，JWT 不应该使用 HTTP 协议明码传输，要使用 HTTPS 协议传输。</li>
+</ol>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#0-%E5%89%8D%E8%A8%80"><span class="top-box-text">0 前言</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E8%B7%A8%E5%9F%9F%E8%AE%A4%E8%AF%81%E9%97%AE%E9%A2%98"><span class="top-box-text">1 跨域认证问题</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-JWT-%E7%9A%84%E5%8E%9F%E7%90%86"><span class="top-box-text">2 JWT 的原理</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-JWT-%E7%9A%84%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">3 JWT 的数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-Header"><span class="top-box-text">3.1 Header</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-Payload"><span class="top-box-text">3.2 Payload</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-Signature"><span class="top-box-text">3.3 Signature</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-4-Base64URL"><span class="top-box-text">3.4 Base64URL</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-JWT-%E7%9A%84%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F"><span class="top-box-text">4 JWT 的使用方式</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#5-JWT-%E7%9A%84%E5%87%A0%E4%B8%AA%E7%89%B9%E7%82%B9"><span class="top-box-text">5 JWT 的几个特点</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/20/%E5%A6%82%E4%BD%95%E7%BC%96%E5%86%99-Commit-message-%E5%92%8C-Change-log/">
+          <h3 class="post-title">
+            下一篇：如何编写 Commit message 和 Change log
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
