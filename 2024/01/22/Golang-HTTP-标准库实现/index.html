@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang HTTP 标准库实现</title>
+<meta name="keywords" content="Golang HTTP 标准库实现, HeXu">
+<meta name="description" content="1 整体框架1.1 CS 架构http 协议下，交互框架是由客户端（Client）和服务端（Server）两个模块组成的 C-S 架构，两个部分正好对应为本文研究的两条主线
+1.2 启动 http 服务在 Golang 启动一个 http ">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang HTTP 标准库实现">
+<meta property="og:description" content="1 整体框架1.1 CS 架构http 协议下，交互框架是由客户端（Client）和服务端（Server）两个模块组成的 C-S 架构，两个部分正好对应为本文研究的两条主线
+1.2 启动 http 服务在 Golang 启动一个 http ">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang HTTP 标准库实现</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-22</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="1-整体框架"><a href="#1-整体框架" class="headerlink" title="1 整体框架"></a>1 整体框架</h1><h2 id="1-1-CS-架构"><a href="#1-1-CS-架构" class="headerlink" title="1.1 CS 架构"></a>1.1 CS 架构</h2><p>http 协议下，交互框架是由客户端（Client）和服务端（Server）两个模块组成的 C-S 架构，两个部分正好对应为本文研究的两条主线</p>
+<h2 id="1-2-启动-http-服务"><a href="#1-2-启动-http-服务" class="headerlink" title="1.2 启动 http 服务"></a>1.2 启动 http 服务</h2><p>在 Golang 启动一个 http 服务只需寥寥数笔，非常方便，代码示例如下：</p>
+<pre class="line-numbers language-none"><code class="language-none">import (
+    &quot;net&#x2F;http&quot;
+)
+
+func main() &#123;
+    http.HandleFunc(&quot;&#x2F;ping&quot;, func(w http.ResponseWriter, r *http.Request) &#123;
+        w.Write([]byte(&quot;pong&quot;))
+    &#125;)
+    http.ListenAndServe(&quot;:8091&quot;, nil)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>调用 http.HandleFunc 方法，注册了对应于请求路径 &#x2F;ping 的 handler 函数<br>调用 http.ListenAndServe，启动了一个端口为 8091 的 http 服务</p>
+<h2 id="1-3-发送-http-请求"><a href="#1-3-发送-http-请求" class="headerlink" title="1.3 发送 http 请求"></a>1.3 发送 http 请求</h2><p>在 Golang 中发送 http 请求的实现同样非常简单. 下面给出一例发送 JSON POST 请求的代码示例.</p>
+<pre class="line-numbers language-none"><code class="language-none">
+func main() &#123;
+    reqBody, _ :&#x3D; json.Marshal(map[string]string&#123;&quot;key1&quot;: &quot;val1&quot;, &quot;key2&quot;: &quot;val2&quot;&#125;)
+    
+    resp, _ :&#x3D; http.Post(&quot;:8091&quot;, &quot;application&#x2F;json&quot;, bytes.NewReader(reqBody))
+    defer resp.Body.Close()
+    
+    respBody, _ :&#x3D; io.ReadAll(resp.Body)
+    fmt.Printf(&quot;resp: %s&quot;, respBody)
+&#125;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<h2 id="1-4-源码位置一览"><a href="#1-4-源码位置一览" class="headerlink" title="1.4 源码位置一览"></a>1.4 源码位置一览</h2><p>本文涉及内容的源码均位于 net&#x2F;http 库下，各模块的文件位置如下表所示：</p>
+<table>
+<thead>
+<tr>
+<th align="center">模块</th>
+<th align="center">文件</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">服务端</td>
+<td align="center">net&#x2F;http&#x2F;server.go</td>
+</tr>
+<tr>
+<td align="center">客户端——主流程</td>
+<td align="center">net&#x2F;http&#x2F;client.go</td>
+</tr>
+<tr>
+<td align="center">客户端——构造请求</td>
+<td align="center">net&#x2F;http&#x2F;request.go</td>
+</tr>
+<tr>
+<td align="center">客户端——网络交互</td>
+<td align="center">net&#x2F;http&#x2F;transport.go</td>
+</tr>
+</tbody></table>
+<h1 id="2-服务端"><a href="#2-服务端" class="headerlink" title="2 服务端"></a>2 服务端</h1><h2 id="2-1-核心数据结构"><a href="#2-1-核心数据结构" class="headerlink" title="2.1 核心数据结构"></a>2.1 核心数据结构</h2><p>首先对 http 服务端模块涉及的核心数据结构作简要介绍.</p>
+<ol>
+<li><p>Server</p>
+<p> 基于面向对象的思想，整个 http 服务端模块被封装在 Server 类当中.</p>
+<p> <code>Handler</code> 是 <code>Server</code> 中最核心的成员字段，实现了从请求路径 <code>path</code> 到具体处理方法 <code>handler</code> 的注册和映射能力.</p>
+<p> 在用户构造 <code>Server</code> 对象时，倘若其中的 <code>Handler</code> 字段未显式声明，则会取 <code>net/http</code> 包下的单例对象 <code>DefaultServeMux（ServerMux 类型）</code> 进行兜底.</p>
+ <pre class="line-numbers language-none"><code class="language-none">type Server struct &#123;
+    &#x2F;&#x2F; server 的地址
+    Addr string
+    &#x2F;&#x2F; 路由器.
+    Handler Handler &#x2F;&#x2F; handler to invoke, http.DefaultServeMux if nil
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+</li>
+<li><p>Handler</p>
+<p> <code>Handler</code> 是一个 <code>interface</code>，暴露了方法： <code>ServeHTTP</code>.</p>
+<p> 该方法的作用是，根据 http 请求 Request 中的请求路径 path 映射到对应的 handler 处理函数，对请求进行处理和响应.</p>
+ <pre class="line-numbers language-none"><code class="language-none">type Handler interface &#123;
+    ServeHTTP(ResponseWriter, *Request)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+</li>
+<li><p>ServeMux<br> <code>ServeMux</code> 是对 <code>Handler</code> 的具体实现，内部通过一个 <code>map</code> 维护了从 <code>path</code> 到 <code>handler</code> 的映射关系.</p>
+ <pre class="line-numbers language-none"><code class="language-none">type ServeMux struct &#123;
+    mu sync.RWMutex
+    m map[string]muxEntry
+    es []muxEntry &#x2F;&#x2F; slice of entries sorted from longest to shortest.
+    hosts bool &#x2F;&#x2F; whether any patterns contain hostnames
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+</li>
+<li><p>muxEntry<br> muxEntry 为一个 handler 单元，内部包含了请求路径 path + 处理函数 handler 两部分.</p>
+ <pre class="line-numbers language-none"><code class="language-none">type muxEntry struct &#123;
+    h Handler
+    pattern string 
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre></li>
+</ol>
+<h2 id="2-2-注册-handler"><a href="#2-2-注册-handler" class="headerlink" title="2.2 注册 handler"></a>2.2 注册 handler</h2><p>首先给出服务端注册 handler 的主干链路，避免晕车.</p>
+<p><a class="simple-lightbox" href="/../images/Golang-HTTP-%E6%A0%87%E5%87%86%E5%BA%93%E5%AE%9E%E7%8E%B0/register_handel.png"><img   src="/images/loading.svg" data-src="/../images/Golang-HTTP-%E6%A0%87%E5%87%86%E5%BA%93%E5%AE%9E%E7%8E%B0/register_handel.png"  alt="register_handel" lazyload></a></p>
+<p>在 <code>net/http</code> 包下声明了一个单例 <code>ServeMux</code>，当用户直接通过公开方法 <code>http.HandleFunc</code> 注册 handler 时，则会将其注册到 <code>DefaultServeMux</code> 当中.</p>
+<pre class="line-numbers language-none"><code class="language-none">var DefaultServeMux &#x3D; &amp;defaultServeMux
+var defaultServeMux ServeMux
+
+func HandleFunc(pattern string, handler func(ResponseWriter, *Request)) &#123;
+    DefaultServeMux.HandleFunc(pattern, handler)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>ServeMux.HandleFunc</code> 内部会将处理函数 <code>handler</code> 转为实现了 <code>ServeHTTP</code> 方法的 <code>HandlerFunc</code> 类型，将其作为 <code>Handler interface</code> 的实现类注册到 <code>ServeMux</code> 的路由 map 当中.</p>
+<pre class="line-numbers language-none"><code class="language-none">type HandlerFunc func(ResponseWriter, *Request)
+
+
+&#x2F;&#x2F; ServeHTTP calls f(w, r).
+func (f HandlerFunc) ServeHTTP(w ResponseWriter, r *Request) &#123;
+    f(w, r)
+&#125;
+
+
+func (mux *ServeMux) HandleFunc(pattern string, handler func(ResponseWriter, *Request)) &#123;
+    &#x2F;&#x2F; ...
+    mux.Handle(pattern, HandlerFunc(handler))
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>实现路由注册的核心逻辑位于 ServeMux.Handle 方法中，两个核心逻辑值得一提：</p>
+<ul>
+<li>将 <code>path</code> 和 <code>handler</code> 包装成一个 <code>muxEntry</code>，以 path 为 key 注册到路由 map ServeMux.m 中</li>
+<li><strong>响应模糊匹配机制</strong>. 对于以 ‘&#x2F;‘ 结尾的 path，根据 path 长度将 <code>muxEntry</code> 有序插入到数组 <code>ServeMux.es</code> 中.</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">func (mux *ServeMux) Handle(pattern string, handler Handler) &#123;
+    mux.mu.Lock()
+    defer mux.mu.Unlock()
+    &#x2F;&#x2F; ...
+
+    e :&#x3D; muxEntry&#123;h: handler, pattern: pattern&#125; &#x2F;&#x2F; 将 path 和 handler 包装成一个 muxEntry
+    mux.m[pattern] &#x3D; e &#x2F;&#x2F; 插入到 ServeMux
+
+    &#x2F;&#x2F; 最后一位是 “&#x2F;”，响应模糊匹配机制，有序插入
+    if pattern[len(pattern)-1] &#x3D;&#x3D; &#39;&#x2F;&#39; &#123;
+        mux.es &#x3D; appendSorted(mux.es, e)
+    &#125;
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; 有序插入的实现
+func appendSorted(es []muxEntry, e muxEntry) []muxEntry &#123;
+    n :&#x3D; len(es)
+    &#x2F;&#x2F; 根据路径长短进行排序
+    i :&#x3D; sort.Search(n, func(i int) bool &#123;
+        return len(es[i].pattern) &lt; len(e.pattern)
+    &#125;)
+    if i &#x3D;&#x3D; n &#123;
+        return append(es, e)
+    &#125;
+    es &#x3D; append(es, muxEntry&#123;&#125;) &#x2F;&#x2F; try to grow the slice in place, any entry works.
+    copy(es[i+1:], es[i:])      &#x2F;&#x2F; Move shorter entries down
+    es[i] &#x3D; e
+    return es
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-3-启动-server"><a href="#2-3-启动-server" class="headerlink" title="2.3 启动 server"></a>2.3 启动 server</h2><p><a class="simple-lightbox" href="/../images/Golang-HTTP-%E6%A0%87%E5%87%86%E5%BA%93%E5%AE%9E%E7%8E%B0/server_pipeline.png"><img   src="/images/loading.svg" data-src="/../images/Golang-HTTP-%E6%A0%87%E5%87%86%E5%BA%93%E5%AE%9E%E7%8E%B0/server_pipeline.png"  alt="server_pipeline" lazyload></a></p>
+<p>调用 <code>net/http</code> 包下的公开方法 <code>ListenAndServe</code>，可以实现对服务端的一键启动. 内部会声明一个新的 <code>Server</code> 对象，嵌套执行 <code>Server.ListenAndServe</code> 方法.</p>
+<pre class="line-numbers language-none"><code class="language-none">func ListenAndServe(addr string, handler Handler) error &#123;
+    server :&#x3D; &amp;Server&#123;Addr: addr, Handler: handler&#125;
+    return server.ListenAndServe()
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>Server.ListenAndServe</code> 方法中，根据用户传入的端口，申请到一个监听器 <code>listener</code>，继而调用 Server.Serve 方法.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (srv *Server) ListenAndServe() error &#123;
+    &#x2F;&#x2F; ...
+    addr :&#x3D; srv.Addr
+    if addr &#x3D;&#x3D; &quot;&quot; &#123;
+        addr &#x3D; &quot;:http&quot;
+    &#125;
+
+    &#x2F;&#x2F; 申请到一个监听器 listener
+    ln, err :&#x3D; net.Listen(&quot;tcp&quot;, addr)
+    &#x2F;&#x2F; ...    
+
+    &#x2F;&#x2F; 继而调用 Server.Serve 方法
+    return srv.Serve(ln)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>Server.Serve</code> 方法很核心，体现了 <code>http</code> 服务端的运行架构：<strong>for + listener.accept</strong> 模式.</p>
+<p>将 <code>server</code> 封装成一组 <code>kv</code> 对，添加到 <code>context</code> 当中<br>开启 <code>for</code> 循环，每轮循环调用 <code>Listener.Accept</code> 方法阻塞等待新连接到达。每有一个连接到达，创建一个 <code>goroutine</code> 异步执行 <code>conn.serve</code> 方法负责处理</p>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; server 的 key
+var ServerContextKey &#x3D; &amp;contextKey&#123;&quot;http-server&quot;&#125;
+
+type contextKey struct &#123;
+    name string
+&#125;
+
+func (srv *Server) Serve(l net.Listener) error &#123;
+   &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; server 的 kv 对，添加到 context 中
+    ctx :&#x3D; context.WithValue(baseCtx, ServerContextKey, srv)
+
+    &#x2F;&#x2F; 开启 for 循环，每轮循环调用 Listener.Accept 方法阻塞等待新链接到达
+    &#x2F;&#x2F; 每有一个链接到达，创建一个 goroutine 异步执行 conn.serve 方法负责处理
+    for &#123;
+        rw, err :&#x3D; l.Accept()
+        &#x2F;&#x2F; ...
+        connCtx :&#x3D; ctx
+        &#x2F;&#x2F; ...
+        c :&#x3D; srv.newConn(rw)
+        &#x2F;&#x2F; ...
+        go c.serve(connCtx)
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>conn.serve</code> 是响应客户端连接的核心方法：</p>
+<p>从 <code>conn</code> 中读取到封装到 <code>response</code> 结构体，以及请求参数 <code>http.Request</code><br>调用 <code>serveHandler.ServeHTTP</code> 方法，根据请求的 <code>path</code> 为其分配 <code>handler</code><br>通过特定 <code>handler</code> 处理并响应请求</p>
+<pre class="line-numbers language-none"><code class="language-none">func (c *conn) serve(ctx context.Context) &#123;
+    &#x2F;&#x2F; ...
+    &#x2F;&#x2F; 创建 connReader 实例并将其赋值给 c.r 字段。
+    c.r &#x3D; &amp;connReader&#123;conn: c&#125;
+
+    &#x2F;&#x2F; 使用 connReader c.r 创建 bufio.Reader 实例，并将其赋值给 c.bufr 字段。
+    c.bufr &#x3D; newBufioReader(c.r)
+
+    &#x2F;&#x2F; 创建一个缓冲区大小为 4KB 的 bufio.Writer 实例，并将其赋值给 c.bufw 字段。
+    c.bufw &#x3D; newBufioWriterSize(checkConnErrorWriter&#123;c&#125;, 4&lt;&lt;10)
+
+
+    for &#123;
+        &#x2F;&#x2F; 使用 c.readRequest(ctx) 读取请求，并将请求数据赋值给变量 w。
+        w, err :&#x3D; c.readRequest(ctx)
+        &#x2F;&#x2F; ...
+
+         &#x2F;&#x2F; 调用 serverHandler&#123;c.server&#125;.ServeHTTP 方法处理请求 w 和 w.req。
+        serverHandler&#123;c.server&#125;.ServeHTTP(w, w.req)
+
+        &#x2F;&#x2F; 取消与当前请求关联的上下文。
+        w.cancelCtx()
+        &#x2F;&#x2F; ...
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>serveHandler.ServeHTTP</code> 方法中，会对 <code>Handler</code> 作判断，倘若其未声明，则取全局单例 <code>DefaultServeMux</code> 进行路由匹配，呼应了 <code>http.HandleFunc</code> 中的处理细节.</p>
+<pre class="line-numbers language-none"><code class="language-none">
+func (sh serverHandler) ServeHTTP(rw ResponseWriter, req *Request) &#123;
+    &#x2F;&#x2F; 获取server执行的 handler
+    handler :&#x3D; sh.srv.Handler
+
+    &#x2F;&#x2F; 如果取得的handler为空，就用默认的 DefaultServeMux
+    if handler &#x3D;&#x3D; nil &#123;
+        handler &#x3D; DefaultServeMux
+    &#125;
+    &#x2F;&#x2F; ...
+    handler.ServeHTTP(rw, req)
+&#125;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>接下来，兜兜转转依次调用 <code>ServeMux.ServeHTTP</code>、<code>ServeMux.Handler</code>、<code>ServeMux.handler</code> 等方法，最终在 <code>ServeMux.match</code> 方法中，以 <code>Request</code> 中的 <code>path</code> 为 <code>pattern</code>，在路由字典 <code>Server.m</code> 中匹配 <code>handler</code>，最后调用 <code>handler.ServeHTTP</code> 方法进行请求的处理和响应.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (mux *ServeMux) ServeHTTP(w ResponseWriter, r *Request) &#123;
+    &#x2F;&#x2F; ...
+    h, _ :&#x3D; mux.Handler(r)
+    h.ServeHTTP(w, r)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string) &#123;
+    &#x2F;&#x2F; ...
+    return mux.handler(host, r.URL.Path)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func (mux *ServeMux) handler(host, path string) (h Handler, pattern string) &#123;
+    mux.mu.RLock()
+    defer mux.mu.RUnlock()
+    
+    &#x2F;&#x2F; ...
+    h, pattern &#x3D; mux.match(path)
+    &#x2F;&#x2F; ...
+    return
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>值得一提的是，当通过路由字典 <code>Server.m</code> 未命中 <code>handler</code> 时，此时会启动<strong>模糊匹配</strong>模式，两个核心规则如下：</p>
+<ul>
+<li>以 ‘&#x2F;‘ 结尾的 <code>pattern</code> 才能被添加到 <code>Server.es</code> 数组中，才有资格参与模糊匹配</li>
+<li>模糊匹配时，会找到一个与请求路径 <code>path</code> 前缀完全匹配且长度最长的 <code>pattern</code>，其对应的<code>handler</code> 会作为本次请求的处理函数.</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">func (mux *ServeMux) match(path string) (h Handler, pattern string) &#123;
+    v, ok :&#x3D; mux.m[path]
+    if ok &#123;
+        return v.h, v.pattern
+    &#125;
+
+    &#x2F;&#x2F; ServeMux.es 本身是按照 pattern 的长度由大到小排列的
+    for _, e :&#x3D; range mux.es &#123;
+        if strings.HasPrefix(path, e.pattern) &#123;
+            return e.h, e.pattern
+        &#125;
+    &#125;
+    return nil, &quot;&quot;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="3-客户端"><a href="#3-客户端" class="headerlink" title="3 客户端"></a>3 客户端</h1><h2 id="3-1-核心数据结构"><a href="#3-1-核心数据结构" class="headerlink" title="3.1 核心数据结构"></a>3.1 核心数据结构</h2><h3 id="1-Client"><a href="#1-Client" class="headerlink" title="1. Client"></a>1. Client</h3><p>与 <code>Server</code> 对仗，客户端模块也有一个 <code>Client</code> 类，实现对整个模块的封装：</p>
+<ul>
+<li><code>Transport</code>：负责 http 通信的核心部分，也是接下来的讨论重点</li>
+<li><code>Jar</code>：cookie 管理</li>
+<li><code>Timeout</code>：超时设置</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">type Client struct &#123;
+    &#x2F;&#x2F; ...
+    Transport RoundTripper
+    &#x2F;&#x2F; ...
+    Jar CookieJar
+    &#x2F;&#x2F; ...
+    Timeout time.Duration
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="2-RoundTripper"><a href="#2-RoundTripper" class="headerlink" title="2. RoundTripper"></a>2. RoundTripper</h3><p><code>RoundTripper</code> 是通信模块的 interface，需要实现方法 <code>Roundtrip</code>，即通过传入请求 <code>Request</code>，与服务端交互后获得响应 <code>Response</code>.</p>
+<pre class="line-numbers language-none"><code class="language-none">type RoundTripper interface &#123;
+    RoundTrip(*Request) (*Response, error)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="3-Transport"><a href="#3-Transport" class="headerlink" title="3. Transport"></a>3. Transport</h3><p><code>Tranport</code> 是 <code>RoundTripper</code> 的实现类，核心字段包括：</p>
+<ul>
+<li><code>idleConn</code>：空闲连接 map，实现复用</li>
+<li><code>DialContext</code>：新连接生成器</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">type Transport struct &#123;
+    idleConn     map[connectMethodKey][]*persistConn &#x2F;&#x2F; most recently used at end
+    &#x2F;&#x2F; ...
+    DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="4-Request"><a href="#4-Request" class="headerlink" title="4. Request"></a>4. Request</h3><p>http 请求参数结构体.</p>
+<pre class="line-numbers language-none"><code class="language-none">type Request struct &#123;
+    &#x2F;&#x2F; 方法
+    Method string
+    &#x2F;&#x2F; 请求路径
+    URL *url.URL
+    &#x2F;&#x2F; 请求头
+    Header Header
+    &#x2F;&#x2F; 请求参数内容
+    Body io.ReadCloser
+    &#x2F;&#x2F; 服务器主机
+    Host string
+    &#x2F;&#x2F; query 请求参数
+    Form url.Values
+    &#x2F;&#x2F; 响应参数 struct
+    Response *Response
+    &#x2F;&#x2F; 请求链路的上下文
+    ctx context.Context
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="5-Response"><a href="#5-Response" class="headerlink" title="5. Response"></a>5. Response</h3><p>http 响应参数结构体.</p>
+<pre class="line-numbers language-none"><code class="language-none">type Response struct &#123;
+    &#x2F;&#x2F; 请求状态，200 为 请求成功
+    StatusCode int    &#x2F;&#x2F; e.g. 200
+    &#x2F;&#x2F; http 协议，如：HTTP&#x2F;1.0
+    Proto      string &#x2F;&#x2F; e.g. &quot;HTTP&#x2F;1.0&quot;
+    &#x2F;&#x2F; 请求头
+    Header Header
+    &#x2F;&#x2F; 响应参数内容  
+    Body io.ReadCloser
+    &#x2F;&#x2F; 指向请求参数
+    Request *Request
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-2-方法链路总览"><a href="#3-2-方法链路总览" class="headerlink" title="3.2 方法链路总览"></a>3.2 方法链路总览</h2><p>客户端发起一次 <code>http</code> 请求大致分为几个步骤：</p>
+<ul>
+<li>构造 <code>http</code> 请求参数</li>
+<li>获取用于与服务端交互的 <code>tcp</code> 连接</li>
+<li>通过 <code>tcp</code> 连接发送请求参数</li>
+<li>通过 <code>tcp</code> 连接接收响应结果</li>
+</ul>
+<p><a class="simple-lightbox" href="/../images/Golang-HTTP-%E6%A0%87%E5%87%86%E5%BA%93%E5%AE%9E%E7%8E%B0/send_http_request.png"><img   src="/images/loading.svg" data-src="/../images/Golang-HTTP-%E6%A0%87%E5%87%86%E5%BA%93%E5%AE%9E%E7%8E%B0/send_http_request.png"  alt="send_http_request" lazyload></a></p>
+<h2 id="3-3-Client-Post"><a href="#3-3-Client-Post" class="headerlink" title="3.3 Client.Post"></a>3.3 Client.Post</h2><p>调用 <code>net/http</code> 包下的公开方法 <code>Post</code> 时，需要传入服务端地址 <code>url</code>，请求参数格式 <code>contentType</code> 以及请求参数的 <code>io reader</code>.</p>
+<p>方法中会使用包下的单例客户端 <code>DefaultClient</code> 处理这次请求.</p>
+<pre class="line-numbers language-none"><code class="language-none">var DefaultClient &#x3D; &amp;Client&#123;&#125;
+
+func Post(url, contentType string, body io.Reader) (resp *Response, err error) &#123;
+    return DefaultClient.Post(url, contentType, body)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>Client.Post</code> 方法中，首先会结合用户的入参，构造出完整的请求参数 <code>Request</code>；继而通过 <code>Client.Do</code> 方法，处理这笔请求.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (c *Client) Post(url, contentType string, body io.Reader) (resp *Response, err error) &#123;
+    &#x2F;&#x2F; 构造 Request 请求
+    req, err :&#x3D; NewRequest(&quot;POST&quot;, url, body)
+
+    &#x2F;&#x2F; ...
+    req.Header.Set(&quot;Content-Type&quot;, contentType)
+
+    &#x2F;&#x2F; 处理请求
+    return c.Do(req)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-4-NewRequest"><a href="#3-4-NewRequest" class="headerlink" title="3.4 NewRequest"></a>3.4 NewRequest</h2><p><code>NewRequestWithContext</code> 方法中，根据用户传入的 <code>url</code>、<code>method</code> 等信息，构造了 <code>Request</code> 实例.</p>
+<pre class="line-numbers language-none"><code class="language-none">func NewRequestWithContext(ctx context.Context, method, url string, body io.Reader) (*Request, error) &#123;
+    &#x2F;&#x2F; ...
+    u, err :&#x3D; urlpkg.Parse(url)
+    &#x2F;&#x2F; ...
+    rc, ok :&#x3D; body.(io.ReadCloser)
+    &#x2F;&#x2F; ...
+    req :&#x3D; &amp;Request&#123;
+        ctx:        ctx,
+        Method:     method,
+        URL:        u,
+        &#x2F;&#x2F; ...
+        Header:     make(Header),
+        Body:       rc,
+        Host:       u.Host,
+    &#125;
+    &#x2F;&#x2F; ...
+    return req, nil
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-5-Client-Do"><a href="#3-5-Client-Do" class="headerlink" title="3.5 Client.Do"></a>3.5 Client.Do</h2><p>发送请求方法时，经由 <code>Client.Do</code>、<code>Client.do</code> 辗转，继而步入到 <code>Client.send</code> 方法中.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (c *Client) Do(req *Request) (*Response, error) &#123;
+    return c.do(req)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func (c *Client) do(req *Request) (retres *Response, reterr error) &#123;
+    var (
+        deadline      &#x3D; c.deadline()
+        resp          *Response
+        &#x2F;&#x2F; ...
+    )    
+    for &#123;
+        &#x2F;&#x2F; ...
+        var err error       
+        if resp, didTimeout, err &#x3D; c.send(req, deadline); err !&#x3D; nil &#123;
+            &#x2F;&#x2F; ...
+        &#125;
+        &#x2F;&#x2F; ...
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>Client.send</code> 方法中，会在通过 <code>send</code> 方法发送请求的前后，分别对 <code>cookie</code> 进行更新.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (c *Client) send(req *Request, deadline time.Time) (resp *Response, didTimeout func() bool, err error) &#123;
+    &#x2F;&#x2F; 设置 cookie 到请求头中
+    if c.Jar !&#x3D; nil &#123;
+        for _, cookie :&#x3D; range c.Jar.Cookies(req.URL) &#123;
+            req.AddCookie(cookie)
+        &#125;
+    &#125;
+    &#x2F;&#x2F; 发送请求
+    resp, didTimeout, err &#x3D; send(req, c.transport(), deadline)
+    if err !&#x3D; nil &#123;
+        return nil, didTimeout, err
+    &#125;
+    &#x2F;&#x2F; 更新 resp 的 cookie 到请求头中
+    if c.Jar !&#x3D; nil &#123;
+        if rc :&#x3D; resp.Cookies(); len(rc) &gt; 0 &#123;
+            c.Jar.SetCookies(req.URL, rc)
+        &#125;
+    &#125;
+    return resp, nil, nil
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在调用 <code>send</code> 方法时，需要注入 <code>RoundTripper</code> 模块，默认会使用全局单例 <code>DefaultTransport</code> 进行注入，核心逻辑位于 <code>Transport.RoundTrip</code> 方法中，其中分为两个步骤：</p>
+<ul>
+<li>获取&#x2F;构造 <code>tcp</code> 连接</li>
+<li>通过 <code>tcp</code> 连接完成与服务端的交互</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; 构造 tcp 链接
+
+var DefaultTransport RoundTripper &#x3D; &amp;Transport&#123;
+    &#x2F;&#x2F; ...
+    &#x2F;&#x2F; 定义连接器
+    DialContext: defaultTransportDialContext(&amp;net.Dialer&#123;
+        Timeout:   30 * time.Second,
+        KeepAlive: 30 * time.Second,
+    &#125;),
+    &#x2F;&#x2F; ...
+&#125;
+
+func (c *Client) transport() RoundTripper &#123;
+    if c.Transport !&#x3D; nil &#123;
+        return c.Transport
+    &#125;
+    return DefaultTransport
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; 发送请求，获得应答
+func send(ireq *Request, rt RoundTripper, deadline time.Time) (resp *Response, didTimeout func() bool, err error) &#123;
+    &#x2F;&#x2F; ...
+    resp, err &#x3D; rt.RoundTrip(req)
+    &#x2F;&#x2F; ...
+    return resp, nil, nil
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) RoundTrip(req *Request) (*Response, error) &#123;
+    return t.roundTrip(req)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; 处理请求
+func (t *Transport) roundTrip(req *Request) (*Response, error) &#123;
+    &#x2F;&#x2F; ...
+    for &#123;          
+        &#x2F;&#x2F; ...    
+
+        treq :&#x3D; &amp;transportRequest&#123;Request: req, trace: trace, cancelKey: cancelKey&#125;      
+
+        &#x2F;&#x2F; ...
+        
+        &#x2F;&#x2F; 获取一个 tcp 链接
+        pconn, err :&#x3D; t.getConn(treq, cm) 
+
+        &#x2F;&#x2F; ...
+
+        &#x2F;&#x2F; 处理请求
+        resp, err &#x3D; pconn.roundTrip(treq)          
+        &#x2F;&#x2F; ...
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-6-Transport-getConn"><a href="#3-6-Transport-getConn" class="headerlink" title="3.6 Transport.getConn"></a>3.6 Transport.getConn</h2><p>获取 tcp 连接的策略分为两步：</p>
+<ul>
+<li>通过 <code>queueForIdleConn</code> 方法，尝试复用采用相同协议、访问相同服务端地址的空闲连接</li>
+<li>倘若无可用连接，则通过 <code>queueForDial</code> 方法，异步创建一个新的连接，并通过接收 <code>ready channel </code>信号的方式，确认构造连接的工作已经完成.</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) getConn(treq *transportRequest, cm connectMethod) (pc *persistConn, err error) &#123;
+
+    &#x2F;&#x2F; 获取连接的请求参数体
+    w :&#x3D; &amp;wantConn&#123;
+        cm:         cm,
+        &#x2F;&#x2F; key 由 http 协议、服务端地址等信息组成
+        key:        cm.key(),
+        ctx:        ctx,
+        &#x2F;&#x2F; 标识连接构造成功的信号发射器
+        ready:      make(chan struct&#123;&#125;, 1),
+    &#125;
+
+    &#x2F;&#x2F; 倘若连接获取失败，在 wantConn.cancel 方法中，会尝试将 tcp 连接放回队列中以供后续复用
+    defer func() &#123;
+        if err !&#x3D; nil &#123;
+            w.cancel(t, err)
+        &#125;
+    &#125;()
+
+    &#x2F;&#x2F; 尝试复用指向相同服务端地址的空闲连接
+    if delivered :&#x3D; t.queueForIdleConn(w); delivered &#123;
+        pc :&#x3D; w.pc
+        &#x2F;&#x2F; ...
+        return pc, nil
+    &#125;
+
+    &#x2F;&#x2F; 异步构造新的连接
+    t.queueForDial(w)
+
+    select &#123;
+    &#x2F;&#x2F; 通过阻塞等待信号的方式，等待连接获取完成
+    case &lt;-w.ready:
+        &#x2F;&#x2F; ...
+        return w.pc, w.err
+    &#x2F;&#x2F; ...
+    &#125;
+
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="1-复用链接"><a href="#1-复用链接" class="headerlink" title="1. 复用链接"></a>1. 复用链接</h3><ul>
+<li>尝试从 <code>Transport.idleConn</code> 中获取指向同一服务端的空闲连接 <code>persisConn</code></li>
+<li>获取到连接后会调用 <code>wantConn.tryDeliver</code> 方法将连接绑定到 <code>wantConn</code> 请求参数上</li>
+<li>绑定成功后，会关闭 <code>wantConn.ready channel</code>，以唤醒阻塞读取该 <code>channel</code> 的 <code>goroutine</code></li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) queueForIdleConn(w *wantConn) (delivered bool) &#123;
+
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 尝试取空闲链接
+    if list, ok :&#x3D; t.idleConn[w.key]; ok &#123;
+        &#x2F;&#x2F; ...
+
+        for len(list) &gt; 0 &amp;&amp; !stop &#123;
+            &#x2F;&#x2F; 取空闲链接链表中的最后一个
+            pconn :&#x3D; list[len(list)-1]
+
+            &#x2F;&#x2F; ...
+
+            &#x2F;&#x2F; 将连接绑定到 wantConn 请求参数上
+            &#x2F;&#x2F; 绑定好了 delivered 就是 true
+            delivered &#x3D; w.tryDeliver(pconn, nil)
+            if delivered &#123;
+
+                &#x2F;&#x2F; ...
+
+                修改空闲链接链表
+                list &#x3D; list[:len(list)-1]               
+            &#125;
+
+            &#x2F;&#x2F; 操作成功后，停止循环
+            stop &#x3D; true
+        &#125;
+
+        &#x2F;&#x2F; ...
+
+        if stop &#123;
+            return delivered
+        &#125;
+    &#125;
+   
+    &#x2F;&#x2F; ...    
+
+    return false
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; 将连接绑定到 wantConn 请求参数上
+func (w *wantConn) tryDeliver(pc *persistConn, err error) bool &#123;
+    w.mu.Lock()
+    defer w.mu.Unlock()
+
+    &#x2F;&#x2F; ...
+
+    w.pc &#x3D; pc
+    w.err &#x3D; err
+
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 绑定成功后，会关闭 wantConn.ready channel，以唤醒阻塞读取该 channel 的 goroutine
+    close(w.ready)
+    return true
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="2-创建链接"><a href="#2-创建链接" class="headerlink" title="2. 创建链接"></a>2. 创建链接</h3><p>没有取得空闲链接，就需要创建新链接。</p>
+<p>在 <code>queueForDial</code> 方法会异步调用 <code>Transport.dialConnFor</code> 方法，创建新的 tcp 连接. 由于是<strong>异步操作</strong>，所以在上游会通过读 <code>channel</code> 的方式，等待创建操作完成.</p>
+<p>这里之所以采用<strong>异步操作</strong>进行连接创建，有两部分原因：</p>
+<ul>
+<li>一个 tcp 连接并不是一个静态的数据结构，它是有生命周期的，创建过程中会为其创建负责读写的两个守护协程，伴随而生.</li>
+<li>在上游 <code>Transport.queueForIdleConn</code> 方法中，当通过 <code>select</code> 多路复用的方式，接收到其他终止信号时，可以提前调用 <code>wantConn.cancel</code> 方法打断创建连接的 <code>goroutine</code>. 相比于串行化执行而言，这种异步交互的模式，具有更高的灵活度</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) queueForDial(w *wantConn) &#123;
+    &#x2F;&#x2F; ...
+    go t.dialConnFor(w) 
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><code>Transport.dialConnFor</code> 方法中，首先调用 <code>Transport.dialConn</code> 创建 <code>tcp</code> 连接 <code>persisConn</code>，接着执行 <code>wantConn.tryDeliver</code> 方法，将连接绑定到 <code>wantConn</code> 上，然后通过关闭 <code>ready channel</code> 操作唤醒上游读 <code>ready channel</code> 的 <code>goroutine</code>.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) dialConnFor(w *wantConn) &#123;
+    &#x2F;&#x2F; ...
+    pc, err :&#x3D; t.dialConn(w.ctx, w.cm)
+    delivered :&#x3D; w.tryDeliver(pc, err)
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><code>Transport.dialConn</code> 方法包含了创建连接的核心逻辑：</p>
+<ul>
+<li>调用 <code>Transport.dial</code> 方法，最终通过 <code>Tranport.DialContext</code> 成员函数，创建好 tcp 连接，封装到 <code>persistConn</code> 当中</li>
+<li>异步启动连接的伴生读写协程 <code>readLoop</code> 和 <code>writeLoop</code> 方法，组成提交请求、接收响应的循环</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) dialConn(ctx context.Context, cm connectMethod) (pconn *persistConn, err error) &#123;
+    &#x2F;&#x2F; 构建链接
+    pconn &#x3D; &amp;persistConn&#123;
+        t:             t,
+        reqch:         make(chan requestAndChan, 1),
+        writech:       make(chan writeRequest, 1),
+        &#x2F;&#x2F; ...
+    &#125;
+    
+    &#x2F;&#x2F; 建立tcp链接 
+    conn, err :&#x3D; t.dial(ctx, &quot;tcp&quot;, cm.addr())
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 把链接 conn 传入到 pconn
+    pconn.conn &#x3D; conn      
+    &#x2F;&#x2F; ...
+   
+    &#x2F;&#x2F; 开启此链接对应的读写协程
+    go pconn.readLoop()
+    go pconn.writeLoop()
+    return pconn, nil
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) dial(ctx context.Context, network, addr string) (net.Conn, error) &#123;
+    &#x2F;&#x2F; ...
+    return t.DialContext(ctx, network, addr)
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>在伴生读协程 <code>persisConn.readLoop</code> 方法中，会读取来自服务端的响应，并添加到 <code>persistConn.reqCh</code> 中，供上游 <code>persistConn.roundTrip</code> 方法接收.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (pc *persistConn) readLoop() &#123; 
+    &#x2F;&#x2F; ...
+    alive :&#x3D; true
+    for alive &#123;
+        &#x2F;&#x2F; ...
+        &#x2F;&#x2F; 读到了数据
+        rc :&#x3D; &lt;-pc.reqch
+        &#x2F;&#x2F; ...
+        &#x2F;&#x2F; 构造应答
+        var resp *Response
+        &#x2F;&#x2F; ...
+
+        resp, err &#x3D; pc.readResponse(rc, trace)
+        &#x2F;&#x2F; ...
+        select&#123;
+            rc.ch &lt;- responseAndError&#123;res: resp&#125;:
+            &#x2F;&#x2F; ...
+        &#125;
+        &#x2F;&#x2F; ...        
+    &#125;
+    
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<p>在伴生协协程 <code>persisConn.writeLoop</code>方法中，会通过 <code>persistConn.writech</code> 读取到客户端提交的请求，然后将其发送到服务端.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (pc *persistConn) writeLoop() &#123;    
+    for &#123;
+        select &#123;
+        case wr :&#x3D; &lt;-pc.writech:
+            &#x2F;&#x2F; ...
+            err :&#x3D; wr.req.Request.write(pc.bw, pc.isProxy, wr.req.extra, pc.waitForContinue(wr.continueCh))
+            &#x2F;&#x2F; ...       
+        &#125;
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="3-归还链接"><a href="#3-归还链接" class="headerlink" title="3. 归还链接"></a>3. 归还链接</h3><p>有复用连接的能力，就必然存在归还连接的机制.</p>
+<p>首先，在构造新连接中途，倘若被打断，则可能会将连接放回队列以供复用：</p>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) getConn(treq *transportRequest, cm connectMethod) (pc *persistConn, err error) &#123;
+    &#x2F;&#x2F; ...
+    &#x2F;&#x2F; 倘若连接获取失败，在 wantConn.cancel 方法中，会尝试将 tcp 连接放回队列中以供后续复用
+    defer func() &#123;
+        if err !&#x3D; nil &#123;
+            w.cancel(t, err)
+        &#125;
+    &#125;()
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func (w *wantConn) cancel(t *Transport, err error) &#123;
+   &#x2F;&#x2F; ...
+    if pc !&#x3D; nil &#123;
+        t.putOrCloseIdleConn(pc)
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) tryPutIdleConn(pconn *persistConn) error &#123;
+    &#x2F;&#x2F; ...
+    key :&#x3D; pconn.cacheKey
+    &#x2F;&#x2F; ...
+    t.idleConn[key] &#x3D; append(idles, pconn)
+    &#x2F;&#x2F; ...
+    return nil
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>其次，倘若与服务端的一轮交互流程结束，也会将连接放回队列以供复用.</p>
+<pre class="line-numbers language-none"><code class="language-none">func (pc *persistConn) readLoop() &#123;
+    tryPutIdleConn :&#x3D; func(trace *httptrace.ClientTrace) bool &#123;
+        if err :&#x3D; pc.t.tryPutIdleConn(pc); err !&#x3D; nil &#123;
+            &#x2F;&#x2F; ...
+        &#125;
+        &#x2F;&#x2F; ...
+    &#125;
+    
+    &#x2F;&#x2F; ...
+    alive :&#x3D; true
+    for alive &#123;
+        &#x2F;&#x2F; ...
+        select &#123;
+        case bodyEOF :&#x3D; &lt;-waitForBodyRead:
+            &#x2F;&#x2F; ...
+            tryPutIdleConn(trace)
+            &#x2F;&#x2F; ...
+        &#125;           
+    &#125;
+    
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-none"><code class="language-none">func (t *Transport) putOrCloseIdleConn(pconn *persistConn) &#123;
+    if err :&#x3D; t.tryPutIdleConn(pconn); err !&#x3D; nil &#123;
+        pconn.close(err)
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-7-persistConn-roundTrip"><a href="#3-7-persistConn-roundTrip" class="headerlink" title="3.7 persistConn.roundTrip"></a>3.7 persistConn.roundTrip</h2><p>3.6 小节中谈到，一个连接 persistConn 是一个具有生命特征的角色. 它本身伴有 readLoop 和 writeLoop 两个协程，与应用者之间通过 channel 进行读写交互.</p>
+<p>而其中扮演应用者这一角色的，正式本小节谈到的主流程中的方法：<code>persistConn.roundTrip</code>：</p>
+<ul>
+<li>首先将 <code>http</code> 请求通过 <code>persistConn.writech</code> 发送给连接的守护协程 <code>writeLoop</code>，并进一步传送到服务端</li>
+<li>其次通过读取 <code>resc channel</code>，接收由守护协程 <code>readLoop</code> 代理转发的客户端响应数据.</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">func (pc *persistConn) roundTrip(req *transportRequest) (resp *Response, err error) &#123;
+
+    &#x2F;&#x2F; ...
+
+    &#x2F;&#x2F; 通知writeLoop启动一次写操作
+    pc.writech &lt;- writeRequest&#123;req, writeErrCh, continueCh&#125;
+
+    resc :&#x3D; make(chan responseAndError)
+    
+    &#x2F;&#x2F; 通知readLoop启动一次读操作
+    pc.reqch &lt;- requestAndChan&#123;
+        req:        req.Request,
+        cancelKey:  req.cancelKey,
+        ch:         resc,
+        &#x2F;&#x2F; ...
+    &#125;
+    &#x2F;&#x2F; ...
+    for &#123;       
+        select &#123;
+
+        &#x2F;&#x2F; ...
+
+        &#x2F;&#x2F; 通过读取 resc channel，接收由守护协程 readLoop 代理转发的客户端响应数据.
+        case re :&#x3D; &lt;-resc:
+
+            &#x2F;&#x2F; ...
+
+            return re.res, nil
+        &#x2F;&#x2F; ...
+        &#125;
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>（end）</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E6%95%B4%E4%BD%93%E6%A1%86%E6%9E%B6"><span class="top-box-text">1 整体框架</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-CS-%E6%9E%B6%E6%9E%84"><span class="top-box-text">1.1 CS 架构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E5%90%AF%E5%8A%A8-http-%E6%9C%8D%E5%8A%A1"><span class="top-box-text">1.2 启动 http 服务</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-3-%E5%8F%91%E9%80%81-http-%E8%AF%B7%E6%B1%82"><span class="top-box-text">1.3 发送 http 请求</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-4-%E6%BA%90%E7%A0%81%E4%BD%8D%E7%BD%AE%E4%B8%80%E8%A7%88"><span class="top-box-text">1.4 源码位置一览</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E6%9C%8D%E5%8A%A1%E7%AB%AF"><span class="top-box-text">2 服务端</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">2.1 核心数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-%E6%B3%A8%E5%86%8C-handler"><span class="top-box-text">2.2 注册 handler</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E5%90%AF%E5%8A%A8-server"><span class="top-box-text">2.3 启动 server</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-%E5%AE%A2%E6%88%B7%E7%AB%AF"><span class="top-box-text">3 客户端</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">3.1 核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-Client"><span class="top-box-text">1. Client</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-RoundTripper"><span class="top-box-text">2. RoundTripper</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-Transport"><span class="top-box-text">3. Transport</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#4-Request"><span class="top-box-text">4. Request</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#5-Response"><span class="top-box-text">5. Response</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E6%96%B9%E6%B3%95%E9%93%BE%E8%B7%AF%E6%80%BB%E8%A7%88"><span class="top-box-text">3.2 方法链路总览</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-Client-Post"><span class="top-box-text">3.3 Client.Post</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-4-NewRequest"><span class="top-box-text">3.4 NewRequest</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-5-Client-Do"><span class="top-box-text">3.5 Client.Do</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-6-Transport-getConn"><span class="top-box-text">3.6 Transport.getConn</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-%E5%A4%8D%E7%94%A8%E9%93%BE%E6%8E%A5"><span class="top-box-text">1. 复用链接</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-%E5%88%9B%E5%BB%BA%E9%93%BE%E6%8E%A5"><span class="top-box-text">2. 创建链接</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-%E5%BD%92%E8%BF%98%E9%93%BE%E6%8E%A5"><span class="top-box-text">3. 归还链接</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-7-persistConn-roundTrip"><span class="top-box-text">3.7 persistConn.roundTrip</span></a></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/21/JSON-Web-Token-%E5%85%A5%E9%97%A8/">
+          <h3 class="post-title">
+            下一篇：JSON Web Token 入门
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
