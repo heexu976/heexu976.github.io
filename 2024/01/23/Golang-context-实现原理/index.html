@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang context 实现原理</title>
+<meta name="keywords" content="Golang context 实现原理, HeXu">
+<meta name="description" content="0 前言context 是 golang 中的经典工具，主要在异步场景中用于实现并发协调以及对 goroutine 的生命周期控制. 除此之外，context 还兼有一定的数据存储能力. 
+1 核心数据结构1.1 context.Conte">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang context 实现原理">
+<meta property="og:description" content="0 前言context 是 golang 中的经典工具，主要在异步场景中用于实现并发协调以及对 goroutine 的生命周期控制. 除此之外，context 还兼有一定的数据存储能力. 
+1 核心数据结构1.1 context.Conte">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang context 实现原理</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-23</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="0-前言"><a href="#0-前言" class="headerlink" title="0 前言"></a>0 前言</h1><p><code>context</code> 是 golang 中的经典工具，主要在<strong>异步场景中用于实现并发协调以及对 goroutine 的生命周期控制</strong>. 除此之外，<strong>context 还兼有一定的数据存储能力</strong>. </p>
+<h1 id="1-核心数据结构"><a href="#1-核心数据结构" class="headerlink" title="1 核心数据结构"></a>1 核心数据结构</h1><h2 id="1-1-context-Context"><a href="#1-1-context-Context" class="headerlink" title="1.1 context.Context"></a>1.1 context.Context</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Context <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token function">Deadline</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>deadline time<span class="token punctuation">.</span>Time<span class="token punctuation">,</span> ok <span class="token builtin">bool</span><span class="token punctuation">)</span> <span class="token comment">// 返回 ctx 的过期事件</span>
+    <span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>                   <span class="token comment">// 返回用于标识 ctx 是否结束的 chan</span>
+    <span class="token function">Err</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>                              <span class="token comment">// 返回 ctx 的错误</span>
+    <span class="token function">Value</span><span class="token punctuation">(</span>key any<span class="token punctuation">)</span> any                       <span class="token comment">// 返回 ctx 存放的 kv 对</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h2 id="1-2-标准-error"><a href="#1-2-标准-error" class="headerlink" title="1.2 标准 error"></a>1.2 标准 error</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// context 被 cancel </span>
+<span class="token keyword">var</span> Canceled <span class="token operator">=</span> errors<span class="token punctuation">.</span><span class="token function">New</span><span class="token punctuation">(</span><span class="token string">"context canceled"</span><span class="token punctuation">)</span>
+
+<span class="token comment">// context 超时时会报此错误</span>
+<span class="token keyword">var</span> DeadlineExceeded <span class="token builtin">error</span> <span class="token operator">=</span> deadlineExceededError<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+
+
+<span class="token keyword">type</span> deadlineExceededError <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>deadlineExceededError<span class="token punctuation">)</span> <span class="token function">Error</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">string</span>   <span class="token punctuation">&#123;</span> <span class="token keyword">return</span> <span class="token string">"context deadline exceeded"</span> <span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>deadlineExceededError<span class="token punctuation">)</span> <span class="token function">Timeout</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">bool</span>   <span class="token punctuation">&#123;</span> <span class="token keyword">return</span> <span class="token boolean">true</span> <span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>deadlineExceededError<span class="token punctuation">)</span> <span class="token function">Temporary</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">bool</span> <span class="token punctuation">&#123;</span> <span class="token keyword">return</span> <span class="token boolean">true</span> <span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="2-emptyCtx"><a href="#2-emptyCtx" class="headerlink" title="2 emptyCtx"></a>2 emptyCtx</h1><h2 id="2-1-类的实现"><a href="#2-1-类的实现" class="headerlink" title="2.1 类的实现"></a>2.1 类的实现</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// emptyCtx 是一个空的 context，本质上类型为一个整型；</span>
+<span class="token keyword">type</span> emptyCtx <span class="token builtin">int</span>
+
+<span class="token comment">//返回一个公元元年时间以及 false 的 flag，标识当前 context 不存在过期时间</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span><span class="token operator">*</span>emptyCtx<span class="token punctuation">)</span> <span class="token function">Deadline</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>deadline time<span class="token punctuation">.</span>Time<span class="token punctuation">,</span> ok <span class="token builtin">bool</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">// 返回一个 nil 值，用户无论往 nil 中写入或者读取数据，均会陷入阻塞</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span><span class="token operator">*</span>emptyCtx<span class="token punctuation">)</span> <span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">//Err 方法返回的错误永远为 nil</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span><span class="token operator">*</span>emptyCtx<span class="token punctuation">)</span> <span class="token function">Err</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">// Value 方法返回的 value 同样永远为 nil</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span><span class="token operator">*</span>emptyCtx<span class="token punctuation">)</span> <span class="token function">Value</span><span class="token punctuation">(</span>key any<span class="token punctuation">)</span> any <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-2-context-Background-context-TODO"><a href="#2-2-context-Background-context-TODO" class="headerlink" title="2.2 context.Background() &amp; context.TODO()"></a>2.2 context.Background() &amp; context.TODO()</h2><p><strong>我们所常用的 context.Background() 和 context.TODO() 方法返回的均是 emptyCtx 类型的一个实例.</strong></p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> <span class="token punctuation">(</span>
+    background <span class="token operator">=</span> <span class="token function">new</span><span class="token punctuation">(</span>emptyCtx<span class="token punctuation">)</span>
+    todo       <span class="token operator">=</span> <span class="token function">new</span><span class="token punctuation">(</span>emptyCtx<span class="token punctuation">)</span>
+<span class="token punctuation">)</span>
+
+
+<span class="token keyword">func</span> <span class="token function">Background</span><span class="token punctuation">(</span><span class="token punctuation">)</span> Context <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> background
+<span class="token punctuation">&#125;</span>
+
+
+<span class="token keyword">func</span> <span class="token function">TODO</span><span class="token punctuation">(</span><span class="token punctuation">)</span> Context <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> todo
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="3-cancelCtx"><a href="#3-cancelCtx" class="headerlink" title="3 cancelCtx"></a>3 cancelCtx</h1><h2 id="3-1-cancelCtx-数据结构"><a href="#3-1-cancelCtx-数据结构" class="headerlink" title="3.1 cancelCtx 数据结构"></a>3.1 cancelCtx 数据结构</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> cancelCtx <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Context <span class="token comment">// 父 context</span>
+    
+    <span class="token comment">// 内置了一把锁，用以协调并发场景下的资源获取；</span>
+    mu       sync<span class="token punctuation">.</span>Mutex            <span class="token comment">// protects following fields</span>
+
+    <span class="token comment">// done：实际类型为 chan struct&#123;&#125;，即用以反映 cancelCtx 生命周期的通道；</span>
+    done     atomic<span class="token punctuation">.</span>Value          <span class="token comment">// of chan struct&#123;&#125;, created lazily, closed by first cancel call</span>
+
+    <span class="token comment">// 一个 set，指向 cancelCtx 的所有子 context；</span>
+    children <span class="token keyword">map</span><span class="token punctuation">[</span>canceler<span class="token punctuation">]</span><span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span> <span class="token comment">// set to nil by the first cancel call</span>
+
+    <span class="token comment">// 记录了当前 cancelCtx 的错误. 必然为某个 context 的子 context；</span>
+    err      <span class="token builtin">error</span>                 <span class="token comment">// set to non-nil by the first cancel call</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">type</span> canceler <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+	<span class="token function">cancel</span><span class="token punctuation">(</span>removeFromParent <span class="token builtin">bool</span><span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span>
+	<span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-2-Deadline-方法"><a href="#3-2-Deadline-方法" class="headerlink" title="3.2 Deadline 方法"></a>3.2 Deadline 方法</h2><p><code>cancelCtx</code> 未实现该方法，仅是 <code>embed</code> 了一个带有 <code>Deadline</code> 方法的 <code>Context interface</code>，因此倘若直接调用会报错.</p>
+<h2 id="3-3-Done-方法"><a href="#3-3-Done-方法" class="headerlink" title="3.3 Done 方法"></a>3.3 Done 方法</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>cancelCtx<span class="token punctuation">)</span> <span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span> <span class="token punctuation">&#123;</span>
+    d <span class="token operator">:=</span> c<span class="token punctuation">.</span>done<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 基于 atomic 包，读取 cancelCtx 中的 chan；倘若已存在，则直接返回；</span>
+    <span class="token keyword">if</span> d <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> d<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+     
+     <span class="token comment">// 加锁后，在此检查 chan 是否存在，若存在则返回</span>
+    c<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">defer</span> c<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    d <span class="token operator">=</span> c<span class="token punctuation">.</span>done<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+    <span class="token comment">// 初始化 chan 存储到 aotmic.Value 当中，并返回.（懒加载机制）</span>
+    <span class="token keyword">if</span> d <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        d <span class="token operator">=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+        c<span class="token punctuation">.</span>done<span class="token punctuation">.</span><span class="token function">Store</span><span class="token punctuation">(</span>d<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> d<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-4-Err-方法"><a href="#3-4-Err-方法" class="headerlink" title="3.4 Err 方法"></a>3.4 Err 方法</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>cancelCtx<span class="token punctuation">)</span> <span class="token function">Err</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    c<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    err <span class="token operator">:=</span> c<span class="token punctuation">.</span>err
+    c<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span> err
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-5-Value-方法"><a href="#3-5-Value-方法" class="headerlink" title="3.5 Value 方法"></a>3.5 Value 方法</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>cancelCtx<span class="token punctuation">)</span> <span class="token function">Value</span><span class="token punctuation">(</span>key any<span class="token punctuation">)</span> any <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 倘若 key 特定值 &amp;cancelCtxKey，则返回 cancelCtx 自身的指针；</span>
+    <span class="token keyword">if</span> key <span class="token operator">==</span> <span class="token operator">&amp;</span>cancelCtxKey <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> c
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 否则遵循 valueCtx 的思路取值返回</span>
+    <span class="token keyword">return</span> <span class="token function">value</span><span class="token punctuation">(</span>c<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> key<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-6-context-WithCancel"><a href="#3-6-context-WithCancel" class="headerlink" title="3.6 context.WithCancel()"></a>3.6 context.WithCancel()</h2><h3 id="3-6-1-context-WithCancel"><a href="#3-6-1-context-WithCancel" class="headerlink" title="3.6.1 context.WithCancel()"></a>3.6.1 context.WithCancel()</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">WithCancel</span><span class="token punctuation">(</span>parent Context<span class="token punctuation">)</span> <span class="token punctuation">(</span>ctx Context<span class="token punctuation">,</span> cancel CancelFunc<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 检验父 context 非空</span>
+    <span class="token keyword">if</span> parent <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">panic</span><span class="token punctuation">(</span><span class="token string">"cannot create context from nil parent"</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 注入父 context 构造一个新的 cancelCtx</span>
+    c <span class="token operator">:=</span> <span class="token function">newCancelCtx</span><span class="token punctuation">(</span>parent<span class="token punctuation">)</span>
+    
+    <span class="token comment">// 在 propagateCancel 方法内启动一个守护协程，以保证父 context 终止时，该 cancelCtx 也会被终止；</span>
+    <span class="token function">propagateCancel</span><span class="token punctuation">(</span>parent<span class="token punctuation">,</span> <span class="token operator">&amp;</span>c<span class="token punctuation">)</span>
+
+    <span class="token comment">// 将 cancelCtx 返回，连带返回一个用以终止该 cancelCtx 的闭包函数.</span>
+    <span class="token keyword">return</span> <span class="token operator">&amp;</span>c<span class="token punctuation">,</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span> c<span class="token punctuation">.</span><span class="token function">cancel</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">,</span> Canceled<span class="token punctuation">)</span> <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h3 id="3-6-2-newCancelCtx"><a href="#3-6-2-newCancelCtx" class="headerlink" title="3.6.2 newCancelCtx"></a>3.6.2 newCancelCtx</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 注入父 context 后，返回一个新的 cancelCtx.</span>
+<span class="token keyword">func</span> <span class="token function">newCancelCtx</span><span class="token punctuation">(</span>parent Context<span class="token punctuation">)</span> cancelCtx <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> cancelCtx<span class="token punctuation">&#123;</span>Context<span class="token punctuation">:</span> parent<span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="3-6-3-propagateCancel"><a href="#3-6-3-propagateCancel" class="headerlink" title="3.6.3 propagateCancel"></a>3.6.3 propagateCancel</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// propagateCancel 方法顾名思义，用以传递父子 context 之间的 cancel 事件</span>
+<span class="token keyword">func</span> <span class="token function">propagateCancel</span><span class="token punctuation">(</span>parent Context<span class="token punctuation">,</span> child canceler<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+
+    <span class="token comment">// 倘若 parent 是不会被 cancel 的类型（如 emptyCtx），则直接返回；</span>
+    done <span class="token operator">:=</span> parent<span class="token punctuation">.</span><span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> done <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token comment">// parent is never canceled</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 倘若 parent 已经被 cancel，则直接终止子 context，并以 parent 的 err 作为子 context 的 err</span>
+    <span class="token keyword">select</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">case</span> <span class="token operator">&lt;-</span>done<span class="token punctuation">:</span>
+        <span class="token comment">// parent is already canceled</span>
+        child<span class="token punctuation">.</span><span class="token function">cancel</span><span class="token punctuation">(</span><span class="token boolean">false</span><span class="token punctuation">,</span> parent<span class="token punctuation">.</span><span class="token function">Err</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span>
+    <span class="token keyword">default</span><span class="token punctuation">:</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 假如 parent 是 cancelCtx 的类型，则加锁，并将子 context 添加到 parent 的 children map 当中；</span>
+    <span class="token keyword">if</span> p<span class="token punctuation">,</span> ok <span class="token operator">:=</span> <span class="token function">parentCancelCtx</span><span class="token punctuation">(</span>parent<span class="token punctuation">)</span><span class="token punctuation">;</span> ok <span class="token punctuation">&#123;</span>
+        p<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> p<span class="token punctuation">.</span>err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// parent has already been canceled</span>
+            child<span class="token punctuation">.</span><span class="token function">cancel</span><span class="token punctuation">(</span><span class="token boolean">false</span><span class="token punctuation">,</span> p<span class="token punctuation">.</span>err<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> p<span class="token punctuation">.</span>children <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                p<span class="token punctuation">.</span>children <span class="token operator">=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span>canceler<span class="token punctuation">]</span><span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+            p<span class="token punctuation">.</span>children<span class="token punctuation">[</span>child<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+        p<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        atomic<span class="token punctuation">.</span><span class="token function">AddInt32</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>goroutines<span class="token punctuation">,</span> <span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">)</span>
+        <span class="token keyword">go</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">select</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">case</span> <span class="token operator">&lt;-</span>parent<span class="token punctuation">.</span><span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+                child<span class="token punctuation">.</span><span class="token function">cancel</span><span class="token punctuation">(</span><span class="token boolean">false</span><span class="token punctuation">,</span> parent<span class="token punctuation">.</span><span class="token function">Err</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token keyword">case</span> <span class="token operator">&lt;-</span>child<span class="token punctuation">.</span><span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#0-%E5%89%8D%E8%A8%80"><span class="top-box-text">0 前言</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">1 核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-context-Context"><span class="top-box-text">1.1 context.Context</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E6%A0%87%E5%87%86-error"><span class="top-box-text">1.2 标准 error</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-emptyCtx"><span class="top-box-text">2 emptyCtx</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-%E7%B1%BB%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="top-box-text">2.1 类的实现</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-context-Background-context-TODO"><span class="top-box-text">2.2 context.Background() &amp; context.TODO()</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-cancelCtx"><span class="top-box-text">3 cancelCtx</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-cancelCtx-%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">3.1 cancelCtx 数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-Deadline-%E6%96%B9%E6%B3%95"><span class="top-box-text">3.2 Deadline 方法</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-Done-%E6%96%B9%E6%B3%95"><span class="top-box-text">3.3 Done 方法</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-4-Err-%E6%96%B9%E6%B3%95"><span class="top-box-text">3.4 Err 方法</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-5-Value-%E6%96%B9%E6%B3%95"><span class="top-box-text">3.5 Value 方法</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-6-context-WithCancel"><span class="top-box-text">3.6 context.WithCancel()</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-6-1-context-WithCancel"><span class="top-box-text">3.6.1 context.WithCancel()</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-6-2-newCancelCtx"><span class="top-box-text">3.6.2 newCancelCtx</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-6-3-propagateCancel"><span class="top-box-text">3.6.3 propagateCancel</span></a></li></ol></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/22/Golang-%E7%BD%91%E7%BB%9C-IO-%E6%A8%A1%E5%9E%8B%E4%B9%8B-EPOLL/">
+          <h3 class="post-title">
+            下一篇：Golang 网络 IO 模型之 EPOLL
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
