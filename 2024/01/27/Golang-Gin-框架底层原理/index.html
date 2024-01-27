@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang Gin 框架底层原理</title>
+<meta name="keywords" content="Golang Gin 框架底层原理, HeXu">
+<meta name="description" content="1 Gin 和 Http1.1 Gin 的背景Gin 是 Golang 世界里最流行的 web 框架，于 github 开源。
+本文根据 gin tag：v1.9.0 来进行学习
+支撑研发团队选择 Gin 作为 web 框架的原因包括：
+
+">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang Gin 框架底层原理">
+<meta property="og:description" content="1 Gin 和 Http1.1 Gin 的背景Gin 是 Golang 世界里最流行的 web 框架，于 github 开源。
+本文根据 gin tag：v1.9.0 来进行学习
+支撑研发团队选择 Gin 作为 web 框架的原因包括：
+
+">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang Gin 框架底层原理</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-27</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="1-Gin-和-Http"><a href="#1-Gin-和-Http" class="headerlink" title="1 Gin 和 Http"></a>1 Gin 和 Http</h1><h2 id="1-1-Gin-的背景"><a href="#1-1-Gin-的背景" class="headerlink" title="1.1 Gin 的背景"></a>1.1 Gin 的背景</h2><p>Gin 是 Golang 世界里最流行的 web 框架，于 github 开源。</p>
+<p>本文根据 <code>gin tag：v1.9.0</code> 来进行学习</p>
+<p>支撑研发团队选择 Gin 作为 web 框架的原因包括：</p>
+<ul>
+<li>支持中间件操作（ handlersChain 机制 ）</li>
+<li>更方便的使用（ gin.Context ）</li>
+<li>更强大的路由解析能力（ radix tree 路由树 ）</li>
+</ul>
+<p>括号中的知识点将在后文逐一介绍.</p>
+<h2 id="1-2-Gin-与-net-http-的关系"><a href="#1-2-Gin-与-net-http-的关系" class="headerlink" title="1.2 Gin 与 net&#x2F;http 的关系"></a>1.2 Gin 与 net&#x2F;http 的关系</h2><p>Gin 是在 Golang HTTP 标准库 <code>net/http</code> 基础之上的再封装，两者的交互边界如下图：</p>
+<p><a class="simple-lightbox" href="/../images/Golang-Gin-%E6%A1%86%E6%9E%B6%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/gin.png"><img   src="/images/loading.svg" data-src="/../images/Golang-Gin-%E6%A1%86%E6%9E%B6%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/gin.png"  alt="gin" lazyload></a></p>
+<p>可以看出，在 <code>net/http</code> 的既定框架下，<code>gin</code> 所做的是提供了一个 <code>gin.Engine</code> 对象作为 <code>Handler</code> 注入其中，从而实现路由注册&#x2F;匹配、请求处理链路的优化.</p>
+<h2 id="1-3-Gin-框架使用示例"><a href="#1-3-Gin-框架使用示例" class="headerlink" title="1.3 Gin 框架使用示例"></a>1.3 Gin 框架使用示例</h2><p>下面提供一段接入 Gin 的示例代码，：</p>
+<ul>
+<li>构造 gin.Engine 实例：<code>gin.Default()</code></li>
+<li>路由组注册中间件：<code>Engine.Use()</code></li>
+<li>路由组注册 POST 方法下的 <code>handler：Engine.POST()</code></li>
+<li>启动 http server：<code>Engine.Run()</code></li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 创建一个 gin Engine，本质上是一个 http Handler</span>
+    mux <span class="token operator">:=</span> gin<span class="token punctuation">.</span><span class="token function">Default</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 注册中间件</span>
+    mux<span class="token punctuation">.</span><span class="token function">Use</span><span class="token punctuation">(</span>myMiddleWare<span class="token punctuation">)</span>
+    <span class="token comment">// 注册一个 path 为 /ping 的处理函数</span>
+    mux<span class="token punctuation">.</span><span class="token function">POST</span><span class="token punctuation">(</span><span class="token string">"/ping"</span><span class="token punctuation">,</span> <span class="token keyword">func</span><span class="token punctuation">(</span>c <span class="token operator">*</span>gin<span class="token punctuation">.</span>Context<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        c<span class="token punctuation">.</span><span class="token function">JSON</span><span class="token punctuation">(</span>http<span class="token punctuation">.</span>StatusOK<span class="token punctuation">,</span> <span class="token string">"pone"</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+    <span class="token comment">// 运行 http 服务</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> mux<span class="token punctuation">.</span><span class="token function">Run</span><span class="token punctuation">(</span><span class="token string">":8080"</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">panic</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="2-注册-handler-流程"><a href="#2-注册-handler-流程" class="headerlink" title="2. 注册 handler 流程"></a>2. 注册 handler 流程</h1><h2 id="2-1-核心数据结构"><a href="#2-1-核心数据结构" class="headerlink" title="2.1 核心数据结构"></a>2.1 核心数据结构</h2><h3 id="1-gin-Engine"><a href="#1-gin-Engine" class="headerlink" title="1. gin.Engine"></a>1. gin.Engine</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Engine <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+   <span class="token comment">// 路由组</span>
+    RouterGroup
+    <span class="token comment">// ...</span>
+    <span class="token comment">// context 对象池</span>
+    pool             sync<span class="token punctuation">.</span>Pool
+    <span class="token comment">// 方法路由树</span>
+    trees            methodTrees
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// net/http 包下的 Handler interface</span>
+<span class="token keyword">type</span> Handler <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token function">ServeHTTP</span><span class="token punctuation">(</span>ResponseWriter<span class="token punctuation">,</span> <span class="token operator">*</span>Request<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span>
+
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>engine <span class="token operator">*</span>Engine<span class="token punctuation">)</span> <span class="token function">ServeHTTP</span><span class="token punctuation">(</span>w http<span class="token punctuation">.</span>ResponseWriter<span class="token punctuation">,</span> req <span class="token operator">*</span>http<span class="token punctuation">.</span>Request<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><code>Engine</code> 为 <code>Gin</code> 中构建的 <code>HTTP Handler</code>，其实现了 <code>net/http</code> 包下 <code>Handler interface</code> 的抽象方法： <code>Handler.ServeHTTP</code>，因此可以作为 <code>Handler</code> 注入到 <code>net/http</code> 的 <code>Server</code> 当中.</p>
+<p><code>Engine</code> 包含的核心内容包括：</p>
+<ul>
+<li>路由组 RouterGroup：第（2）部分展开</li>
+<li>Context 对象池 pool：基于 sync.Pool 实现，作为复用 gin.Context 实例的缓冲池. gin.Context 的内容于本文第 5 章详解</li>
+<li>路由树数组 trees：共有 9 棵路由树，对应于 9 种 http 方法. 路由树基于压缩前缀树实现，于本文第 4 章详解.</li>
+</ul>
+<p>9 种 http 方法展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">const</span> <span class="token punctuation">(</span>
+    MethodGet     <span class="token operator">=</span> <span class="token string">"GET"</span>
+    MethodHead    <span class="token operator">=</span> <span class="token string">"HEAD"</span>
+    MethodPost    <span class="token operator">=</span> <span class="token string">"POST"</span>
+    MethodPut     <span class="token operator">=</span> <span class="token string">"PUT"</span>
+    MethodPatch   <span class="token operator">=</span> <span class="token string">"PATCH"</span> <span class="token comment">// RFC 5789</span>
+    MethodDelete  <span class="token operator">=</span> <span class="token string">"DELETE"</span>
+    MethodConnect <span class="token operator">=</span> <span class="token string">"CONNECT"</span>
+    MethodOptions <span class="token operator">=</span> <span class="token string">"OPTIONS"</span>
+    MethodTrace   <span class="token operator">=</span> <span class="token string">"TRACE"</span>
+<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="2-RouterGroup"><a href="#2-RouterGroup" class="headerlink" title="2 RouterGroup"></a>2 RouterGroup</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> RouterGroup <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Handlers HandlersChain
+    basePath <span class="token builtin">string</span>
+    engine <span class="token operator">*</span>Engine
+    root <span class="token builtin">bool</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>RouterGroup 是路由组的概念, 其中的配置将被从属于该路由组的所有路由重用：</p>
+<ul>
+<li><code>Handlers</code>：路由组共同的 handler 处理函数链。组下的节点将拼接RouterGroup 的公用 handlers 和自己的 handlers ，组成最后的 handlers链</li>
+<li><code>basePath</code>：路由组的基础路径. 组下的节点将拼接 RouterGroup 的 basePath 和自己的 path，组成最终使用的 absolutePath</li>
+<li><code>engine</code>：指向路由组从属的 Engine</li>
+<li><code>root</code>：标识路由组是否位于 Engine 的根节点. 当用户基于 RouterGroup.Group 方法创建子路由组后，该标识为 false</li>
+</ul>
+<h3 id="3-HandlersChain"><a href="#3-HandlersChain" class="headerlink" title="3 HandlersChain"></a>3 HandlersChain</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> HandlersChain <span class="token punctuation">[</span><span class="token punctuation">]</span>HandlerFunc
+
+<span class="token keyword">type</span> HandlerFunc <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token operator">*</span>Context<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<p><code>HandlersChain</code> 是由多个路由处理函数 <code>HandlerFunc</code> 构成的处理函数链. 在使用的时候，会按照索引的先后顺序依次调用 <code>HandlerFunc</code>.</p>
+<h2 id="2-2-流程入口"><a href="#2-2-流程入口" class="headerlink" title="2.2 流程入口"></a>2.2 流程入口</h2><p>下面以创建 <code>gin.Engine</code> 、注册 <code>middleware</code> 和注册 <code>handler</code> 作为主线，进行源码走读和原理解析：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 创建一个 gin Engine，本质上是一个 http Handler</span>
+    mux <span class="token operator">:=</span> gin<span class="token punctuation">.</span><span class="token function">Default</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 注册中间件</span>
+    mux<span class="token punctuation">.</span><span class="token function">Use</span><span class="token punctuation">(</span>myMiddleWare<span class="token punctuation">)</span>
+    <span class="token comment">// 注册一个 path 为 /ping 的处理函数</span>
+    mux<span class="token punctuation">.</span><span class="token function">POST</span><span class="token punctuation">(</span><span class="token string">"/ping"</span><span class="token punctuation">,</span> <span class="token keyword">func</span><span class="token punctuation">(</span>c <span class="token operator">*</span>gin<span class="token punctuation">.</span>Context<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        c<span class="token punctuation">.</span><span class="token function">JSON</span><span class="token punctuation">(</span>http<span class="token punctuation">.</span>StatusOK<span class="token punctuation">,</span> <span class="token string">"pone"</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-3-初始化-Engine"><a href="#2-3-初始化-Engine" class="headerlink" title="2.3 初始化 Engine"></a>2.3 初始化 Engine</h2><p>方法调用：<strong>gin.Default -&gt; gin.New</strong></p>
+<ol>
+<li>创建一个 <code>gin.Engine</code> 实例</li>
+<li>创建 <code>Enging</code> 的首个 <code>RouterGroup</code>，对应的处理函数链 <code>Handlers</code> 为 <code>nil</code>，基础路径 <code>basePath</code> 为 “&#x2F;“，root 标识为 true</li>
+<li>构造了 9 棵方法路由树，对应于 9 种 http 方法</li>
+<li>创建了 <code>gin.Context</code> 的对象池</li>
+</ol>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">Default</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span>Engine <span class="token punctuation">&#123;</span>
+    engine <span class="token operator">:=</span> <span class="token function">New</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> engine
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">New</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span>Engine <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 创建 gin Engine 实例</span>
+    engine <span class="token operator">:=</span> <span class="token operator">&amp;</span>Engine<span class="token punctuation">&#123;</span>
+        <span class="token comment">// 路由组实例</span>
+        RouterGroup<span class="token punctuation">:</span> RouterGroup<span class="token punctuation">&#123;</span>
+            Handlers<span class="token punctuation">:</span> <span class="token boolean">nil</span><span class="token punctuation">,</span>
+            basePath<span class="token punctuation">:</span> <span class="token string">"/"</span><span class="token punctuation">,</span>
+            root<span class="token punctuation">:</span>     <span class="token boolean">true</span><span class="token punctuation">,</span>
+        <span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+        <span class="token comment">// ...</span>
+        <span class="token comment">// 9 棵路由压缩前缀树，对应 9 种 http 方法</span>
+        trees<span class="token punctuation">:</span>                  <span class="token function">make</span><span class="token punctuation">(</span>methodTrees<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">9</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+    engine<span class="token punctuation">.</span>RouterGroup<span class="token punctuation">.</span>engine <span class="token operator">=</span> engine     
+    <span class="token comment">// gin.Context 对象池   </span>
+    engine<span class="token punctuation">.</span>pool<span class="token punctuation">.</span>New <span class="token operator">=</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> any <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> engine<span class="token punctuation">.</span><span class="token function">allocateContext</span><span class="token punctuation">(</span>engine<span class="token punctuation">.</span>maxParams<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> engine
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-3-注册-middleware"><a href="#2-3-注册-middleware" class="headerlink" title="2.3 注册 middleware"></a>2.3 注册 middleware</h2><p>通过 <code>Engine.Use</code> 方法可以实现中间件的注册，会将注册的 <code>middlewares</code> 添加到 <code>RouterGroup.Handlers</code> 中. 后续 <code>RouterGroup</code> 下新注册的 <code>handler</code> 都会在前缀中拼上这部分 <code>group</code> 公共的 <code>handlers</code>.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>engine <span class="token operator">*</span>Engine<span class="token punctuation">)</span> <span class="token function">Use</span><span class="token punctuation">(</span>middleware <span class="token operator">...</span>HandlerFunc<span class="token punctuation">)</span> IRoutes <span class="token punctuation">&#123;</span>
+    engine<span class="token punctuation">.</span>RouterGroup<span class="token punctuation">.</span><span class="token function">Use</span><span class="token punctuation">(</span>middleware<span class="token operator">...</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> engine
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>group <span class="token operator">*</span>RouterGroup<span class="token punctuation">)</span> <span class="token function">Use</span><span class="token punctuation">(</span>middleware <span class="token operator">...</span>HandlerFunc<span class="token punctuation">)</span> IRoutes <span class="token punctuation">&#123;</span>
+    group<span class="token punctuation">.</span>Handlers <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span>group<span class="token punctuation">.</span>Handlers<span class="token punctuation">,</span> middleware<span class="token operator">...</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span> group<span class="token punctuation">.</span><span class="token function">returnObj</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-4-注册-handler"><a href="#2-4-注册-handler" class="headerlink" title="2.4 注册 handler"></a>2.4 注册 handler</h2><p>以 <code>http post</code> 为例，注册 <code>handler</code> 方法调用顺序为 <code>RouterGroup.POST</code>-&gt; <code>RouterGroup.handle</code>，接下来会完成三个步骤：</p>
+<ol>
+<li>拼接出待注册方法的完整路径 absolutePath</li>
+<li>拼接出代注册方法的完整处理函数链 handlers</li>
+<li>以 absolutePath 和 handlers 组成 kv 对添加到路由树中</li>
+</ol>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>group <span class="token operator">*</span>RouterGroup<span class="token punctuation">)</span> <span class="token function">POST</span><span class="token punctuation">(</span>relativePath <span class="token builtin">string</span><span class="token punctuation">,</span> handlers <span class="token operator">...</span>HandlerFunc<span class="token punctuation">)</span> IRoutes <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> group<span class="token punctuation">.</span><span class="token function">handle</span><span class="token punctuation">(</span>http<span class="token punctuation">.</span>MethodPost<span class="token punctuation">,</span> relativePath<span class="token punctuation">,</span> handlers<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>group <span class="token operator">*</span>RouterGroup<span class="token punctuation">)</span> <span class="token function">handle</span><span class="token punctuation">(</span>httpMethod<span class="token punctuation">,</span> relativePath <span class="token builtin">string</span><span class="token punctuation">,</span> handlers HandlersChain<span class="token punctuation">)</span> IRoutes <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 拼接出待注册方法的完整路径 absolutePath</span>
+    absolutePath <span class="token operator">:=</span> group<span class="token punctuation">.</span><span class="token function">calculateAbsolutePath</span><span class="token punctuation">(</span>relativePath<span class="token punctuation">)</span>
+    
+    <span class="token comment">// 拼接出代注册方法的完整处理函数链 handlers</span>
+    handlers <span class="token operator">=</span> group<span class="token punctuation">.</span><span class="token function">combineHandlers</span><span class="token punctuation">(</span>handlers<span class="token punctuation">)</span>
+
+    <span class="token comment">//以 absolutePath 和 handlers 组成 kv 对添加到路由树中</span>
+    group<span class="token punctuation">.</span>engine<span class="token punctuation">.</span><span class="token function">addRoute</span><span class="token punctuation">(</span>httpMethod<span class="token punctuation">,</span> absolutePath<span class="token punctuation">,</span> handlers<span class="token punctuation">)</span>
+    <span class="token keyword">return</span> group<span class="token punctuation">.</span><span class="token function">returnObj</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><a class="simple-lightbox" href="/../images/Golang-Gin-%E6%A1%86%E6%9E%B6%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/pipeline.png"><img   src="/images/loading.svg" data-src="/../images/Golang-Gin-%E6%A1%86%E6%9E%B6%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/pipeline.png"  alt="pipeline" lazyload></a></p>
+<h3 id="1-完整路径拼接"><a href="#1-完整路径拼接" class="headerlink" title="1 完整路径拼接"></a>1 完整路径拼接</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>group <span class="token operator">*</span>RouterGroup<span class="token punctuation">)</span> <span class="token function">calculateAbsolutePath</span><span class="token punctuation">(</span>relativePath <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token builtin">string</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token function">joinPaths</span><span class="token punctuation">(</span>group<span class="token punctuation">.</span>basePath<span class="token punctuation">,</span> relativePath<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">joinPaths</span><span class="token punctuation">(</span>absolutePath<span class="token punctuation">,</span> relativePath <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token builtin">string</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 输入为空，直接输出前面的路径</span>
+    <span class="token keyword">if</span> relativePath <span class="token operator">==</span> <span class="token string">""</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> absolutePath
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 当前路径和base进行拼接</span>
+    finalPath <span class="token operator">:=</span> path<span class="token punctuation">.</span><span class="token function">Join</span><span class="token punctuation">(</span>absolutePath<span class="token punctuation">,</span> relativePath<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> <span class="token function">lastChar</span><span class="token punctuation">(</span>relativePath<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token char">'/'</span> <span class="token operator">&amp;&amp;</span> <span class="token function">lastChar</span><span class="token punctuation">(</span>finalPath<span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token char">'/'</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> finalPath <span class="token operator">+</span> <span class="token string">"/"</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> finalPath
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="2-完整-handlers-生成"><a href="#2-完整-handlers-生成" class="headerlink" title="2 完整 handlers 生成"></a>2 完整 handlers 生成</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>group <span class="token operator">*</span>RouterGroup<span class="token punctuation">)</span> <span class="token function">combineHandlers</span><span class="token punctuation">(</span>handlers HandlersChain<span class="token punctuation">)</span> HandlersChain <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 计算数组长度，判断是否超长</span>
+    finalSize <span class="token operator">:=</span> <span class="token function">len</span><span class="token punctuation">(</span>group<span class="token punctuation">.</span>Handlers<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token function">len</span><span class="token punctuation">(</span>handlers<span class="token punctuation">)</span>
+    <span class="token function">assert1</span><span class="token punctuation">(</span>finalSize <span class="token operator">&lt;</span> <span class="token function">int</span><span class="token punctuation">(</span>abortIndex<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"too many handlers"</span><span class="token punctuation">)</span>
+    
+    <span class="token comment">//构造一条新的 HandlersChain</span>
+    mergedHandlers <span class="token operator">:=</span> <span class="token function">make</span><span class="token punctuation">(</span>HandlersChain<span class="token punctuation">,</span> finalSize<span class="token punctuation">)</span>
+
+    <span class="token comment">// 深拷贝</span>
+    <span class="token function">copy</span><span class="token punctuation">(</span>mergedHandlers<span class="token punctuation">,</span> group<span class="token punctuation">.</span>Handlers<span class="token punctuation">)</span>
+    <span class="token function">copy</span><span class="token punctuation">(</span>mergedHandlers<span class="token punctuation">[</span><span class="token function">len</span><span class="token punctuation">(</span>group<span class="token punctuation">.</span>Handlers<span class="token punctuation">)</span><span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">,</span> handlers<span class="token punctuation">)</span>
+    <span class="token keyword">return</span> mergedHandlers
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="3-注册-handler-到路由树"><a href="#3-注册-handler-到路由树" class="headerlink" title="3 注册 handler 到路由树"></a>3 注册 handler 到路由树</h3><ul>
+<li>获取 http method 对应的 methodTree</li>
+<li>将 absolutePath 和对应的 handlers 注册到 methodTree 中</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>engine <span class="token operator">*</span>Engine<span class="token punctuation">)</span> <span class="token function">addRoute</span><span class="token punctuation">(</span>method<span class="token punctuation">,</span> path <span class="token builtin">string</span><span class="token punctuation">,</span> handlers HandlersChain<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    root <span class="token operator">:=</span> engine<span class="token punctuation">.</span>trees<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>method<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> root <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        root <span class="token operator">=</span> <span class="token function">new</span><span class="token punctuation">(</span>node<span class="token punctuation">)</span>
+        root<span class="token punctuation">.</span>fullPath <span class="token operator">=</span> <span class="token string">"/"</span>
+        engine<span class="token punctuation">.</span>trees <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span>engine<span class="token punctuation">.</span>trees<span class="token punctuation">,</span> methodTree<span class="token punctuation">&#123;</span>method<span class="token punctuation">:</span> method<span class="token punctuation">,</span> root<span class="token punctuation">:</span> root<span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    root<span class="token punctuation">.</span><span class="token function">addRoute</span><span class="token punctuation">(</span>path<span class="token punctuation">,</span> handlers<span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="3-启动服务流程"><a href="#3-启动服务流程" class="headerlink" title="3 启动服务流程"></a>3 启动服务流程</h1><h2 id="3-1-流程入口"><a href="#3-1-流程入口" class="headerlink" title="3.1 流程入口"></a>3.1 流程入口</h2><p>下面通过 Gin 框架运行 http 服务为主线，进行源码走读：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 创建一个 gin Engine，本质上是一个 http Handler</span>
+    mux <span class="token operator">:=</span> gin<span class="token punctuation">.</span><span class="token function">Default</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    
+    <span class="token comment">// 一键启动 http 服务</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> mux<span class="token punctuation">.</span><span class="token function">Run</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span><span class="token punctuation">&#123;</span>
+        <span class="token function">panic</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-2-启动服务"><a href="#3-2-启动服务" class="headerlink" title="3.2 启动服务"></a>3.2 启动服务</h2><p>一键启动 <code>Engine.Run</code> 方法后，底层会将 <code>gin.Engine</code> 本身作为 <code>net/http</code> 包下<code> Handler interface</code> 的实现类，并调用 <code>http.ListenAndServe</code> 方法启动服务.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>engine <span class="token operator">*</span>Engine<span class="token punctuation">)</span> <span class="token function">Run</span><span class="token punctuation">(</span>addr <span class="token operator">...</span><span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    err <span class="token operator">=</span> http<span class="token punctuation">.</span><span class="token function">ListenAndServe</span><span class="token punctuation">(</span>address<span class="token punctuation">,</span> engine<span class="token punctuation">.</span><span class="token function">Handler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>ListenerAndServe</code> 方法本身会<strong>基于主动轮询 + IO 多路复用</strong>的方式运行，因此程序在正常运行时，会始终阻塞于<code> Engine.Run</code> 方法，不会返回.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>srv <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">Serve</span><span class="token punctuation">(</span>l net<span class="token punctuation">.</span>Listener<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+   <span class="token comment">// ...</span>
+   ctx <span class="token operator">:=</span> context<span class="token punctuation">.</span><span class="token function">WithValue</span><span class="token punctuation">(</span>baseCtx<span class="token punctuation">,</span> ServerContextKey<span class="token punctuation">,</span> srv<span class="token punctuation">)</span>
+    <span class="token keyword">for</span> <span class="token punctuation">&#123;</span>
+        rw<span class="token punctuation">,</span> err <span class="token operator">:=</span> l<span class="token punctuation">.</span><span class="token function">Accept</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token comment">// ...</span>
+        connCtx <span class="token operator">:=</span> ctx
+        <span class="token comment">// ...</span>
+        c <span class="token operator">:=</span> srv<span class="token punctuation">.</span><span class="token function">newConn</span><span class="token punctuation">(</span>rw<span class="token punctuation">)</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">go</span> c<span class="token punctuation">.</span><span class="token function">serve</span><span class="token punctuation">(</span>connCtx<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-3-处理请求"><a href="#3-3-处理请求" class="headerlink" title="3.3 处理请求"></a>3.3 处理请求</h2><p>在服务端接收到 <code>http</code> 请求时，会通过 <code>Handler.ServeHTTP</code> 方法进行处理. 而此处的 <code>Handler</code> 正是 <code>gin.Engine</code>，其处理请求的核心步骤如下：</p>
+<p>对于每笔 <code>http</code> 请求，会为其分配一个 <code>gin.Context</code>，在 <code>handlers</code> 链路中持续向下传递<br>调用 <code>Engine.handleHTTPRequest</code> 方法，从路由树中获取 <code>handlers</code> 链，然后遍历调用<br>处理完 <code>http</code> 请求后，会将 <code>gin.Context</code> 进行回收. 整个回收复用的流程基于对象池管理</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>engine <span class="token operator">*</span>Engine<span class="token punctuation">)</span> <span class="token function">ServeHTTP</span><span class="token punctuation">(</span>w http<span class="token punctuation">.</span>ResponseWriter<span class="token punctuation">,</span> req <span class="token operator">*</span>http<span class="token punctuation">.</span>Request<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 从对象池中获取一个 context</span>
+    c <span class="token operator">:=</span> engine<span class="token punctuation">.</span>pool<span class="token punctuation">.</span><span class="token function">Get</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token operator">*</span>Context<span class="token punctuation">)</span>
+    
+    <span class="token comment">// 重置/初始化 context</span>
+    c<span class="token punctuation">.</span>writermem<span class="token punctuation">.</span><span class="token function">reset</span><span class="token punctuation">(</span>w<span class="token punctuation">)</span>
+    c<span class="token punctuation">.</span>Request <span class="token operator">=</span> req
+    c<span class="token punctuation">.</span><span class="token function">reset</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    
+    <span class="token comment">// 处理 http 请求</span>
+    engine<span class="token punctuation">.</span><span class="token function">handleHTTPRequest</span><span class="token punctuation">(</span>c<span class="token punctuation">)</span>
+
+
+    <span class="token comment">// 把 context 放回对象池</span>
+    engine<span class="token punctuation">.</span>pool<span class="token punctuation">.</span><span class="token function">Put</span><span class="token punctuation">(</span>c<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>Engine.handleHTTPRequest</code> 方法核心步骤分为三步：</p>
+<ol>
+<li>根据 <code>http method</code> 取得对应的 <code>methodTree</code></li>
+<li>根据 <code>path</code> 从 <code>methodTree</code> 中找到对应的 <code>handlers</code> 链</li>
+<li>将 <code>handlers</code> 链注入到 <code>gin.Context</code> 中，通过 <code>Context.Next</code> 方法按照顺序遍历调用 <code>handler</code></li>
+</ol>
+<p>此处根据 <code>path</code> 从路由树寻找 <code>handlers</code> 的逻辑位于 <code>root.getValue</code> 方法中，和路由树数据结构有关，放在本文第 4 章详解；</p>
+<p>根据 <code>gin.Context.Next</code> 方法遍历 <code>handler</code> 链的内容放在本文第 5 章详解.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>engine <span class="token operator">*</span>Engine<span class="token punctuation">)</span> <span class="token function">handleHTTPRequest</span><span class="token punctuation">(</span>c <span class="token operator">*</span>Context<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    httpMethod <span class="token operator">:=</span> c<span class="token punctuation">.</span>Request<span class="token punctuation">.</span>Method
+    rPath <span class="token operator">:=</span> c<span class="token punctuation">.</span>Request<span class="token punctuation">.</span>URL<span class="token punctuation">.</span>Path
+    
+    <span class="token comment">// ...</span>
+
+    t <span class="token operator">:=</span> engine<span class="token punctuation">.</span>trees
+    <span class="token keyword">for</span> i<span class="token punctuation">,</span> tl <span class="token operator">:=</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token function">len</span><span class="token punctuation">(</span>t<span class="token punctuation">)</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> tl<span class="token punctuation">;</span> i<span class="token operator">++</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 获取对应的方法树</span>
+        <span class="token keyword">if</span> t<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>method <span class="token operator">!=</span> httpMethod <span class="token punctuation">&#123;</span>
+            <span class="token keyword">continue</span>
+        <span class="token punctuation">&#125;</span>
+        root <span class="token operator">:=</span> t<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>root
+        <span class="token comment">// 从路由树中寻找路由</span>
+        value <span class="token operator">:=</span> root<span class="token punctuation">.</span><span class="token function">getValue</span><span class="token punctuation">(</span>rPath<span class="token punctuation">,</span> c<span class="token punctuation">.</span>params<span class="token punctuation">,</span> c<span class="token punctuation">.</span>skippedNodes<span class="token punctuation">,</span> unescape<span class="token punctuation">)</span>
+        
+        <span class="token comment">// value中的内容，都存到context中，用于后面执行</span>
+        <span class="token keyword">if</span> value<span class="token punctuation">.</span>params <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            c<span class="token punctuation">.</span>Params <span class="token operator">=</span> <span class="token operator">*</span>value<span class="token punctuation">.</span>params
+        <span class="token punctuation">&#125;</span>
+        <span class="token keyword">if</span> value<span class="token punctuation">.</span>handlers <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            c<span class="token punctuation">.</span>handlers <span class="token operator">=</span> value<span class="token punctuation">.</span>handlers
+            c<span class="token punctuation">.</span>fullPath <span class="token operator">=</span> value<span class="token punctuation">.</span>fullPath
+            c<span class="token punctuation">.</span><span class="token function">Next</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            c<span class="token punctuation">.</span>writermem<span class="token punctuation">.</span><span class="token function">WriteHeaderNow</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">return</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">break</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="4-Gin-的路由树"><a href="#4-Gin-的路由树" class="headerlink" title="4 Gin 的路由树"></a>4 Gin 的路由树</h1><p>在聊 Gin 路由树实现原理之前，需要先补充一个压缩前缀树 radix tree 的基础设定.</p>
+<h3 id="前缀树"><a href="#前缀树" class="headerlink" title="前缀树"></a>前缀树</h3><p>前缀树又称 <strong>trie</strong> 树，是一种基于字符串公共前缀构建索引的树状结构，核心点包括：</p>
+<ul>
+<li>除根节点之外，每个节点对应一个字符</li>
+<li>从根节点到某一节点，路径上经过的字符串联起来，即为该节点对应的字符串</li>
+<li>尽可能复用公共前缀，如无必要不分配新的节点</li>
+<li>tries 树在 leetcode 上的题号为 208</li>
+</ul>
+<h3 id="压缩前缀树"><a href="#压缩前缀树" class="headerlink" title="压缩前缀树"></a>压缩前缀树</h3><p>压缩前缀树又称基数树或 <strong>radix</strong> 树，是对前缀树的改良版本，优化点主要在于空间的节省，核心策略体现在：</p>
+<ul>
+<li>倘若某个子节点是其父节点的唯一孩子，则与父节点进行合并</li>
+<li><strong>在 gin 框架中，是用压缩前缀树</strong></li>
+</ul>
+<h3 id="为什么使用压缩前缀树，而不用-hashmap"><a href="#为什么使用压缩前缀树，而不用-hashmap" class="headerlink" title="为什么使用压缩前缀树，而不用 hashmap"></a>为什么使用压缩前缀树，而不用 hashmap</h3><p>与压缩前缀树相对的就是使用 <code>hashmap</code>，以 <code>path</code> 为 <code>key</code>，<code>handlers</code> 为 <code>value</code> 进行映射关联，这里选择了前者的原因在于：</p>
+<ul>
+<li><strong>path</strong> 匹配时不是完全精确匹配，比如末尾 ‘&#x2F;’ 符号的增减、全匹配符号 ‘*’ 的处理等，map 无法胜任（模糊匹配部分的代码于本文中并未体现，大家可以深入源码中加以佐证）</li>
+<li>路由的数量相对有限，对应数量级下 map 的性能优势体现不明显，在小数据量的前提下，map 性能甚至要弱于前缀树</li>
+<li>path 串通常存在基于分组分类的公共前缀，适合使用前缀树进行管理，可以节省存储空间</li>
+</ul>
+<h3 id="补偿策略"><a href="#补偿策略" class="headerlink" title="补偿策略"></a>补偿策略</h3><p>在 <code>Gin</code> 路由树中还使用一种补偿策略，在组装路由树时，会将注册路由句柄数量更多的 <code>child node</code> 摆放在 <code>children</code> 数组更靠前的位置.</p>
+<p>这是因为某个链路注册的 <code>handlers</code> 句柄数量越多，一次匹配操作所需要话费的时间就越长，被匹配命中的概率就越大，因此应该被优先处理.</p>
+<h2 id="4-2-核心数据结构"><a href="#4-2-核心数据结构" class="headerlink" title="4.2 核心数据结构"></a>4.2 核心数据结构</h2><p>路由树的数据结构，对应于 9 种 http method，共有 9 棵 methodTree. 每棵 methodTree 会通过 root 指向 radix tree 的根节点.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> methodTree <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    method <span class="token builtin">string</span>
+    root   <span class="token operator">*</span>node
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>node</code> 是 <code>radix tree</code> 中的节点，对应节点含义如下：</p>
+<ul>
+<li>path：节点的相对路径，拼接上 RouterGroup 中的 basePath 作为前缀后才能拿到完整的路由 path</li>
+<li>indices：由各个子节点 path 首字母组成的字符串，子节点顺序会按照途径的路由数量 priority进行排序</li>
+<li>priority：途径本节点的路由数量，反映出本节点在父节点中被检索的优先级</li>
+<li>children：子节点列表</li>
+<li>handlers：当前节点对应的处理函数链</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">const</span> <span class="token punctuation">(</span>
+    static nodeType <span class="token operator">=</span> <span class="token boolean">iota</span>
+    root
+    param    <span class="token comment">// path 包含冒号通配符</span>
+    catchAll <span class="token comment">//包含 * 通配符的情况</span>
+<span class="token punctuation">)</span>
+
+
+<span class="token comment">//path树的节点结构</span>
+<span class="token keyword">type</span> node <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 表示当前节点的 path</span>
+    path      <span class="token builtin">string</span>
+    <span class="token comment">// 通常情况下维护了 children 列表的 path 的各首字符组成的 string，</span>
+    <span class="token comment">// 之所以是通常情况，是在处理包含通配符的 path 处理中会有一些例外情况</span>
+    indices   <span class="token builtin">string</span>
+
+    children  <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token operator">*</span>node
+    handlers  HandlersChain
+    <span class="token comment">//代表了有几条路由会经过此节点，用于在节点进行排序时使用，最小值为1</span>
+    priority  <span class="token builtin">uint32</span>
+    <span class="token comment">// 是节点的类型，默认是 static 类型，</span>
+    nType     nodeType
+    <span class="token comment">// 当前节点到各个叶子节点的包含的通配符的最大数量。</span>
+    maxParams <span class="token builtin">uint8</span>
+    <span class="token comment">// 默认是 false，当 children 是 通配符类型时，wildChild 为 true；</span>
+    wildChild <span class="token builtin">bool</span>
+    <span class="token comment">// 是从 root 节点到当前节点的全部 path 部分；</span>
+    <span class="token comment">//如果此节点为终结节点 handlers 为对应的处理链，否则为 nil</span>
+    fullPath  <span class="token builtin">string</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>这样一段路由配置：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">engine<span class="token punctuation">.</span><span class="token function">GET</span><span class="token punctuation">(</span><span class="token string">"/admin/model/get"</span><span class="token punctuation">,</span> api<span class="token punctuation">.</span>GetTemplate<span class="token punctuation">)</span>
+engine<span class="token punctuation">.</span><span class="token function">GET</span><span class="token punctuation">(</span><span class="token string">"/admin/model/query"</span><span class="token punctuation">,</span> api<span class="token punctuation">.</span>QueryTemplate<span class="token punctuation">)</span>
+engine<span class="token punctuation">.</span><span class="token function">POST</span><span class="token punctuation">(</span><span class="token string">"/admin/model/set"</span><span class="token punctuation">,</span> api<span class="token punctuation">.</span>SetTemplate<span class="token punctuation">)</span>
+engine<span class="token punctuation">.</span><span class="token function">POST</span><span class="token punctuation">(</span><span class="token string">"/admin/model/upload"</span><span class="token punctuation">,</span> api<span class="token punctuation">.</span>UploadTemplate<span class="token punctuation">)</span>
+engine<span class="token punctuation">.</span><span class="token function">POST</span><span class="token punctuation">(</span><span class="token string">"/admin/model/uploadv2"</span><span class="token punctuation">,</span> api<span class="token punctuation">.</span>GetTemplateWithSignature<span class="token punctuation">)</span>
+engine<span class="token punctuation">.</span><span class="token function">POST</span><span class="token punctuation">(</span><span class="token string">"/admin/model/update"</span><span class="token punctuation">,</span> api<span class="token punctuation">.</span>UpdateTemplate<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>它的前缀树应该为：</p>
+<p><a class="simple-lightbox" href="/../images/Golang-Gin-%E6%A1%86%E6%9E%B6%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/radix.png"><img   src="/images/loading.svg" data-src="/../images/Golang-Gin-%E6%A1%86%E6%9E%B6%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/radix.png"  alt="radix" lazyload></a></p>
+<h2 id="4-3-注册到路由树"><a href="#4-3-注册到路由树" class="headerlink" title="4.3 注册到路由树"></a>4.3 注册到路由树</h2><p>下述代码展示了将一组 <code>path + handlers</code> 添加到 <code>radix tree</code> 的详细过程，核心位置均已给出注释。</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 传入的是 绝对路径</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">addRoute</span><span class="token punctuation">(</span>path <span class="token builtin">string</span><span class="token punctuation">,</span> handlers HandlersChain<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+
+    fullPath <span class="token operator">:=</span> path
+
+    n<span class="token punctuation">.</span>priority<span class="token operator">++</span>
+
+    <span class="token comment">// 如果是一个空树，就直接插入后返回</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>path<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token operator">&amp;&amp;</span> <span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>children<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        n<span class="token punctuation">.</span><span class="token function">insertChild</span><span class="token punctuation">(</span>path<span class="token punctuation">,</span> fullPath<span class="token punctuation">,</span> handlers<span class="token punctuation">)</span>
+        n<span class="token punctuation">.</span>nType <span class="token operator">=</span> root
+        <span class="token keyword">return</span>
+    <span class="token punctuation">&#125;</span>
+
+    parentFullPathIndex <span class="token operator">:=</span> <span class="token number">0</span>
+
+    walk<span class="token punctuation">:</span>
+    <span class="token keyword">for</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">//最长的公共前缀的长度。</span>
+        <span class="token comment">//这也意味着通用前缀不包含':'或'*'</span>
+        <span class="token comment">//因为现有的键不能包含这些字符。</span>
+        i <span class="token operator">:=</span> <span class="token function">longestCommonPrefix</span><span class="token punctuation">(</span>path<span class="token punctuation">,</span> n<span class="token punctuation">.</span>path<span class="token punctuation">)</span>
+
+        <span class="token comment">// 最长公共前缀的长度小于 node.path 的长度，代表 node 需要分裂</span>
+        <span class="token comment">// 举例而言：node.path == search, 待插入的 path == see</span>
+        <span class="token comment">// 最长公共前缀是 se， 长度是 2，而 len(node.path) == 6</span>
+        <span class="token comment">// 所以 node 要进行分裂，变为 se -> arch</span>
+        <span class="token comment">//                            -> e</span>
+        <span class="token keyword">if</span> i <span class="token operator">&lt;</span> <span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>path<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// 分裂的后半部分 举例中的 arch</span>
+            child <span class="token operator">:=</span> node<span class="token punctuation">&#123;</span>
+                path<span class="token punctuation">:</span>      n<span class="token punctuation">.</span>path<span class="token punctuation">[</span>i<span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+                wildChild<span class="token punctuation">:</span> n<span class="token punctuation">.</span>wildChild<span class="token punctuation">,</span>
+                nType<span class="token punctuation">:</span>     static<span class="token punctuation">,</span>
+                indices<span class="token punctuation">:</span>   n<span class="token punctuation">.</span>indices<span class="token punctuation">,</span>
+                children<span class="token punctuation">:</span>  n<span class="token punctuation">.</span>children<span class="token punctuation">,</span>
+                handlers<span class="token punctuation">:</span>  n<span class="token punctuation">.</span>handlers<span class="token punctuation">,</span>
+                priority<span class="token punctuation">:</span>  n<span class="token punctuation">.</span>priority <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">,</span>
+                fullPath<span class="token punctuation">:</span>  n<span class="token punctuation">.</span>fullPath<span class="token punctuation">,</span>
+            <span class="token punctuation">&#125;</span>
+
+            <span class="token comment">// 后半部分设置为耗子节点</span>
+            n<span class="token punctuation">.</span>children <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token operator">*</span>node<span class="token punctuation">&#123;</span><span class="token operator">&amp;</span>child<span class="token punctuation">&#125;</span>
+            <span class="token comment">// []byte for proper unicode char conversion, see #65</span>
+            <span class="token comment">// 把当前的 n 修改为前半部分，设置 se 的 indice 首字母为 a</span>
+            n<span class="token punctuation">.</span>indices <span class="token operator">=</span> bytesconv<span class="token punctuation">.</span><span class="token function">BytesToString</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">&#123;</span>n<span class="token punctuation">.</span>path<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+            <span class="token comment">// 调整 search 为 se</span>
+            n<span class="token punctuation">.</span>path <span class="token operator">=</span> path<span class="token punctuation">[</span><span class="token punctuation">:</span>i<span class="token punctuation">]</span>
+            <span class="token comment">// search 的 handlers 都托付给 arch 了，se 本身没有 handlers</span>
+            n<span class="token punctuation">.</span>handlers <span class="token operator">=</span> <span class="token boolean">nil</span>
+            n<span class="token punctuation">.</span>wildChild <span class="token operator">=</span> <span class="token boolean">false</span>
+            n<span class="token punctuation">.</span>fullPath <span class="token operator">=</span> fullPath<span class="token punctuation">[</span><span class="token punctuation">:</span>parentFullPathIndex<span class="token operator">+</span>i<span class="token punctuation">]</span>
+        <span class="token punctuation">&#125;</span>
+
+        <span class="token comment">// 最长公共前缀长度小于 path，正如 se 之于 see</span>
+        <span class="token comment">// path没有完成匹配，需要继续向下寻找</span>
+        <span class="token keyword">if</span> i <span class="token operator">&lt;</span> <span class="token function">len</span><span class="token punctuation">(</span>path<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// path see 扣除公共前缀 se，剩余 e</span>
+            path <span class="token operator">=</span> path<span class="token punctuation">[</span>i<span class="token punctuation">:</span><span class="token punctuation">]</span>
+            c <span class="token operator">:=</span> path<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+
+            <span class="token comment">// '/' after param</span>
+            <span class="token comment">// 当前节点开头是 “/” 的话</span>
+            <span class="token keyword">if</span> n<span class="token punctuation">.</span>nType <span class="token operator">==</span> param <span class="token operator">&amp;&amp;</span> c <span class="token operator">==</span> <span class="token char">'/'</span> <span class="token operator">&amp;&amp;</span> <span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>children<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">1</span> <span class="token punctuation">&#123;</span>
+                parentFullPathIndex <span class="token operator">+=</span> <span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>path<span class="token punctuation">)</span>
+                n <span class="token operator">=</span> n<span class="token punctuation">.</span>children<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                n<span class="token punctuation">.</span>priority<span class="token operator">++</span>
+                <span class="token keyword">continue</span> walk
+            <span class="token punctuation">&#125;</span>
+
+            <span class="token comment">// 根据 node.indices，辅助判断，其子节点中是否与当前 path 还存在公共前缀</span>
+            <span class="token comment">//遍历利当前节点的每一个孩子，如果发现有相同前缀的 ，从walk开始再处理   </span>
+            <span class="token keyword">for</span> i<span class="token punctuation">,</span> max <span class="token operator">:=</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>indices<span class="token punctuation">)</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> max<span class="token punctuation">;</span> i<span class="token operator">++</span> <span class="token punctuation">&#123;</span>
+                <span class="token keyword">if</span> c <span class="token operator">==</span> n<span class="token punctuation">.</span>indices<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token punctuation">&#123;</span>
+                    <span class="token comment">//倘若 node 子节点还与 path 有公共前缀，则令 node = child，</span>
+                    <span class="token comment">// 并调到外层 for 循环 walk 位置开始新一轮处理</span>
+                    parentFullPathIndex <span class="token operator">+=</span> <span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>path<span class="token punctuation">)</span>
+                    i <span class="token operator">=</span> n<span class="token punctuation">.</span><span class="token function">incrementChildPrio</span><span class="token punctuation">(</span>i<span class="token punctuation">)</span>
+                    n <span class="token operator">=</span> n<span class="token punctuation">.</span>children<span class="token punctuation">[</span>i<span class="token punctuation">]</span>
+                    <span class="token keyword">continue</span> walk
+                <span class="token punctuation">&#125;</span>
+            <span class="token punctuation">&#125;</span>
+
+            <span class="token comment">// 处理完前面部分后，对path进行插入</span>
+
+            <span class="token comment">// 如果没有通配符，对当前节点进行设置</span>
+            <span class="token keyword">if</span> c <span class="token operator">!=</span> <span class="token char">':'</span> <span class="token operator">&amp;&amp;</span> c <span class="token operator">!=</span> <span class="token char">'*'</span> <span class="token operator">&amp;&amp;</span> n<span class="token punctuation">.</span>nType <span class="token operator">!=</span> catchAll <span class="token punctuation">&#123;</span>
+                <span class="token comment">// []byte for proper unicode char conversion, see #65</span>
+                n<span class="token punctuation">.</span>indices <span class="token operator">+=</span> bytesconv<span class="token punctuation">.</span><span class="token function">BytesToString</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">&#123;</span>c<span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+                child <span class="token operator">:=</span> <span class="token operator">&amp;</span>node<span class="token punctuation">&#123;</span>
+                    fullPath<span class="token punctuation">:</span> fullPath<span class="token punctuation">,</span>
+                <span class="token punctuation">&#125;</span>
+                <span class="token comment">// children属性中插入</span>
+                n<span class="token punctuation">.</span><span class="token function">addChild</span><span class="token punctuation">(</span>child<span class="token punctuation">)</span>
+                n<span class="token punctuation">.</span><span class="token function">incrementChildPrio</span><span class="token punctuation">(</span><span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>indices<span class="token punctuation">)</span> <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">)</span>
+                n <span class="token operator">=</span> child
+
+            <span class="token comment">// 如果有通配符</span>
+            <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token keyword">if</span> n<span class="token punctuation">.</span>wildChild <span class="token punctuation">&#123;</span>
+                <span class="token comment">// 插入一个通配符节点，需要检查它是否与现有的通配符冲突</span>
+                n <span class="token operator">=</span> n<span class="token punctuation">.</span>children<span class="token punctuation">[</span><span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>children<span class="token punctuation">)</span><span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span>
+                n<span class="token punctuation">.</span>priority<span class="token operator">++</span>
+
+                <span class="token comment">// 检查通配符是否匹配</span>
+                <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>path<span class="token punctuation">)</span> <span class="token operator">>=</span> <span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>path<span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span> n<span class="token punctuation">.</span>path <span class="token operator">==</span> path<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>path<span class="token punctuation">)</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span>
+                    <span class="token comment">// nType 不是 catchAll</span>
+                    n<span class="token punctuation">.</span>nType <span class="token operator">!=</span> catchAll <span class="token operator">&amp;&amp;</span>
+                    <span class="token comment">// 检查较长的通配符，例如:name和:names</span>
+                    <span class="token punctuation">(</span><span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>path<span class="token punctuation">)</span> <span class="token operator">>=</span> <span class="token function">len</span><span class="token punctuation">(</span>path<span class="token punctuation">)</span> <span class="token operator">||</span> path<span class="token punctuation">[</span><span class="token function">len</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>path<span class="token punctuation">)</span><span class="token punctuation">]</span> <span class="token operator">==</span> <span class="token char">'/'</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+                    <span class="token keyword">continue</span> walk
+                <span class="token punctuation">&#125;</span>
+
+                <span class="token comment">// 处理通配符不匹配</span>
+                pathSeg <span class="token operator">:=</span> path
+                <span class="token keyword">if</span> n<span class="token punctuation">.</span>nType <span class="token operator">!=</span> catchAll <span class="token punctuation">&#123;</span>
+                    pathSeg <span class="token operator">=</span> strings<span class="token punctuation">.</span><span class="token function">SplitN</span><span class="token punctuation">(</span>pathSeg<span class="token punctuation">,</span> <span class="token string">"/"</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                <span class="token punctuation">&#125;</span>
+                prefix <span class="token operator">:=</span> fullPath<span class="token punctuation">[</span><span class="token punctuation">:</span>strings<span class="token punctuation">.</span><span class="token function">Index</span><span class="token punctuation">(</span>fullPath<span class="token punctuation">,</span> pathSeg<span class="token punctuation">)</span><span class="token punctuation">]</span> <span class="token operator">+</span> n<span class="token punctuation">.</span>path
+                <span class="token function">panic</span><span class="token punctuation">(</span><span class="token string">"'"</span> <span class="token operator">+</span> pathSeg <span class="token operator">+</span>
+                    <span class="token string">"' in new path '"</span> <span class="token operator">+</span> fullPath <span class="token operator">+</span>
+                    <span class="token string">"' conflicts with existing wildcard '"</span> <span class="token operator">+</span> n<span class="token punctuation">.</span>path <span class="token operator">+</span>
+                    <span class="token string">"' in existing prefix '"</span> <span class="token operator">+</span> prefix <span class="token operator">+</span>
+                    <span class="token string">"'"</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+
+            <span class="token comment">// 前缀树插入</span>
+            n<span class="token punctuation">.</span><span class="token function">insertChild</span><span class="token punctuation">(</span>path<span class="token punctuation">,</span> fullPath<span class="token punctuation">,</span> handlers<span class="token punctuation">)</span>
+            <span class="token keyword">return</span>
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 此处的分支是，path 恰好是其与 node.path 的公共前缀，则直接复制 handlers 即可</span>
+
+        <span class="token keyword">if</span> n<span class="token punctuation">.</span>handlers <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token function">panic</span><span class="token punctuation">(</span><span class="token string">"handlers are already registered for path '"</span> <span class="token operator">+</span> fullPath <span class="token operator">+</span> <span class="token string">"'"</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+        n<span class="token punctuation">.</span>handlers <span class="token operator">=</span> handlers
+        n<span class="token punctuation">.</span>fullPath <span class="token operator">=</span> fullPath
+        <span class="token keyword">return</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><a class="simple-lightbox" href="/../images/Golang-Gin-%E6%A1%86%E6%9E%B6%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/addRoute.png"><img   src="/images/loading.svg" data-src="/../images/Golang-Gin-%E6%A1%86%E6%9E%B6%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/addRoute.png"  alt="addRoute" lazyload></a></p>
+<p>呼应于 4.1 小节第（4）部分谈到的补偿策略，下面这段代码体现了，在每个 <code>node</code> 的 <code>children</code> 数组中，<code>child node</code> 在会依据 <code>priority</code> 有序排列，保证 <code>priority</code> 更高的 <code>child node</code> 会排在数组前列，被优先匹配.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">incrementChildPrio</span><span class="token punctuation">(</span>pos <span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token builtin">int</span> <span class="token punctuation">&#123;</span>
+    cs <span class="token operator">:=</span> n<span class="token punctuation">.</span>children
+    cs<span class="token punctuation">[</span>pos<span class="token punctuation">]</span><span class="token punctuation">.</span>priority<span class="token operator">++</span>
+    prio <span class="token operator">:=</span> cs<span class="token punctuation">[</span>pos<span class="token punctuation">]</span><span class="token punctuation">.</span>priority
+
+    <span class="token comment">// Adjust position (move to front)</span>
+    newPos <span class="token operator">:=</span> pos
+    <span class="token keyword">for</span> <span class="token punctuation">;</span> newPos <span class="token operator">></span> <span class="token number">0</span> <span class="token operator">&amp;&amp;</span> cs<span class="token punctuation">[</span>newPos<span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">.</span>priority <span class="token operator">&lt;</span> prio<span class="token punctuation">;</span> newPos<span class="token operator">--</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// Swap node positions</span>
+        cs<span class="token punctuation">[</span>newPos<span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cs<span class="token punctuation">[</span>newPos<span class="token punctuation">]</span> <span class="token operator">=</span> cs<span class="token punctuation">[</span>newPos<span class="token punctuation">]</span><span class="token punctuation">,</span> cs<span class="token punctuation">[</span>newPos<span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// Build new index char string</span>
+    <span class="token keyword">if</span> newPos <span class="token operator">!=</span> pos <span class="token punctuation">&#123;</span>
+        n<span class="token punctuation">.</span>indices <span class="token operator">=</span> n<span class="token punctuation">.</span>indices<span class="token punctuation">[</span><span class="token punctuation">:</span>newPos<span class="token punctuation">]</span> <span class="token operator">+</span> <span class="token comment">// Unchanged prefix, might be empty</span>
+            n<span class="token punctuation">.</span>indices<span class="token punctuation">[</span>pos<span class="token punctuation">:</span>pos<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">+</span> <span class="token comment">// The index char we move</span>
+            n<span class="token punctuation">.</span>indices<span class="token punctuation">[</span>newPos<span class="token punctuation">:</span>pos<span class="token punctuation">]</span> <span class="token operator">+</span> n<span class="token punctuation">.</span>indices<span class="token punctuation">[</span>pos<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">:</span><span class="token punctuation">]</span> <span class="token comment">// Rest without char at 'pos'</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">return</span> newPos
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 从路由树中获取 path 对应的 handlers </span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">getValue</span><span class="token punctuation">(</span>path <span class="token builtin">string</span><span class="token punctuation">,</span> params <span class="token operator">*</span>Params<span class="token punctuation">,</span> skippedNodes <span class="token operator">*</span><span class="token punctuation">[</span><span class="token punctuation">]</span>skippedNode<span class="token punctuation">,</span> unescape <span class="token builtin">bool</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>value nodeValue<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> globalParamsCount <span class="token builtin">int16</span>
+
+
+<span class="token comment">// 外层 for 循环断点</span>
+walk<span class="token punctuation">:</span> 
+    <span class="token keyword">for</span> <span class="token punctuation">&#123;</span>
+        prefix <span class="token operator">:=</span> n<span class="token punctuation">.</span>path
+        <span class="token comment">// 待匹配 path 长度大于 node.path</span>
+        <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>path<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token function">len</span><span class="token punctuation">(</span>prefix<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// node.path 长度 &lt; path，且前缀匹配上</span>
+            <span class="token keyword">if</span> path<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token function">len</span><span class="token punctuation">(</span>prefix<span class="token punctuation">)</span><span class="token punctuation">]</span> <span class="token operator">==</span> prefix <span class="token punctuation">&#123;</span>
+                <span class="token comment">// path 取为后半部分</span>
+                path <span class="token operator">=</span> path<span class="token punctuation">[</span><span class="token function">len</span><span class="token punctuation">(</span>prefix<span class="token punctuation">)</span><span class="token punctuation">:</span><span class="token punctuation">]</span>
+                <span class="token comment">// 遍历当前 node.indices，找到可能和 path 后半部分可能匹配到的 child node</span>
+                idxc <span class="token operator">:=</span> path<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                <span class="token keyword">for</span> i<span class="token punctuation">,</span> c <span class="token operator">:=</span> <span class="token keyword">range</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token function">byte</span><span class="token punctuation">(</span>n<span class="token punctuation">.</span>indices<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+                    <span class="token comment">// 找到了首字母匹配的 child node</span>
+                    <span class="token keyword">if</span> c <span class="token operator">==</span> idxc <span class="token punctuation">&#123;</span>
+                        <span class="token comment">// 将 n 指向 child node，调到 walk 断点开始下一轮处理</span>
+                        n <span class="token operator">=</span> n<span class="token punctuation">.</span>children<span class="token punctuation">[</span>i<span class="token punctuation">]</span>
+                        <span class="token keyword">continue</span> walk
+                    <span class="token punctuation">&#125;</span>
+                <span class="token punctuation">&#125;</span>
+
+
+                <span class="token comment">// ...</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 倘若 path 正好等于 node.path，说明已经找到目标</span>
+        <span class="token keyword">if</span> path <span class="token operator">==</span> prefix <span class="token punctuation">&#123;</span>
+            <span class="token comment">// ...</span>
+            <span class="token comment">// 取出对应的 handlers 进行返回 </span>
+            <span class="token keyword">if</span> value<span class="token punctuation">.</span>handlers <span class="token operator">=</span> n<span class="token punctuation">.</span>handlers<span class="token punctuation">;</span> value<span class="token punctuation">.</span>handlers <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                value<span class="token punctuation">.</span>fullPath <span class="token operator">=</span> n<span class="token punctuation">.</span>fullPath
+                <span class="token keyword">return</span>
+            <span class="token punctuation">&#125;</span>
+
+
+            <span class="token comment">// ...           </span>
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 倘若 path 与 node.path 已经没有公共前缀，说明匹配失败，会尝试重定向，此处不展开</span>
+        <span class="token comment">// ...</span>
+ <span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<h1 id="5-Gin-Context"><a href="#5-Gin-Context" class="headerlink" title="5 Gin.Context"></a>5 Gin.Context</h1><h2 id="5-1-核心数据结构"><a href="#5-1-核心数据结构" class="headerlink" title="5.1 核心数据结构"></a>5.1 核心数据结构</h2><p><code>gin.Context</code> 的定位是对应于一次 http 请求，贯穿于整条 <code>handlersChain</code> 调用链路的上下文，其中包含了如下核心字段：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Context <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+
+    writermem responseWriter
+    <span class="token comment">// 请求参数</span>
+    Request   <span class="token operator">*</span>http<span class="token punctuation">.</span>Request
+    <span class="token comment">// 响应参数</span>
+    Writer    ResponseWriter
+
+    Params   Params
+
+    <span class="token comment">// 处理函数链</span>
+    handlers HandlersChain
+
+    <span class="token comment">// 当前处于处理函数链的索引</span>
+    index    <span class="token builtin">int8</span>
+    fullPath <span class="token builtin">string</span>
+
+    engine       <span class="token operator">*</span>Engine
+    params       <span class="token operator">*</span>Params
+    skippedNodes <span class="token operator">*</span><span class="token punctuation">[</span><span class="token punctuation">]</span>skippedNode
+
+    <span class="token comment">// 读写锁，保证并发安全</span>
+    mu sync<span class="token punctuation">.</span>RWMutex
+
+    <span class="token comment">// key value 对存储 map</span>
+    Keys <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span>any
+
+    <span class="token comment">// Errors 是附加到使用此上下文的所有处理程序/中间件的错误列表。</span>
+    Errors errorMsgs
+
+    <span class="token comment">// Accepted 定义了一个手动接受的格式列表，用于内容协商。</span>
+    Accepted <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+
+    <span class="token comment">// queryCache缓存c.Request.URL.Query()的查询结果。</span>
+    queryCache url<span class="token punctuation">.</span>Values
+
+    <span class="token comment">// formCache caches c.Request.PostForm, which contains the parsed form data from POST, PATCH,</span>
+    <span class="token comment">// or PUT body parameters.</span>
+    formCache url<span class="token punctuation">.</span>Values
+
+    <span class="token comment">// SameSite allows a server to define a cookie attribute making it impossible for</span>
+    <span class="token comment">// the browser to send this cookie along with cross-site requests.</span>
+    sameSite http<span class="token punctuation">.</span>SameSite
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="5-2-复用策略"><a href="#5-2-复用策略" class="headerlink" title="5.2 复用策略"></a>5.2 复用策略</h2><p><code>gin.Context</code> 作为处理 <code>http</code> 请求的通用数据结构，不可避免地会被频繁创建和销毁. 为了缓解 GC 压力，gin 中采用对象池 <code>sync.Pool</code> 进行 Context 的缓存复用，处理流程如下：</p>
+<ul>
+<li>http 请求到达时，从 pool 中获取 Context，倘若池子已空，通过 pool.New 方法构造新的 Context 补上空缺</li>
+<li>http 请求处理完成后，将 Context 放回 pool 中，用以后续复用</li>
+</ul>
+<p><strong>sync.Pool 并不是真正意义上的缓存，将其称为回收站或许更加合适，放入其中的数据在逻辑意义上都是已经被删除的，但在物理意义上数据是仍然存在的，这些数据可以存活两轮 GC 的时间，在此期间倘若有被获取的需求，则可以被重新复用.</strong></p>
+<h2 id="5-3-分配与回收时机"><a href="#5-3-分配与回收时机" class="headerlink" title="5.3 分配与回收时机"></a>5.3 分配与回收时机</h2><p><code>gin.Context</code> 分配与回收的时机是在 <code>gin.Engine</code> 处理 <code>http</code> 请求的前后，位于 <code>Engine.ServeHTTP</code> 方法当中：</p>
+<ul>
+<li>从池中获取 Context</li>
+<li>重置 Context 的内容，使其成为一个空白的上下文</li>
+<li>调用 Engine.handleHTTPRequest 方法处理 http 请求</li>
+<li>请求处理完成后，将 Context 放回池中</li>
+</ul>
+<h2 id="5-4-使用时机"><a href="#5-4-使用时机" class="headerlink" title="5.4 使用时机"></a>5.4 使用时机</h2><h3 id="handlesChain-入口"><a href="#handlesChain-入口" class="headerlink" title="handlesChain 入口"></a>handlesChain 入口</h3><p>在 <code>Engine.handleHTTPRequest</code> 方法处理请求时，会通过 <code>path</code> 从 <code>methodTree</code> 中获取到对应的 <code>handlers</code> 链，然后将 <code>handlers</code> 注入到 <code>Context.handlers</code> 中，然后启动 <code>Context.Next</code> 方法开启 <code>handlers</code> 链的遍历调用流程.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>engine <span class="token operator">*</span>Engine<span class="token punctuation">)</span> <span class="token function">handleHTTPRequest</span><span class="token punctuation">(</span>c <span class="token operator">*</span>Context<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    t <span class="token operator">:=</span> engine<span class="token punctuation">.</span>trees
+    <span class="token keyword">for</span> i<span class="token punctuation">,</span> tl <span class="token operator">:=</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token function">len</span><span class="token punctuation">(</span>t<span class="token punctuation">)</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> tl<span class="token punctuation">;</span> i<span class="token operator">++</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> t<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>method <span class="token operator">!=</span> httpMethod <span class="token punctuation">&#123;</span>
+            <span class="token keyword">continue</span>
+        <span class="token punctuation">&#125;</span>
+        root <span class="token operator">:=</span> t<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>root        
+        value <span class="token operator">:=</span> root<span class="token punctuation">.</span><span class="token function">getValue</span><span class="token punctuation">(</span>rPath<span class="token punctuation">,</span> c<span class="token punctuation">.</span>params<span class="token punctuation">,</span> c<span class="token punctuation">.</span>skippedNodes<span class="token punctuation">,</span> unescape<span class="token punctuation">)</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">if</span> value<span class="token punctuation">.</span>handlers <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            c<span class="token punctuation">.</span>handlers <span class="token operator">=</span> value<span class="token punctuation">.</span>handlers
+            c<span class="token punctuation">.</span>fullPath <span class="token operator">=</span> value<span class="token punctuation">.</span>fullPath
+            c<span class="token punctuation">.</span><span class="token function">Next</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            c<span class="token punctuation">.</span>writermem<span class="token punctuation">.</span><span class="token function">WriteHeaderNow</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">return</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="handlesChain-遍历调用"><a href="#handlesChain-遍历调用" class="headerlink" title="handlesChain 遍历调用"></a>handlesChain 遍历调用</h3><p>推进 <code>handlers</code> 链调用进度的方法正是 <code>Context.Next</code>. 可以看到其中以 <code>Context.index</code> 为索引，通过 for 循环依次调用 handlers 链中的 handler.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Context<span class="token punctuation">)</span> <span class="token function">Next</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    c<span class="token punctuation">.</span>index<span class="token operator">++</span>
+    <span class="token keyword">for</span> c<span class="token punctuation">.</span>index <span class="token operator">&lt;</span> <span class="token function">int8</span><span class="token punctuation">(</span><span class="token function">len</span><span class="token punctuation">(</span>c<span class="token punctuation">.</span>handlers<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        c<span class="token punctuation">.</span>handlers<span class="token punctuation">[</span>c<span class="token punctuation">.</span>index<span class="token punctuation">]</span><span class="token punctuation">(</span>c<span class="token punctuation">)</span>
+        c<span class="token punctuation">.</span>index<span class="token operator">++</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>由于 <code>Context</code> 本身会暴露于调用链路中，因此用户可以在某个 <code>handler</code> 中通过手动调用 <code>Context.Next</code> 的方式来打断当前 <code>handler</code> 的执行流程，提前进入下一个 <code>handler</code> 的处理中.</p>
+<p>结合下面的代码示例来说，用户可以在某个 handler 中，于调用 Context.Next 方法的前后分别声明前处理逻辑和后处理逻辑，这里的“前”和“后”相对的是后置位的所有 handler 而言.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">myHandleFunc</span><span class="token punctuation">(</span>c <span class="token operator">*</span>gin<span class="token punctuation">.</span>Context<span class="token punctuation">)</span><span class="token punctuation">&#123;</span>
+    <span class="token comment">// 前处理</span>
+    <span class="token function">preHandle</span><span class="token punctuation">(</span><span class="token punctuation">)</span>  
+    c<span class="token punctuation">.</span><span class="token function">Next</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 后处理</span>
+    <span class="token function">postHandle</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>此外，用户可以在某个 <code>handler</code> 中通过调用<code> Context.Abort</code> 方法实现 <code>handlers</code> 链路的提前熔断.</p>
+<p>其实现原理是将 <code>Context.index</code> 设置为一个过载值 <code>63</code>，导致 <code>Next</code> 流程直接终止. 这是因为 <code>handlers</code> 链的长度必须小于 <code>63</code>，否则在注册时就会直接 <code>panic</code>. 因此在 <code>Context.Next</code> 方法中，一旦 <code>index</code> 被设为 <code>63</code>，则必然大于整条 <code>handlers</code> <code>链的长度，for</code> 循环便会提前终止.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">const</span> abortIndex <span class="token builtin">int8</span> <span class="token operator">=</span> <span class="token number">63</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Context<span class="token punctuation">)</span> <span class="token function">Abort</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    c<span class="token punctuation">.</span>index <span class="token operator">=</span> abortIndex
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>此外，用户还可以通过 Context.IsAbort 方法检测当前 handlerChain 是出于正常调用，还是已经被熔断.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Context<span class="token punctuation">)</span> <span class="token function">IsAborted</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">bool</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> c<span class="token punctuation">.</span>index <span class="token operator">>=</span> abortIndex
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>注册 handlers，倘若 handlers 链长度达到 63，则会 panic</p>
+<pre class="line-numbers language-none"><code class="language-none">func (group *RouterGroup) combineHandlers(handlers HandlersChain) HandlersChain &#123;
+    finalSize :&#x3D; len(group.Handlers) + len(handlers)
+    &#x2F;&#x2F; 断言 handlers 链长度必须小于 63
+    assert1(finalSize &lt; int(abortIndex), &quot;too many handlers&quot;)
+    &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="共享数据存取"><a href="#共享数据存取" class="headerlink" title="共享数据存取"></a>共享数据存取</h3><p><code>gin.Context</code> 作为 <code>handlers</code> 链的上下文，还提供对外暴露的 <code>Get</code> 和 <code>Set</code> 接口向用户提供了共享数据的存取服务，相关操作都在读写锁的保护之下，能够保证并发安全.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Context <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 读写锁，保证并发安全</span>
+    mu sync<span class="token punctuation">.</span>RWMutex
+
+
+    <span class="token comment">// key value 对存储 map</span>
+    Keys <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span>any
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Context<span class="token punctuation">)</span> <span class="token function">Get</span><span class="token punctuation">(</span>key <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>value any<span class="token punctuation">,</span> exists <span class="token builtin">bool</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    c<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">RLock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">defer</span> c<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">RUnlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    value<span class="token punctuation">,</span> exists <span class="token operator">=</span> c<span class="token punctuation">.</span>Keys<span class="token punctuation">[</span>key<span class="token punctuation">]</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Context<span class="token punctuation">)</span> <span class="token function">Set</span><span class="token punctuation">(</span>key <span class="token builtin">string</span><span class="token punctuation">,</span> value any<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    c<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">defer</span> c<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> c<span class="token punctuation">.</span>Keys <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        c<span class="token punctuation">.</span>Keys <span class="token operator">=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span>any<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    c<span class="token punctuation">.</span>Keys<span class="token punctuation">[</span>key<span class="token punctuation">]</span> <span class="token operator">=</span> value
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="6-总结"><a href="#6-总结" class="headerlink" title="6 总结"></a>6 总结</h1><p>对全文内容做个总结回顾：</p>
+<ol>
+<li>gin 将 Engine 作为 http.Handler 的实现类进行注入，从而融入 Golang net&#x2F;http 标准库的框架之内</li>
+<li>gin 中基于 handler 链的方式实现中间件和处理函数的协调使用</li>
+<li>gin 中基于压缩前缀树的方式作为路由树的数据结构，对应于 9 种 http 方法共有 9 棵树</li>
+<li>gin 中基于 gin.Context 作为一次 http 请求贯穿整条 handler chain 的核心数据结构</li>
+<li>gin.Context 是一种会被频繁创建销毁的资源对象，因此使用对象池 sync.Pool 进行缓存复用</li>
+</ol>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-Gin-%E5%92%8C-Http"><span class="top-box-text">1 Gin 和 Http</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-Gin-%E7%9A%84%E8%83%8C%E6%99%AF"><span class="top-box-text">1.1 Gin 的背景</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-Gin-%E4%B8%8E-net-http-%E7%9A%84%E5%85%B3%E7%B3%BB"><span class="top-box-text">1.2 Gin 与 net&#x2F;http 的关系</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-3-Gin-%E6%A1%86%E6%9E%B6%E4%BD%BF%E7%94%A8%E7%A4%BA%E4%BE%8B"><span class="top-box-text">1.3 Gin 框架使用示例</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E6%B3%A8%E5%86%8C-handler-%E6%B5%81%E7%A8%8B"><span class="top-box-text">2. 注册 handler 流程</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">2.1 核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-gin-Engine"><span class="top-box-text">1. gin.Engine</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-RouterGroup"><span class="top-box-text">2 RouterGroup</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-HandlersChain"><span class="top-box-text">3 HandlersChain</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-%E6%B5%81%E7%A8%8B%E5%85%A5%E5%8F%A3"><span class="top-box-text">2.2 流程入口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E5%88%9D%E5%A7%8B%E5%8C%96-Engine"><span class="top-box-text">2.3 初始化 Engine</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E6%B3%A8%E5%86%8C-middleware"><span class="top-box-text">2.3 注册 middleware</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-4-%E6%B3%A8%E5%86%8C-handler"><span class="top-box-text">2.4 注册 handler</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-%E5%AE%8C%E6%95%B4%E8%B7%AF%E5%BE%84%E6%8B%BC%E6%8E%A5"><span class="top-box-text">1 完整路径拼接</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-%E5%AE%8C%E6%95%B4-handlers-%E7%94%9F%E6%88%90"><span class="top-box-text">2 完整 handlers 生成</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-%E6%B3%A8%E5%86%8C-handler-%E5%88%B0%E8%B7%AF%E7%94%B1%E6%A0%91"><span class="top-box-text">3 注册 handler 到路由树</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-%E5%90%AF%E5%8A%A8%E6%9C%8D%E5%8A%A1%E6%B5%81%E7%A8%8B"><span class="top-box-text">3 启动服务流程</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E6%B5%81%E7%A8%8B%E5%85%A5%E5%8F%A3"><span class="top-box-text">3.1 流程入口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E5%90%AF%E5%8A%A8%E6%9C%8D%E5%8A%A1"><span class="top-box-text">3.2 启动服务</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-%E5%A4%84%E7%90%86%E8%AF%B7%E6%B1%82"><span class="top-box-text">3.3 处理请求</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-Gin-%E7%9A%84%E8%B7%AF%E7%94%B1%E6%A0%91"><span class="top-box-text">4 Gin 的路由树</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%89%8D%E7%BC%80%E6%A0%91"><span class="top-box-text">前缀树</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%8E%8B%E7%BC%A9%E5%89%8D%E7%BC%80%E6%A0%91"><span class="top-box-text">压缩前缀树</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BD%BF%E7%94%A8%E5%8E%8B%E7%BC%A9%E5%89%8D%E7%BC%80%E6%A0%91%EF%BC%8C%E8%80%8C%E4%B8%8D%E7%94%A8-hashmap"><span class="top-box-text">为什么使用压缩前缀树，而不用 hashmap</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%A1%A5%E5%81%BF%E7%AD%96%E7%95%A5"><span class="top-box-text">补偿策略</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-2-%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">4.2 核心数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-3-%E6%B3%A8%E5%86%8C%E5%88%B0%E8%B7%AF%E7%94%B1%E6%A0%91"><span class="top-box-text">4.3 注册到路由树</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#5-Gin-Context"><span class="top-box-text">5 Gin.Context</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-1-%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">5.1 核心数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-2-%E5%A4%8D%E7%94%A8%E7%AD%96%E7%95%A5"><span class="top-box-text">5.2 复用策略</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-3-%E5%88%86%E9%85%8D%E4%B8%8E%E5%9B%9E%E6%94%B6%E6%97%B6%E6%9C%BA"><span class="top-box-text">5.3 分配与回收时机</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-4-%E4%BD%BF%E7%94%A8%E6%97%B6%E6%9C%BA"><span class="top-box-text">5.4 使用时机</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#handlesChain-%E5%85%A5%E5%8F%A3"><span class="top-box-text">handlesChain 入口</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#handlesChain-%E9%81%8D%E5%8E%86%E8%B0%83%E7%94%A8"><span class="top-box-text">handlesChain 遍历调用</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%85%B1%E4%BA%AB%E6%95%B0%E6%8D%AE%E5%AD%98%E5%8F%96"><span class="top-box-text">共享数据存取</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#6-%E6%80%BB%E7%BB%93"><span class="top-box-text">6 总结</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/23/Golang-context-%E7%AE%80%E5%8D%95%E7%A4%BA%E4%BE%8B/">
+          <h3 class="post-title">
+            下一篇：Golang context 简单示例
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
