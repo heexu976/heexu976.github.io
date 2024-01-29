@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang Gorm 框架源码浅析</title>
+<meta name="keywords" content="Golang Gorm 框架源码浅析, HeXu">
+<meta name="description" content="1 核心类1.1 数据库gorm.DB 是 gorm 定义的数据库类. 所有执行的数据库的操作都将紧密围绕这个类，以链式调用的方式展开. 每当执行过链式调用后，新生成的 DB 对象中就存储了一些当前请求特有的状态信息，我们把这种对象称作“会">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang Gorm 框架源码浅析">
+<meta property="og:description" content="1 核心类1.1 数据库gorm.DB 是 gorm 定义的数据库类. 所有执行的数据库的操作都将紧密围绕这个类，以链式调用的方式展开. 每当执行过链式调用后，新生成的 DB 对象中就存储了一些当前请求特有的状态信息，我们把这种对象称作“会">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang Gorm 框架源码浅析</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-28</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="1-核心类"><a href="#1-核心类" class="headerlink" title="1 核心类"></a>1 核心类</h2><h2 id="1-1-数据库"><a href="#1-1-数据库" class="headerlink" title="1.1 数据库"></a>1.1 数据库</h2><p><code>gorm.DB</code> 是 <code>gorm</code> 定义的数据库类. 所有执行的数据库的操作都将紧密围绕这个类，以链式调用的方式展开. <strong>每当执行过链式调用后，新生成的 DB 对象中就存储了一些当前请求特有的状态信息，我们把这种对象称作“会话”.</strong></p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> DB <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 用户自定义的配置项</span>
+    <span class="token operator">*</span>Config 
+    <span class="token comment">// 一次会话执行过程中遇到的错误</span>
+    Error        <span class="token builtin">error</span>
+    <span class="token comment">// 该请求影响的行数</span>
+    RowsAffected <span class="token builtin">int64</span>
+    <span class="token comment">// 一次会话的状态信息，比如请求和响应信息</span>
+    Statement    <span class="token operator">*</span>Statement
+    <span class="token comment">// 会话被克隆的次数. 倘若 clone = 1，代表是始祖 DB 实例；倘若 clone > 1，代表是从始祖 DB 克隆出来的会话</span>
+    clone        <span class="token builtin">int</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h2 id="1-2-会话状态"><a href="#1-2-会话状态" class="headerlink" title="1.2 会话状态"></a>1.2 会话状态</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Statement <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 数据库实例 </span>
+    <span class="token operator">*</span>DB
+    TableExpr            <span class="token operator">*</span>clause<span class="token punctuation">.</span>Expr
+    <span class="token comment">// 表名</span>
+    Table                <span class="token builtin">string</span>
+    <span class="token comment">//操作的 PO 模型</span>
+    Model                <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+    Unscoped             <span class="token builtin">bool</span>
+    <span class="token comment">//处理结果的反序列化</span>
+    Dest                 <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+    ReflectValue         reflect<span class="token punctuation">.</span>Value
+    <span class="token comment">// 各种条件语句</span>
+    Clauses              <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span>clause<span class="token punctuation">.</span>Clause
+    BuildClauses         <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+    <span class="token comment">// 是否启用 distinct 模式</span>
+    Distinct             <span class="token builtin">bool</span>
+    <span class="token comment">// select 语句</span>
+    Selects              <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span> <span class="token comment">// selected columns</span>
+    <span class="token comment">// omit 语句</span>
+    Omits                <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span> <span class="token comment">// omit columns</span>
+    <span class="token comment">// join </span>
+    Joins                <span class="token punctuation">[</span><span class="token punctuation">]</span>join
+    Preloads             <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+    Settings             sync<span class="token punctuation">.</span>Map
+    <span class="token comment">// 连接池，通常情况下是 database/sql 库下的 *DB  类型.  在 prepare 模式为 gorm.PreparedStmtDB</span>
+    ConnPool             ConnPool
+    <span class="token comment">// 操作表的概要信息</span>
+    Schema               <span class="token operator">*</span>schema<span class="token punctuation">.</span>Schema
+    <span class="token comment">// 上下文，请求生命周期控制管理</span>
+    Context              context<span class="token punctuation">.</span>Context
+    <span class="token comment">// 在未查找到数据记录时，是否抛出 recordNotFound 错误</span>
+    RaiseErrorOnNotFound <span class="token builtin">bool</span>
+    SkipHooks            <span class="token builtin">bool</span>
+    <span class="token comment">// 执行的 sql，调用 state.Build 方法后，会将 sql 各部分文本依次追加到其中.</span>
+    SQL                  strings<span class="token punctuation">.</span>Builder
+    <span class="token comment">// 存储的变量</span>
+    Vars                 <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+    CurDestIndex         <span class="token builtin">int</span>
+    attrs                <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+    assigns              <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+    scopes               <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">func</span><span class="token punctuation">(</span><span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token operator">*</span>DB
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="1-connPool"><a href="#1-connPool" class="headerlink" title="1. connPool"></a>1. connPool</h3><p>这里额外强调一下 <code>connPool</code> 字段，其含义是连接池，和数据库的交互操作都需要依赖它才得以执行. <code>connPool</code> 本身是个 <code>interface</code>，定义如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> ConnPool <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token function">PrepareContext</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> query <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>sql<span class="token punctuation">.</span>Stmt<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+    <span class="token function">ExecContext</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>sql<span class="token punctuation">.</span>Result<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+    <span class="token function">QueryContext</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>sql<span class="token punctuation">.</span>Rows<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+    <span class="token function">QueryRowContext</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token operator">*</span>sql<span class="token punctuation">.</span>Row
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><code>connPool</code> 根据是否启用了 <code>prepare</code> 预处理模式，存在不同的实现类版本：</p>
+<p>在普通模式下，<code>connPool</code> 的实现类为 <code>database/sql</code> 库下的 <code>*DB</code> 类<br>在 prepare 模式下，connPool 实现类型为 gorm 中定义的 PreparedStmtDB 类</p>
+<h3 id="2-db-克隆"><a href="#2-db-克隆" class="headerlink" title="2. db 克隆"></a>2. db 克隆</h3>
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-%E6%A0%B8%E5%BF%83%E7%B1%BB"><span class="top-box-text">1 核心类</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-%E6%95%B0%E6%8D%AE%E5%BA%93"><span class="top-box-text">1.1 数据库</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E4%BC%9A%E8%AF%9D%E7%8A%B6%E6%80%81"><span class="top-box-text">1.2 会话状态</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-connPool"><span class="top-box-text">1. connPool</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-db-%E5%85%8B%E9%9A%86"><span class="top-box-text">2. db 克隆</span></a></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/27/Golang-Gorm-%E6%A1%86%E6%9E%B6%E7%AE%80%E5%8D%95%E4%BD%BF%E7%94%A8/">
+          <h3 class="post-title">
+            下一篇：Golang Gorm 框架简单使用
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
