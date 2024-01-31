@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang mysql 驱动源码解析</title>
+<meta name="keywords" content="Golang mysql 驱动源码解析, HeXu">
+<meta name="description" content="0 前言go-sql-driver&#x2F;mysql 的核心功能是，遵循 database&#x2F;sql 标准库中预留的接口协议，提供出对应于 mysql 的实现版本，将和 mysql 服务端的数据传输、通信协议，预处理模式、事务操">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang mysql 驱动源码解析">
+<meta property="og:description" content="0 前言go-sql-driver&#x2F;mysql 的核心功能是，遵循 database&#x2F;sql 标准库中预留的接口协议，提供出对应于 mysql 的实现版本，将和 mysql 服务端的数据传输、通信协议，预处理模式、事务操">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang mysql 驱动源码解析</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-01-30</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="0-前言"><a href="#0-前言" class="headerlink" title="0 前言"></a>0 前言</h1><p>go-sql-driver&#x2F;mysql 的核心功能是，遵循 database&#x2F;sql 标准库中预留的接口协议，提供出对应于 mysql 的实现版本，将和 mysql 服务端的数据传输、通信协议，预处理模式、事务操作等内容封装实现在其中.</p>
+<p>go-sql-driver&#x2F;mysql 在整个 database&#x2F;sql 运行框架中的定位如下图所示：<br><a class="simple-lightbox" href="/../images/Golang-mysql-%E9%A9%B1%E5%8A%A8%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/pipeline.png"><img   src="/images/loading.svg" data-src="/../images/Golang-mysql-%E9%A9%B1%E5%8A%A8%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/pipeline.png"  alt="pipeline" lazyload></a></p>
+<h1 id="1-数据库驱动"><a href="#1-数据库驱动" class="headerlink" title="1 数据库驱动"></a>1 数据库驱动</h1><h2 id="1-1-驱动"><a href="#1-1-驱动" class="headerlink" title="1.1 驱动"></a>1.1 驱动</h2><p>首先进入第一个核心模块：数据库驱动. 在 <code> database/sql</code> 标准库中定义的接口协议如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Driver <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 打开一个新的数据库连接</span>
+    <span class="token function">Open</span><span class="token punctuation">(</span>name <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>Conn<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在之前也有提到，在使用 <code>mysql driver</code> 时，只需要匿名导入 <code>go-sql-driver/mysql</code> 的 <code>lib</code> 包，即可完成 <code>driver</code> 的注册操作. 实现方式如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">import</span> <span class="token punctuation">(</span>
+    <span class="token comment">// 注册 mysql 数据库驱动</span>
+    <span class="token boolean">_</span> <span class="token string">"github.com/go-sql-driver/mysql"</span>
+<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>其实现原理在于，在 <code>go-sql-driver/mysql</code> 包下会通过 <code>init</code> 方法，在包初始化时就将 mysql driver 实例注册到 database&#x2F;sql 的驱动 map 之中：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">init</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    sql<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"mysql"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>MySQLDriver<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p><code>go-sql-driver/mysql</code> 包下实现的驱动类定义位于 driver.go 文件中，对应的代码如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// MySQL 版本的数据库驱动</span>
+<span class="token keyword">type</span> MySQLDriver <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<p>对应实现的 Open 方法用于创建数据库连接，核心步骤包括：</p>
+<ul>
+<li>解析 dsn，转为配置类实例</li>
+<li>构造连接器实例</li>
+<li>通过连接器完成连接创建操作</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>d MySQLDriver<span class="token punctuation">)</span> <span class="token function">Open</span><span class="token punctuation">(</span>dsn <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Conn<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 解析 dsn</span>
+    cfg<span class="token punctuation">,</span> err <span class="token operator">:=</span> <span class="token function">ParseDSN</span><span class="token punctuation">(</span>dsn<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 构造连接器</span>
+    c<span class="token punctuation">,</span> err <span class="token operator">:=</span> <span class="token function">newConnector</span><span class="token punctuation">(</span>cfg<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 通过连接器创建连接</span>
+    <span class="token keyword">return</span> c<span class="token punctuation">.</span><span class="token function">Connect</span><span class="token punctuation">(</span>context<span class="token punctuation">.</span><span class="token function">Background</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="1-2-连接器"><a href="#1-2-连接器" class="headerlink" title="1.2 连接器"></a>1.2 连接器</h2><p>连接器 Connector 同样是遵循 database&#x2F;sql 库中定义的接口规范来实现的.</p>
+<p><code>database/sql connector </code>接口定义：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// database/sql 定义的抽象的连接器接口</span>
+<span class="token keyword">type</span> Connector <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 创建连接</span>
+    <span class="token function">Connect</span><span class="token punctuation">(</span>context<span class="token punctuation">.</span>Context<span class="token punctuation">)</span> <span class="token punctuation">(</span>Conn<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+    <span class="token comment">// 返回数据库驱动实例</span>
+    <span class="token function">Driver</span><span class="token punctuation">(</span><span class="token punctuation">)</span> Driver
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>go-sql-driver/mysql</code> 实现的连接器类位于 connecto.go 文件中：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> connector <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    cfg               <span class="token operator">*</span>Config <span class="token comment">// immutable private copy.</span>
+    encodedAttributes <span class="token builtin">string</span>  <span class="token comment">// Encoded connection attributes.</span>
+<span class="token punctuation">&#125;</span>
+
+
+<span class="token keyword">func</span> <span class="token function">newConnector</span><span class="token punctuation">(</span>cfg <span class="token operator">*</span>Config<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>connector<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    encodedAttributes <span class="token operator">:=</span> <span class="token function">encodeConnectionAttributes</span><span class="token punctuation">(</span>cfg<span class="token punctuation">.</span>ConnectionAttributes<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>encodedAttributes<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">250</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> fmt<span class="token punctuation">.</span><span class="token function">Errorf</span><span class="token punctuation">(</span><span class="token string">"connection attributes are longer than 250 bytes: %dbytes (%q)"</span><span class="token punctuation">,</span> <span class="token function">len</span><span class="token punctuation">(</span>encodedAttributes<span class="token punctuation">)</span><span class="token punctuation">,</span> cfg<span class="token punctuation">.</span>ConnectionAttributes<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> <span class="token operator">&amp;</span>connector<span class="token punctuation">&#123;</span>
+        cfg<span class="token punctuation">:</span>               cfg<span class="token punctuation">,</span>
+        encodedAttributes<span class="token punctuation">:</span> encodedAttributes<span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>此处着重探讨一下通过 <code>connector</code> 的 <code>connect</code> 方法实现的数据库连接创建流程.</p>
+<p>此处着重探讨一下通过 connector 的 connect 方法实现的数据库连接创建流程.</p>
+<p>其中主要包含如下几个核心步骤：</p>
+<ul>
+<li>创建连接（<strong>net.Dialer.DialContext）</strong></li>
+<li>设置为 tcp 长连 接 <em>（net.TCPConn.KeepAlive）</em>*</li>
+<li>创建连接缓冲区 <strong>（mc.buf &#x3D; newBuffer）</strong></li>
+<li>设置连接超时配置 <strong>（mc.buf.timeout &#x3D; mc.cfg.ReadTimeout；mc.writeTimeout &#x3D; mc.cfg.WriteTimeout）</strong></li>
+<li>接收来自服务端的握手请求（<strong>mc.readHandshakePacket）</strong></li>
+<li>向服务端发起鉴权请求 <strong>（mc.writeHandshakeResponsePacket）</strong></li>
+<li>处理鉴权结果 <strong>（mc.handleAuthResult）</strong></li>
+<li>设置 dsn 中的参数变量 <strong>（mc.handleParams）</strong></li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 创建一笔新的数据库连接</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>connector<span class="token punctuation">)</span> <span class="token function">Connect</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Conn<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> err <span class="token builtin">error</span>
+    <span class="token comment">// 构造 mysql 连接实例</span>
+    mc <span class="token operator">:=</span> <span class="token operator">&amp;</span>mysqlConn<span class="token punctuation">&#123;</span>
+        maxAllowedPacket<span class="token punctuation">:</span> maxPacketSize<span class="token punctuation">,</span>
+        maxWriteSize<span class="token punctuation">:</span>     maxPacketSize <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">,</span>
+        closech<span class="token punctuation">:</span>          <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        cfg<span class="token punctuation">:</span>              c<span class="token punctuation">.</span>cfg<span class="token punctuation">,</span>
+        connector<span class="token punctuation">:</span>        c<span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+    mc<span class="token punctuation">.</span>parseTime <span class="token operator">=</span> mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>ParseTime
+
+
+    <span class="token comment">// 根据传输协议类型获取连接构造器</span>
+    dialsLock<span class="token punctuation">.</span><span class="token function">RLock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    dial<span class="token punctuation">,</span> ok <span class="token operator">:=</span> dials<span class="token punctuation">[</span>mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Net<span class="token punctuation">]</span>
+    dialsLock<span class="token punctuation">.</span><span class="token function">RUnlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> ok <span class="token punctuation">&#123;</span>
+        dctx <span class="token operator">:=</span> ctx
+        <span class="token keyword">if</span> mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Timeout <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">var</span> cancel context<span class="token punctuation">.</span>CancelFunc
+            dctx<span class="token punctuation">,</span> cancel <span class="token operator">=</span> context<span class="token punctuation">.</span><span class="token function">WithTimeout</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> c<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Timeout<span class="token punctuation">)</span>
+            <span class="token keyword">defer</span> <span class="token function">cancel</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+        mc<span class="token punctuation">.</span>netConn<span class="token punctuation">,</span> err <span class="token operator">=</span> <span class="token function">dial</span><span class="token punctuation">(</span>dctx<span class="token punctuation">,</span> mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Addr<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 构造 net conn 实例</span>
+        nd <span class="token operator">:=</span> net<span class="token punctuation">.</span>Dialer<span class="token punctuation">&#123;</span>Timeout<span class="token punctuation">:</span> mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Timeout<span class="token punctuation">&#125;</span>
+        mc<span class="token punctuation">.</span>netConn<span class="token punctuation">,</span> err <span class="token operator">=</span> nd<span class="token punctuation">.</span><span class="token function">DialContext</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Net<span class="token punctuation">,</span> mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Addr<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 将 tcp 连接设置为长连接</span>
+    <span class="token keyword">if</span> tc<span class="token punctuation">,</span> ok <span class="token operator">:=</span> mc<span class="token punctuation">.</span>netConn<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token operator">*</span>net<span class="token punctuation">.</span>TCPConn<span class="token punctuation">)</span><span class="token punctuation">;</span> ok <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> tc<span class="token punctuation">.</span><span class="token function">SetKeepAlive</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            c<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Logger<span class="token punctuation">.</span><span class="token function">Print</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 启动 watcher，关注 context 状态，即时回收连接资源</span>
+    mc<span class="token punctuation">.</span><span class="token function">startWatcher</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">watchCancel</span><span class="token punctuation">(</span>ctx<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        mc<span class="token punctuation">.</span><span class="token function">cleanup</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">defer</span> mc<span class="token punctuation">.</span><span class="token function">finish</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+
+    <span class="token comment">// 构造连接的数据缓冲区 buffer</span>
+    mc<span class="token punctuation">.</span>buf <span class="token operator">=</span> <span class="token function">newBuffer</span><span class="token punctuation">(</span>mc<span class="token punctuation">.</span>netConn<span class="token punctuation">)</span>
+
+
+    <span class="token comment">// 设置单次读、写操作的超时时间</span>
+    mc<span class="token punctuation">.</span>buf<span class="token punctuation">.</span>timeout <span class="token operator">=</span> mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>ReadTimeout
+    mc<span class="token punctuation">.</span>writeTimeout <span class="token operator">=</span> mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>WriteTimeout
+
+
+    <span class="token comment">// 读取来自 mysql 服务端的握手报文</span>
+    authData<span class="token punctuation">,</span> plugin<span class="token punctuation">,</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">readHandshakePacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        mc<span class="token punctuation">.</span><span class="token function">cleanup</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">if</span> plugin <span class="token operator">==</span> <span class="token string">""</span> <span class="token punctuation">&#123;</span>
+        plugin <span class="token operator">=</span> defaultAuthPlugin
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 获取鉴权加密信息</span>
+    authResp<span class="token punctuation">,</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">auth</span><span class="token punctuation">(</span>authData<span class="token punctuation">,</span> plugin<span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 发送握手响应. 携带上数据库、用户名、密码等鉴权信息</span>
+    <span class="token keyword">if</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">writeHandshakeResponsePacket</span><span class="token punctuation">(</span>authResp<span class="token punctuation">,</span> plugin<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        mc<span class="token punctuation">.</span><span class="token function">cleanup</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 处理鉴权响应结果</span>
+    <span class="token keyword">if</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">handleAuthResult</span><span class="token punctuation">(</span>authData<span class="token punctuation">,</span> plugin<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        mc<span class="token punctuation">.</span><span class="token function">cleanup</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 处理 dsn 中的参数</span>
+    err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">handleParams</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> mc<span class="token punctuation">,</span><span class="token boolean">nil</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="1-3-配置"><a href="#1-3-配置" class="headerlink" title="1.3 配置"></a>1.3 配置</h2><p>与 mysql 连接配置有关的内容被聚合在 dsn.go 文件定义的 Config 类中，核心字段均已给出注释：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Config <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    User                 <span class="token builtin">string</span>            <span class="token comment">// 用户名</span>
+    Passwd               <span class="token builtin">string</span>            <span class="token comment">// 密码</span>
+    Net                  <span class="token builtin">string</span>            <span class="token comment">// 网络 tcp 等</span>
+    Addr                 <span class="token builtin">string</span>            <span class="token comment">// ip:port</span>
+    DBName               <span class="token builtin">string</span>            <span class="token comment">// 数据库名</span>
+    Params               <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token builtin">string</span> <span class="token comment">// 连接参数</span>
+    ConnectionAttributes <span class="token builtin">string</span>            <span class="token comment">// Connection Attributes, comma-delimited string of user-defined "key:value" pairs</span>
+    Collation            <span class="token builtin">string</span>            <span class="token comment">// 连接字符集</span>
+    Loc                  <span class="token operator">*</span>time<span class="token punctuation">.</span>Location    <span class="token comment">// Location for time.Time values</span>
+    MaxAllowedPacket     <span class="token builtin">int</span>               <span class="token comment">// Max packet size allowed</span>
+    ServerPubKey         <span class="token builtin">string</span>            <span class="token comment">// Server public key name</span>
+    pubKey               <span class="token operator">*</span>rsa<span class="token punctuation">.</span>PublicKey    <span class="token comment">// Server public key</span>
+    TLSConfig            <span class="token builtin">string</span>            <span class="token comment">// TLS configuration name</span>
+    TLS                  <span class="token operator">*</span>tls<span class="token punctuation">.</span>Config       <span class="token comment">// TLS configuration, its priority is higher than TLSConfig</span>
+    Timeout              time<span class="token punctuation">.</span>Duration     <span class="token comment">// Dial timeout</span>
+    ReadTimeout          time<span class="token punctuation">.</span>Duration     <span class="token comment">// 读请求超时配置</span>
+    WriteTimeout         time<span class="token punctuation">.</span>Duration     <span class="token comment">// 写请求超时配置</span>
+    Logger               Logger            <span class="token comment">// Logger</span>
+
+    AllowAllFiles            <span class="token builtin">bool</span> <span class="token comment">// 允许使用 LOAD DATA LOCAL INFILE 导入数据库</span>
+    AllowCleartextPasswords  <span class="token builtin">bool</span> <span class="token comment">// 支持明文密码客户端</span>
+    AllowFallbackToPlaintext <span class="token builtin">bool</span> <span class="token comment">// Allows fallback to unencrypted connection if server does not support TLS</span>
+    AllowNativePasswords     <span class="token builtin">bool</span> <span class="token comment">// Allows the native password authentication method</span>
+    AllowOldPasswords        <span class="token builtin">bool</span> <span class="token comment">// 允许使用不安全的旧密码</span>
+    CheckConnLiveness        <span class="token builtin">bool</span> <span class="token comment">// Check connections for liveness before using them</span>
+    ClientFoundRows          <span class="token builtin">bool</span> <span class="token comment">// 返回匹配的行数而非影响的行数</span>
+    ColumnsWithAlias         <span class="token builtin">bool</span> <span class="token comment">// 将表名添加在列名前缀</span>
+    InterpolateParams        <span class="token builtin">bool</span> <span class="token comment">// 将参数占位符插入 sql</span>
+    MultiStatements          <span class="token builtin">bool</span> <span class="token comment">// 允许一条语句执行多笔查询操作</span>
+    ParseTime                <span class="token builtin">bool</span> <span class="token comment">// 格式化时间为 time.Time 格式</span>
+    RejectReadOnly           <span class="token builtin">bool</span> <span class="token comment">// Reject read-only connections</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>该文件中两个核心方法：</p>
+<p><code>ParseDSN</code>：完成 <code>dsn</code> 到 <code>config</code> 实例的转换<br><code>FormatDSN</code>：完成 <code>config</code> 实例到 <code>dsn</code> 的转换</p>
+<p>两个方法的具体细节大家可以深入到 <code>dsn.go</code> 文件中查看，这里不再赘述：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 解析 dsn，构造 config 实例</span>
+<span class="token keyword">func</span> <span class="token function">ParseDSN</span><span class="token punctuation">(</span>dsn <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>cfg <span class="token operator">*</span>Config<span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// New config with some default values</span>
+    cfg <span class="token operator">=</span> <span class="token function">NewConfig</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 从 dsn 中解析参数填充到 cfg 中...</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span>
+<span class="token comment">// 从 config 中解析出 dsn</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>cfg <span class="token operator">*</span>Config<span class="token punctuation">)</span> <span class="token function">FormatDSN</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">string</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="1-4-协议"><a href="#1-4-协议" class="headerlink" title="1.4 协议"></a>1.4 协议</h2><p>在 <code>mysql</code> 客户端读取和发送与服务端之间的消息报文时，采用的一套特定的协议规则：</p>
+<p>每笔消息分为<strong>请求头</strong>和<strong>正文</strong>两部分</p>
+<p><strong>在请求头部分中：</strong></p>
+<ul>
+<li><strong>前三个字节对应的是消息正文长度</strong>，共 24 个 bit 位，表示的长度最大值为 2^24 - 1，因此消息最大长度为 16MB-1byte. 如果消息长度大于该阈值，则需要进行分包</li>
+<li><strong>第四个字节对应为请求的 sequence 序列号</strong>.一个新的客户端从 0 开始依次递增序列号，每次读消息时，会对序列号进行校验，要求必须必须和本地序号保持一致</li>
+</ul>
+<p><strong>在正文部分中：</strong></p>
+<ul>
+<li>对于客户端接收服务端消息的场景，首个字节标识了这条消息的状态. 倘若为 0，代表响应成功；倘若为 255，代表有错误发生；其他枚举值含义此处不再赘述</li>
+<li>对于客户端发送消息到服务端的场景，首个字节标识了这笔请求的类型. 则首个字节代表的是 sql 指令的类型. 具体类型在本文 2.3 小节中展开介绍</li>
+<li>理清了通信协议后，下面走读一下客户端通过 mysqlConn 执行读、写消息的源码流程：</li>
+</ul>
+<h3 id="读流程："><a href="#读流程：" class="headerlink" title="读流程："></a>读流程：</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 从 conn 中读取来自服务端的消息</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">readPacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> prevData <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span>
+    <span class="token keyword">for</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 读出头 4 个字节的请求头</span>
+        data<span class="token punctuation">,</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span>buf<span class="token punctuation">.</span><span class="token function">readNext</span><span class="token punctuation">(</span><span class="token number">4</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> cerr <span class="token operator">:=</span> mc<span class="token punctuation">.</span>canceled<span class="token punctuation">.</span><span class="token function">Value</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> cerr <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> cerr
+            <span class="token punctuation">&#125;</span>
+            mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Logger<span class="token punctuation">.</span><span class="token function">Print</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+            mc<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> ErrInvalidConn
+        <span class="token punctuation">&#125;</span>
+
+        <span class="token comment">// 头三个字节对应为消息长度</span>
+        pktLen <span class="token operator">:=</span> <span class="token function">int</span><span class="token punctuation">(</span><span class="token function">uint32</span><span class="token punctuation">(</span>data<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token function">uint32</span><span class="token punctuation">(</span>data<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">&lt;&lt;</span><span class="token number">8</span> <span class="token operator">|</span> <span class="token function">uint32</span><span class="token punctuation">(</span>data<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">&lt;&lt;</span><span class="token number">16</span><span class="token punctuation">)</span>
+
+
+        <span class="token comment">// 第 4 个字节为请求序列号，需要检验其一致性</span>
+        <span class="token keyword">if</span> data<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span> <span class="token operator">!=</span> mc<span class="token punctuation">.</span>sequence <span class="token punctuation">&#123;</span>
+            mc<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">if</span> data<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span> <span class="token operator">></span> mc<span class="token punctuation">.</span>sequence <span class="token punctuation">&#123;</span>
+                <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> ErrPktSyncMul
+            <span class="token punctuation">&#125;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> ErrPktSync
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// 每次分包序列号都需要递增</span>
+        mc<span class="token punctuation">.</span>sequence<span class="token operator">++</span>
+
+
+        <span class="token comment">// 消息长度为 0，则直接返回 prevData</span>
+        <span class="token keyword">if</span> pktLen <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// there was no previous packet</span>
+            <span class="token keyword">if</span> prevData <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Logger<span class="token punctuation">.</span><span class="token function">Print</span><span class="token punctuation">(</span>ErrMalformPkt<span class="token punctuation">)</span>
+                mc<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+                <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> ErrInvalidConn
+            <span class="token punctuation">&#125;</span>
+
+
+            <span class="token keyword">return</span> prevData<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 读取指定长度的消息</span>
+        data<span class="token punctuation">,</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span>buf<span class="token punctuation">.</span><span class="token function">readNext</span><span class="token punctuation">(</span>pktLen<span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> cerr <span class="token operator">:=</span> mc<span class="token punctuation">.</span>canceled<span class="token punctuation">.</span><span class="token function">Value</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> cerr <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> cerr
+            <span class="token punctuation">&#125;</span>
+            mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Logger<span class="token punctuation">.</span><span class="token function">Print</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+            mc<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> ErrInvalidConn
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 未达到包长度上限 1&lt;&lt;24 - 1 字节，则直接返回结果</span>
+        <span class="token keyword">if</span> pktLen <span class="token operator">&lt;</span> maxPacketSize <span class="token punctuation">&#123;</span>
+            <span class="token comment">// zero allocations for non-split packets</span>
+            <span class="token keyword">if</span> prevData <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                <span class="token keyword">return</span> data<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+            <span class="token punctuation">&#125;</span>
+            <span class="token keyword">return</span> <span class="token function">append</span><span class="token punctuation">(</span>prevData<span class="token punctuation">,</span> data<span class="token operator">...</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 倘若达到了包的长度上限，需要进行分包处理</span>
+        prevData <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span>prevData<span class="token punctuation">,</span> data<span class="token operator">...</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="写流程："><a href="#写流程：" class="headerlink" title="写流程："></a>写流程：</h3><pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; Write packet buffer &#39;data&#39;
+func (mc *mysqlConn) writePacket(data []byte) error &#123;
+    &#x2F;&#x2F; 消息长度
+    pktLen :&#x3D; len(data) - 4
+
+    &#x2F;&#x2F; 消息太长了
+    if pktLen &gt; mc.maxAllowedPacket &#123;
+        return ErrPktTooLarge
+    &#125;
+
+    for &#123;
+        &#x2F;&#x2F; 将消息长度信息存储到前 3 个字节
+        var size int
+        if pktLen &gt;&#x3D; maxPacketSize &#123;
+            data[0] &#x3D; 0xff
+            data[1] &#x3D; 0xff
+            data[2] &#x3D; 0xff
+            size &#x3D; maxPacketSize
+        &#125; else &#123;
+            data[0] &#x3D; byte(pktLen)
+            data[1] &#x3D; byte(pktLen &gt;&gt; 8)
+            data[2] &#x3D; byte(pktLen &gt;&gt; 16)
+            size &#x3D; pktLen
+        &#125;
+        &#x2F;&#x2F; 第 4 个字节存储请求序号
+        data[3] &#x3D; mc.sequence
+
+
+        &#x2F;&#x2F; 设置单次写操作的超时时长
+        if mc.writeTimeout &gt; 0 &#123;
+            if err :&#x3D; mc.netConn.SetWriteDeadline(time.Now().Add(mc.writeTimeout)); err !&#x3D; nil &#123;
+                return err
+            &#125;
+        &#125;
+        &#x2F;&#x2F; 执行写操作
+        n, err :&#x3D; mc.netConn.Write(data[:4+size])
+        if err &#x3D;&#x3D; nil &amp;&amp; n &#x3D;&#x3D; 4+size &#123;
+            mc.sequence++
+            if size !&#x3D; maxPacketSize &#123;
+                return nil
+            &#125;
+            pktLen -&#x3D; size
+            data &#x3D; data[size:]
+            continue
+        &#125;
+        &#x2F;&#x2F; ...
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在此处，我们也能够看出来，<strong>针对一笔特定的数据库连接实例，其本身是不支持并发使用的</strong>，其中使用的缓冲区 buffer、序列号 sequence 等状态数据都是未通过互斥锁进行保护的临界资源.</p>
+<h1 id="2-数据库连接"><a href="#2-数据库连接" class="headerlink" title="2 数据库连接"></a>2 数据库连接</h1><p>首先回顾一下 database&#x2F;sql 库中定义的数据库连接接口：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Conn <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 预处理 sql，生成 statement</span>
+    <span class="token function">Prepare</span><span class="token punctuation">(</span>query <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>Stmt<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+
+    <span class="token comment">// 关闭连接</span>
+    <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+
+    <span class="token comment">// 开启事务</span>
+    <span class="token function">Begin</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>Tx<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>接下来是 <code>go-sql-driver/mysql</code> 库对 <code>Conn</code> 的实现版本:</p>
+<p>值得一提的是，在使用 mysqlConn 的过程中：</p>
+<ul>
+<li><strong>对于读流程</strong>：主要通过数据缓冲区 buffer 进行数据的缓存</li>
+<li><strong>对于写流程</strong>：直接通过网络连接 netConn 发送数据</li>
+</ul>
+<p>mysqlConn 的实现源码位于 connection.go 文件中，代码及注释展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> mysqlConn <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 缓冲区数据</span>
+    buf              buffer
+    <span class="token comment">// 网络连接</span>
+    netConn          net<span class="token punctuation">.</span>Conn
+    rawConn          net<span class="token punctuation">.</span>Conn    <span class="token comment">// underlying connection when netConn is TLS connection.</span>
+    result           mysqlResult <span class="token comment">// sql 执行结果</span>
+    cfg              <span class="token operator">*</span>Config <span class="token comment">// 配置文件</span>
+    connector        <span class="token operator">*</span>connector <span class="token comment">// 连接器 </span>
+    maxAllowedPacket <span class="token builtin">int</span>
+    maxWriteSize     <span class="token builtin">int</span>
+    writeTimeout     time<span class="token punctuation">.</span>Duration <span class="token comment">// 单批次写操作超时时间</span>
+    flags            clientFlag <span class="token comment">// 客户端状态标识</span>
+    status           statusFlag  <span class="token comment">// 服务端状态标识</span>
+    sequence         <span class="token builtin">uint8</span> <span class="token comment">// 客户端请求序号</span>
+    parseTime        <span class="token builtin">bool</span>
+
+
+    watching <span class="token builtin">bool</span> <span class="token comment">// 是否开启了 watcher 协程</span>
+    watcher  <span class="token keyword">chan</span><span class="token operator">&lt;-</span> context<span class="token punctuation">.</span>Context <span class="token comment">// watcher 协程监听的 context</span>
+    closech  <span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span> <span class="token comment">// 控制整个 conn 的生命周期</span>
+    finished <span class="token keyword">chan</span><span class="token operator">&lt;-</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span> <span class="token comment">// 标识连接是否已完成</span>
+    canceled atomicError <span class="token comment">// 标识连接是否已取消</span>
+    closed   atomicBool  <span class="token comment">// 标识连接是否已关闭</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>mysqlConn</code> 对外可以通过公开方法 <code>Close</code> 实现关闭，对内主要使用 cleanup 方法释放连接资源. 在 cleanup 方法内部会通过一个原子变量 closed 来保证关闭操作不被重复执行.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// Makes Close idempotent</span>
+    <span class="token keyword">if</span> <span class="token operator">!</span>mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">writeCommandPacket</span><span class="token punctuation">(</span>comQuit<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    mc<span class="token punctuation">.</span><span class="token function">cleanup</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// Makes Close idempotent</span>
+    <span class="token keyword">if</span> <span class="token operator">!</span>mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">writeCommandPacket</span><span class="token punctuation">(</span>comQuit<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    mc<span class="token punctuation">.</span><span class="token function">cleanup</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-2-缓冲区"><a href="#2-2-缓冲区" class="headerlink" title="2.2 缓冲区"></a>2.2 缓冲区</h2><p><code>mysqlConn</code> 中内置的数据缓冲区 <code>buffer</code> 类定义如下：</p>
+<p><strong>buf</strong>：用于存放数据的字节切片<br><strong>nc</strong>：从属的连接，通常为 tcp 连接<br><strong>idx</strong>：当前已读取数据的进度索引<br><strong>length</strong>：剩余未读取数据的长度<br><strong>timeout</strong>：单次读操作的超时时长</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> buffer <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 缓冲区中的数据</span>
+    buf     <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span> 
+    <span class="token comment">// 关联的连接，通常为 tcp</span>
+    nc      net<span class="token punctuation">.</span>Conn
+    <span class="token comment">// 已读取数据的索引 index</span>
+    idx     <span class="token builtin">int</span>
+    <span class="token comment">// 未读取数据的长度</span>
+    length  <span class="token builtin">int</span>
+    <span class="token comment">// 数据库连接超时设置</span>
+    timeout time<span class="token punctuation">.</span>Duration 
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// newBuffer allocates and returns a new buffer.</span>
+<span class="token keyword">func</span> <span class="token function">newBuffer</span><span class="token punctuation">(</span>nc net<span class="token punctuation">.</span>Conn<span class="token punctuation">)</span> buffer <span class="token punctuation">&#123;</span>
+    fg <span class="token operator">:=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> defaultBufSize<span class="token punctuation">)</span>
+    <span class="token keyword">return</span> buffer<span class="token punctuation">&#123;</span>
+        buf<span class="token punctuation">:</span>  fg<span class="token punctuation">,</span>
+        nc<span class="token punctuation">:</span>   nc<span class="token punctuation">,</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>mysql</code> 客户端从 <code>mysqlConn</code> 缓冲区中读取数据的主流程如下，这部分可以和 1.2 小节介绍的 <code>readPacket</code> 方法进行串联呼应：</p>
+<p>核心的 <code>readNext</code> 方法源码为：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 从缓冲区读取 need 个字节数据</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>b <span class="token operator">*</span>buffer<span class="token punctuation">)</span> <span class="token function">readNext</span><span class="token punctuation">(</span>need <span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 倘若剩余数据量不足，则需要调用 fill 方法对 buffer 扩容，且会从 conn 中读取数据填充到 buffer 中</span>
+    <span class="token keyword">if</span> b<span class="token punctuation">.</span>length <span class="token operator">&lt;</span> need <span class="token punctuation">&#123;</span>
+        <span class="token comment">// refill</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> b<span class="token punctuation">.</span><span class="token function">fill</span><span class="token punctuation">(</span>need<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+    offset <span class="token operator">:=</span> b<span class="token punctuation">.</span>idx
+    b<span class="token punctuation">.</span>idx <span class="token operator">+=</span> need
+    b<span class="token punctuation">.</span>length <span class="token operator">-=</span> need
+    <span class="token keyword">return</span> b<span class="token punctuation">.</span>buf<span class="token punctuation">[</span>offset<span class="token punctuation">:</span>b<span class="token punctuation">.</span>idx<span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>buffer</code> 中剩余数据量不足时，会调用 <code>fill</code> 方法从 <code>conn</code> 中读取数据，往 <code>buffer</code> 中执行填充和扩容操作：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 从 conn 中读取数据填充到 buffer</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>b <span class="token operator">*</span>buffer<span class="token punctuation">)</span> <span class="token function">fill</span><span class="token punctuation">(</span>need <span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    n <span class="token operator">:=</span> b<span class="token punctuation">.</span>length
+    
+    <span class="token comment">// 新的字节切片</span>
+    dest <span class="token operator">:=</span> b<span class="token punctuation">.</span>dbuf<span class="token punctuation">[</span>b<span class="token punctuation">.</span>flipcnt<span class="token operator">&amp;</span><span class="token number">1</span><span class="token punctuation">]</span>
+
+
+    <span class="token comment">// 如有必要，进行扩容</span>
+    <span class="token keyword">if</span> need <span class="token operator">></span> <span class="token function">len</span><span class="token punctuation">(</span>dest<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// Round up to the next multiple of the default size</span>
+        dest <span class="token operator">=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>need<span class="token operator">/</span>defaultBufSize<span class="token punctuation">)</span><span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token operator">*</span>defaultBufSize<span class="token punctuation">)</span>
+
+
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...</span>
+    b<span class="token punctuation">.</span>buf <span class="token operator">=</span> dest
+    b<span class="token punctuation">.</span>idx <span class="token operator">=</span> <span class="token number">0</span>
+
+
+    <span class="token comment">// 从 conn 中读取数据填充到 buffer. 因为可能涉及到分包,因此需要使用 for 循环</span>
+    <span class="token keyword">for</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 设置读取数据的超时时间</span>
+        <span class="token keyword">if</span> b<span class="token punctuation">.</span>timeout <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> err <span class="token operator">:=</span> b<span class="token punctuation">.</span>nc<span class="token punctuation">.</span><span class="token function">SetReadDeadline</span><span class="token punctuation">(</span>time<span class="token punctuation">.</span><span class="token function">Now</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Add</span><span class="token punctuation">(</span>b<span class="token punctuation">.</span>timeout<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                <span class="token keyword">return</span> err
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+
+
+       <span class="token comment">// 从 tcp 连接中读取数据，填充到 buffer 中</span>
+        nn<span class="token punctuation">,</span> err <span class="token operator">:=</span> b<span class="token punctuation">.</span>nc<span class="token punctuation">.</span><span class="token function">Read</span><span class="token punctuation">(</span>b<span class="token punctuation">.</span>buf<span class="token punctuation">[</span>n<span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+        n <span class="token operator">+=</span> nn
+
+
+        <span class="token keyword">switch</span> err <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 读取数据未发生错误</span>
+        <span class="token keyword">case</span> <span class="token boolean">nil</span><span class="token punctuation">:</span>
+            <span class="token comment">// 未达到指定长度，则需要处理下一个包</span>
+            <span class="token keyword">if</span> n <span class="token operator">&lt;</span> need <span class="token punctuation">&#123;</span>
+                <span class="token keyword">continue</span>
+            <span class="token punctuation">&#125;</span>
+            <span class="token comment">// 已达到长度，直接返回            </span>
+            b<span class="token punctuation">.</span>length <span class="token operator">=</span> n
+            <span class="token keyword">return</span> <span class="token boolean">nil</span>
+
+
+        <span class="token comment">// 读完全部数据</span>
+        <span class="token keyword">case</span> io<span class="token punctuation">.</span>EOF<span class="token punctuation">:</span>
+            <span class="token comment">// 读取数据量已达到指定长度，返回结果</span>
+            <span class="token keyword">if</span> n <span class="token operator">>=</span> need <span class="token punctuation">&#123;</span>
+                b<span class="token punctuation">.</span>length <span class="token operator">=</span> n
+                <span class="token keyword">return</span> <span class="token boolean">nil</span>
+            <span class="token punctuation">&#125;</span>
+            <span class="token comment">// 返回预期之外的 EOF 错误</span>
+            <span class="token keyword">return</span> io<span class="token punctuation">.</span>ErrUnexpectedEOF
+
+
+        <span class="token keyword">default</span><span class="token punctuation">:</span>
+            <span class="token keyword">return</span> err
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-3-查询"><a href="#2-3-查询" class="headerlink" title="2.3 查询"></a>2.3 查询</h2><p>下面是通过 <code>mysqlConn</code> 执行查询类请求的流程：</p>
+<p>对于 <code>query</code> 方法，入参中的 <code>query</code> 字段为 <code>sql</code> <code>模板，args</code> 字段为用于填充占位符的参数.</p>
+<p><code>query</code> 方法的出参类型为 <code>textRows</code>，其首先会读取响应报文中第一部分，填充各个列的信息，后续内容会保留在内置的 <code>conn</code> 中，通过使用方调用 <code>rows</code> 的 <code>Next</code> 方法时再进行读取操作.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">Query</span><span class="token punctuation">(</span>query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Rows<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> mc<span class="token punctuation">.</span><span class="token function">query</span><span class="token punctuation">(</span>query<span class="token punctuation">,</span> args<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">query</span><span class="token punctuation">(</span>query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>textRows<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    handleOk <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">clearResult</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 连接已关闭？</span>
+    <span class="token keyword">if</span> mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Logger<span class="token punctuation">.</span><span class="token function">Print</span><span class="token punctuation">(</span>ErrInvalidConn<span class="token punctuation">)</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrBadConn
+    <span class="token punctuation">&#125;</span>
+    
+    <span class="token comment">// 提前执行 sql 中的参数替换</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> <span class="token operator">!</span>mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>InterpolateParams <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrSkip
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// 提前处理，进行 sql 中的参数替换</span>
+        prepared<span class="token punctuation">,</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">interpolateParams</span><span class="token punctuation">(</span>query<span class="token punctuation">,</span> args<span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+        <span class="token punctuation">&#125;</span>
+        query <span class="token operator">=</span> prepared
+    <span class="token punctuation">&#125;</span>
+    
+    <span class="token comment">// 将 sql 发送到服务端</span>
+    err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">writeCommandPacketStr</span><span class="token punctuation">(</span>comQuery<span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 读取响应的请求头</span>
+        <span class="token keyword">var</span> resLen <span class="token builtin">int</span>
+        <span class="token comment">// 获取到列的个数 resLen</span>
+        resLen<span class="token punctuation">,</span> err <span class="token operator">=</span> handleOk<span class="token punctuation">.</span><span class="token function">readResultSetHeaderPacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// 构造 textRows 实例</span>
+            rows <span class="token operator">:=</span> <span class="token function">new</span><span class="token punctuation">(</span>textRows<span class="token punctuation">)</span>
+            rows<span class="token punctuation">.</span>mc <span class="token operator">=</span> mc
+
+
+            <span class="token keyword">if</span> resLen <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+                rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>done <span class="token operator">=</span> <span class="token boolean">true</span>
+
+
+                <span class="token keyword">switch</span> err <span class="token operator">:=</span> rows<span class="token punctuation">.</span><span class="token function">NextResultSet</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token punctuation">&#123;</span>
+                <span class="token keyword">case</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> io<span class="token punctuation">.</span>EOF<span class="token punctuation">:</span>
+                    <span class="token keyword">return</span> rows<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+                <span class="token keyword">default</span><span class="token punctuation">:</span>
+                    <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+                <span class="token punctuation">&#125;</span>
+            <span class="token punctuation">&#125;</span>
+
+
+            <span class="token comment">// 读取列信息数据填充到 rows 实例中</span>
+            rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columns<span class="token punctuation">,</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">readColumns</span><span class="token punctuation">(</span>resLen<span class="token punctuation">)</span>
+            <span class="token keyword">return</span> rows<span class="token punctuation">,</span> err
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> mc<span class="token punctuation">.</span><span class="token function">markBadConn</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>将 <code>sql</code> 指令发往服务端是通过 <code>writeCommandPacketStr</code> 方法实现的. 其中对应于 <code>data[4]</code> 位置的字节标识了 <code>sql</code> 指令的类型. 常用的几种类型包括：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">const</span> <span class="token punctuation">(</span>
+    comQuit <span class="token builtin">byte</span> <span class="token operator">=</span> <span class="token boolean">iota</span> <span class="token operator">+</span> <span class="token number">1</span> <span class="token comment">// 1——退出</span>
+    comInitDB <span class="token comment">// 2——初始化数据库</span>
+    comQuery  <span class="token comment">// 3——非 prepare 模式的查询、操作</span>
+    <span class="token comment">// ...</span>
+    comCreateDB  <span class="token comment">// 5——创建数据库</span>
+    comDropDB  <span class="token comment">// 6——删库跑路</span>
+    <span class="token comment">// ...</span>
+    comStmtPrepare  <span class="token comment">// 22—— prepare statement</span>
+    comStmtExecute  <span class="token comment">// 23—— statement exec</span>
+    <span class="token comment">// ...</span>
+    comStmtClose  <span class="token comment">// 25—— statement close</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>writeCommandPacketStr</code> 方法源码如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">writeCommandPacketStr</span><span class="token punctuation">(</span>command <span class="token builtin">byte</span><span class="token punctuation">,</span> arg <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 重置序列号 sequence</span>
+    mc<span class="token punctuation">.</span>sequence <span class="token operator">=</span> <span class="token number">0</span>
+
+
+    <span class="token comment">// 根据消息长度构造字节数组. 倘若此时缓冲区 buffer 仍在使用中，数据未读取干净，会报错</span>
+    pktLen <span class="token operator">:=</span> <span class="token number">1</span> <span class="token operator">+</span> <span class="token function">len</span><span class="token punctuation">(</span>arg<span class="token punctuation">)</span>
+    data<span class="token punctuation">,</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span>buf<span class="token punctuation">.</span><span class="token function">takeBuffer</span><span class="token punctuation">(</span>pktLen <span class="token operator">+</span> <span class="token number">4</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// cannot take the buffer. Something must be wrong with the connection</span>
+        mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Logger<span class="token punctuation">.</span><span class="token function">Print</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+        <span class="token keyword">return</span> errBadConnNoWrite
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 设置 sql 指令类型</span>
+    data<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span> <span class="token operator">=</span> command
+    <span class="token comment">// 拷贝 sql 指令</span>
+    <span class="token function">copy</span><span class="token punctuation">(</span>data<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">,</span> arg<span class="token punctuation">)</span>
+    <span class="token comment">// 发送消息</span>
+    <span class="token keyword">return</span> mc<span class="token punctuation">.</span><span class="token function">writePacket</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>获取指定长度的字节切片：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>b <span class="token operator">*</span>buffer<span class="token punctuation">)</span> <span class="token function">takeBuffer</span><span class="token punctuation">(</span>length <span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> b<span class="token punctuation">.</span>length <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> ErrBusyBuffer
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// test (cheap) general case first</span>
+    <span class="token keyword">if</span> length <span class="token operator">&lt;=</span> <span class="token function">cap</span><span class="token punctuation">(</span>b<span class="token punctuation">.</span>buf<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> b<span class="token punctuation">.</span>buf<span class="token punctuation">[</span><span class="token punctuation">:</span>length<span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">if</span> length <span class="token operator">&lt;</span> maxPacketSize <span class="token punctuation">&#123;</span>
+        b<span class="token punctuation">.</span>buf <span class="token operator">=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> length<span class="token punctuation">)</span>
+        <span class="token keyword">return</span> b<span class="token punctuation">.</span>buf<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// buffer is larger than we want to store.</span>
+    <span class="token keyword">return</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> length<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<p>2.4 执行</p>
+<p>下面是通过 <code>mysqlConn</code> 执行操作类 <code>sql</code> 的流程，入口方法为 <code>Exec</code> 方法：</p>
+<p>Exec 方法的入参中，query 为 sql 模板，args 为占位符及对应的参数. 对应的源码及注释展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">Exec</span><span class="token punctuation">(</span>query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Result<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 连接已关闭？</span>
+    <span class="token keyword">if</span> mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>        
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrBadConn
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> <span class="token operator">!</span>mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>InterpolateParams <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrSkip
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// 填充参数变量</span>
+        prepared<span class="token punctuation">,</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">interpolateParams</span><span class="token punctuation">(</span>query<span class="token punctuation">,</span> args<span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+        <span class="token punctuation">&#125;</span>
+        query <span class="token operator">=</span> prepared
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 执行 sql </span>
+    err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">exec</span><span class="token punctuation">(</span>query<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        copied <span class="token operator">:=</span> mc<span class="token punctuation">.</span>result
+        <span class="token keyword">return</span> <span class="token operator">&amp;</span>copied<span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> mc<span class="token punctuation">.</span><span class="token function">markBadConn</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 执行 sql 请求</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">exec</span><span class="token punctuation">(</span>query <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    handleOk <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">clearResult</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 发送 sql 请求</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">writeCommandPacketStr</span><span class="token punctuation">(</span>comQuery<span class="token punctuation">,</span> query<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> mc<span class="token punctuation">.</span><span class="token function">markBadConn</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 读取响应的请求头，获取到列的个数</span>
+    resLen<span class="token punctuation">,</span> err <span class="token operator">:=</span> handleOk<span class="token punctuation">.</span><span class="token function">readResultSetHeaderPacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> err
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 列的数量大于 0</span>
+    <span class="token keyword">if</span> resLen <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 读取列信息数据，填充到 buffer</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">readUntilEOF</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> err
+        <span class="token punctuation">&#125;</span>
+
+        <span class="token comment">// 读取行数据，填充到 buffer</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">readUntilEOF</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> err
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">return</span> handleOk<span class="token punctuation">.</span><span class="token function">discardResults</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>一次性读取数据，直到 EOF：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Reads Packets until EOF-Packet or an Error appears. Returns count of Packets read</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">readUntilEOF</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">for</span> <span class="token punctuation">&#123;</span>
+        data<span class="token punctuation">,</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">readPacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> err
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token keyword">switch</span> data<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">case</span> iERR<span class="token punctuation">:</span>
+            <span class="token keyword">return</span> mc<span class="token punctuation">.</span><span class="token function">handleErrorPacket</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span>
+        <span class="token keyword">case</span> iEOF<span class="token punctuation">:</span>
+            <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">5</span> <span class="token punctuation">&#123;</span>
+                mc<span class="token punctuation">.</span>status <span class="token operator">=</span> <span class="token function">readStatus</span><span class="token punctuation">(</span>data<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="3-预处理状态"><a href="#3-预处理状态" class="headerlink" title="3 预处理状态"></a>3 预处理状态</h1><p>本章要介绍的内容是 <code>go-sql-driver/mysql</code> 中被广泛使用的预处理 <code>prepare</code> 模式.</p>
+<p><code>prepare</code> 模式的本质是，通过 <code>prepare</code> 操作，将一份 <code>sql</code> 模板提前发往 <code>mysql</code> 服务端. 后续在该 <code>sql</code> 模板下的多笔操作，都只需要将对应的参数发往服务端，即可实现对模板的复用.</p>
+<p>prepare 模式的优势体现在：</p>
+<ul>
+<li>模板复用：sql 模板一次编译，多次复用，可以节约性能</li>
+<li>语法安全： 模板和参数隔离，可以有效防止 sql 注入的问题</li>
+<li>协议优化: prepare 模式采用 binary protocol，相比于传统模式下的 text -  - protocol 更加节省 io，有更好的传输性能</li>
+</ul>
+<h2 id="3-1-预处理"><a href="#3-1-预处理" class="headerlink" title="3.1 预处理"></a>3.1 预处理</h2><p>在 <code>database/sql</code> 库中定义的预处理状态 Stmt 接口规范如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Stmt <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 关闭预处理 statement</span>
+    <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+
+
+    <span class="token comment">// 查看 statement 中有多少个 args</span>
+    <span class="token function">NumInput</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">int</span>
+
+
+    <span class="token comment">// 执行操作类请求</span>
+    <span class="token function">Exec</span><span class="token punctuation">(</span>args <span class="token punctuation">[</span><span class="token punctuation">]</span>Value<span class="token punctuation">)</span> <span class="token punctuation">(</span>Result<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+
+
+    <span class="token comment">// 执行查询类请求</span>
+    <span class="token function">Query</span><span class="token punctuation">(</span>args <span class="token punctuation">[</span><span class="token punctuation">]</span>Value<span class="token punctuation">)</span> <span class="token punctuation">(</span>Rows<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>go-sql-driver/mysql</code> 库实现的 <code>statment</code> 类如下，对应的代码位于 <code>statement.go</code> 文件中：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> mysqlStmt <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 关联的 mysql 连接</span>
+    mc         <span class="token operator">*</span>mysqlConn
+    <span class="token comment">// 预处理语句的标识 id</span>
+    id         <span class="token builtin">uint32</span>
+    <span class="token comment">// 预处理状态中多少待填充参数</span>
+    paramCount <span class="token builtin">int</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>prepare statement</code> 是通过调用 <code>mysqlConn</code> 的 <code>prepare</code> 方法开启的</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 构造 prepare statemnt</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">Prepare</span><span class="token punctuation">(</span>query <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Stmt<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 连接已关闭</span>
+    <span class="token keyword">if</span> mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrBadConn
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 将 sql 模板发放 mysql 服务端</span>
+    err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">writeCommandPacketStr</span><span class="token punctuation">(</span>comStmtPrepare<span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrBadConn
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 内置 mysql 连接，构造 statement 实例</span>
+    stmt <span class="token operator">:=</span> <span class="token operator">&amp;</span>mysqlStmt<span class="token punctuation">&#123;</span>
+        mc<span class="token punctuation">:</span> mc<span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 读取 prepare 请求的响应. 在该方法中会读取到该 statement 全局唯一的 id</span>
+    columnCount<span class="token punctuation">,</span> err <span class="token operator">:=</span> stmt<span class="token punctuation">.</span><span class="token function">readPrepareResultPacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 读取填充参数个数</span>
+        <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>paramCount <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">readUntilEOF</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 读取列个数</span>
+        <span class="token keyword">if</span> columnCount <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">readUntilEOF</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token keyword">return</span> stmt<span class="token punctuation">,</span> err
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>其他公开方法包括：</p>
+<p>关闭 <code>statement：</code></p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 关闭预处理状态</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>mysqlStmt<span class="token punctuation">)</span> <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>mc <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token operator">||</span> stmt<span class="token punctuation">.</span>mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">return</span> driver<span class="token punctuation">.</span>ErrBadConn
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 发送 comStmtClose 类型的指令，传输 statement 的 id</span>
+    err <span class="token operator">:=</span> stmt<span class="token punctuation">.</span>mc<span class="token punctuation">.</span><span class="token function">writeCommandPacketUint32</span><span class="token punctuation">(</span>comStmtClose<span class="token punctuation">,</span> stmt<span class="token punctuation">.</span>id<span class="token punctuation">)</span>
+    stmt<span class="token punctuation">.</span>mc <span class="token operator">=</span> <span class="token boolean">nil</span>
+    <span class="token keyword">return</span> err
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>返回参数个数：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>mysqlStmt<span class="token punctuation">)</span> <span class="token function">NumInput</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">int</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> stmt<span class="token punctuation">.</span>paramCount
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-2-查询"><a href="#3-2-查询" class="headerlink" title="3.2 查询"></a>3.2 查询</h2><p>通过 <code>statement</code> 执行查询类请求时，只需传入参数即可，对应的流程如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>mysqlStmt<span class="token punctuation">)</span> <span class="token function">Query</span><span class="token punctuation">(</span>args <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Rows<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> stmt<span class="token punctuation">.</span><span class="token function">query</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 执行查询 sql 请求</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>mysqlStmt<span class="token punctuation">)</span> <span class="token function">query</span><span class="token punctuation">(</span>args <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>binaryRows<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// mysql 连接关闭</span>
+    <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrBadConn
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 发送执行语句</span>
+    err <span class="token operator">:=</span> stmt<span class="token punctuation">.</span><span class="token function">writeExecutePacket</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> stmt<span class="token punctuation">.</span>mc<span class="token punctuation">.</span><span class="token function">markBadConn</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    mc <span class="token operator">:=</span> stmt<span class="token punctuation">.</span>mc
+    <span class="token comment">// Read Result</span>
+    handleOk <span class="token operator">:=</span> stmt<span class="token punctuation">.</span>mc<span class="token punctuation">.</span><span class="token function">clearResult</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 读取响应，获取到的结果列的长度</span>
+    resLen<span class="token punctuation">,</span> err <span class="token operator">:=</span> handleOk<span class="token punctuation">.</span><span class="token function">readResultSetHeaderPacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+    rows <span class="token operator">:=</span> <span class="token function">new</span><span class="token punctuation">(</span>binaryRows<span class="token punctuation">)</span>
+    <span class="token comment">// 读取列</span>
+    <span class="token keyword">if</span> resLen <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        rows<span class="token punctuation">.</span>mc <span class="token operator">=</span> mc
+        rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columns<span class="token punctuation">,</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">readColumns</span><span class="token punctuation">(</span>resLen<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>done <span class="token operator">=</span> <span class="token boolean">true</span>
+        <span class="token keyword">switch</span> err <span class="token operator">:=</span> rows<span class="token punctuation">.</span><span class="token function">NextResultSet</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token punctuation">&#123;</span>
+        <span class="token keyword">case</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> io<span class="token punctuation">.</span>EOF<span class="token punctuation">:</span>
+            <span class="token keyword">return</span> rows<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+        <span class="token keyword">default</span><span class="token punctuation">:</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> rows<span class="token punctuation">,</span> err
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>通过 statement 将参数发往服务端的流程是通过 writeExecutePacket 方法实现的，对应源码及注释如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>mysqlStmt<span class="token punctuation">)</span> <span class="token function">writeExecutePacket</span><span class="token punctuation">(</span>args <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 校验传入的 args 长度和 stmt 预期的一致</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span> <span class="token operator">!=</span> stmt<span class="token punctuation">.</span>paramCount <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> fmt<span class="token punctuation">.</span><span class="token function">Errorf</span><span class="token punctuation">(</span>
+            <span class="token string">"argument count mismatch (got: %d; has: %d)"</span><span class="token punctuation">,</span>
+            <span class="token function">len</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span><span class="token punctuation">,</span>
+            stmt<span class="token punctuation">.</span>paramCount<span class="token punctuation">,</span>
+        <span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...</span>
+
+
+    <span class="token comment">// 重置序列号 sequence</span>
+    mc<span class="token punctuation">.</span>sequence <span class="token operator">=</span> <span class="token number">0</span>
+
+
+
+
+    <span class="token keyword">var</span> data <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span>
+    <span class="token keyword">var</span> err <span class="token builtin">error</span>
+        <span class="token comment">// 构造字节切片</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        data<span class="token punctuation">,</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span>buf<span class="token punctuation">.</span><span class="token function">takeBuffer</span><span class="token punctuation">(</span>minPktLen<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        data<span class="token punctuation">,</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span>buf<span class="token punctuation">.</span><span class="token function">takeCompleteBuffer</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token comment">// In this case the len(data) == cap(data) which is used to optimise the flow below.</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+
+
+    <span class="token comment">// 指令类型为 stmt exec</span>
+    data<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span> <span class="token operator">=</span> comStmtExecute
+
+
+
+
+    <span class="token comment">// 后续 4 个字节设置 statement 的 id</span>
+    data<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token function">byte</span><span class="token punctuation">(</span>stmt<span class="token punctuation">.</span>id<span class="token punctuation">)</span>
+    data<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token function">byte</span><span class="token punctuation">(</span>stmt<span class="token punctuation">.</span>id <span class="token operator">>></span> <span class="token number">8</span><span class="token punctuation">)</span>
+    data<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token function">byte</span><span class="token punctuation">(</span>stmt<span class="token punctuation">.</span>id <span class="token operator">>></span> <span class="token number">16</span><span class="token punctuation">)</span>
+    data<span class="token punctuation">[</span><span class="token number">8</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token function">byte</span><span class="token punctuation">(</span>stmt<span class="token punctuation">.</span>id <span class="token operator">>></span> <span class="token number">24</span><span class="token punctuation">)</span>
+
+
+
+
+    <span class="token comment">// ... 填充 args 参数</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 将数据发放服务端</span>
+    <span class="token keyword">return</span> mc<span class="token punctuation">.</span><span class="token function">writePacket</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-3-执行"><a href="#3-3-执行" class="headerlink" title="3.3 执行"></a>3.3 执行</h2><p>通过 <code>statement</code> 执行操作类请求的流程与查询类类似：</p>
+<p>源码及注释展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>mysqlStmt<span class="token punctuation">)</span> <span class="token function">Exec</span><span class="token punctuation">(</span>args <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Result<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// mysql 连接已关闭</span>
+    <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrBadConn
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 发送 sql 到服务端执行</span>
+    err <span class="token operator">:=</span> stmt<span class="token punctuation">.</span><span class="token function">writeExecutePacket</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> stmt<span class="token punctuation">.</span>mc<span class="token punctuation">.</span><span class="token function">markBadConn</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    mc <span class="token operator">:=</span> stmt<span class="token punctuation">.</span>mc
+    handleOk <span class="token operator">:=</span> stmt<span class="token punctuation">.</span>mc<span class="token punctuation">.</span><span class="token function">clearResult</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+
+    <span class="token comment">// 读取响应的列长度</span>
+    resLen<span class="token punctuation">,</span> err <span class="token operator">:=</span> handleOk<span class="token punctuation">.</span><span class="token function">readResultSetHeaderPacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token keyword">if</span> resLen <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 读取列信息数据，填充到 conn buffer 中</span>
+        <span class="token keyword">if</span> err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">readUntilEOF</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 读取行数据，填充到 conn buffer 中</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">readUntilEOF</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 丢弃后续多余的内容</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> handleOk<span class="token punctuation">.</span><span class="token function">discardResults</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+
+
+    copied <span class="token operator">:=</span> mc<span class="token punctuation">.</span>result
+    <span class="token keyword">return</span> <span class="token operator">&amp;</span>copied<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="4-事务"><a href="#4-事务" class="headerlink" title="4 事务"></a>4 事务</h1><p>接下来是 <code>go-sql-driver/mysql</code> 实现的事务模块. 这部分内容其实比较简单，事务的核心功能都是通过 <code>mysql</code> 服务端提供的，客户端部分只需要将与事务有关的 <code>tx、commit、rollback</code> 等指令发往服务端，并持有该连接实例即可.</p>
+<h2 id="4-1-开启事务"><a href="#4-1-开启事务" class="headerlink" title="4.1 开启事务"></a>4.1 开启事务</h2><p><code>database/sql</code> 库中预定义的事务接口：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Tx <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 提交</span>
+    <span class="token function">Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+    <span class="token comment">// 回滚</span>
+    <span class="token function">Rollback</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>go-sql-driver/mysql </code>库实现的事务类：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> mysqlTx <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    mc <span class="token operator">*</span>mysqlConn
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>事务的开启是 <code>mysqlConn</code> 的 <code>Begin</code> 方法实现的，该方法中通过将 <code>transaction</code> 指令发往服务端，使用服务端的能力开启事务，并将该 <code>conn</code> 封装在 <code>tx</code> 实例中返回：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">Begin</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Tx<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> mc<span class="token punctuation">.</span><span class="token function">begin</span><span class="token punctuation">(</span><span class="token boolean">false</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>mc <span class="token operator">*</span>mysqlConn<span class="token punctuation">)</span> <span class="token function">begin</span><span class="token punctuation">(</span>readOnly <span class="token builtin">bool</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>driver<span class="token punctuation">.</span>Tx<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>Logger<span class="token punctuation">.</span><span class="token function">Print</span><span class="token punctuation">(</span>ErrInvalidConn<span class="token punctuation">)</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> driver<span class="token punctuation">.</span>ErrBadConn
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">var</span> q <span class="token builtin">string</span>
+    <span class="token keyword">if</span> readOnly <span class="token punctuation">&#123;</span>
+        q <span class="token operator">=</span> <span class="token string">"START TRANSACTION READ ONLY"</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        q <span class="token operator">=</span> <span class="token string">"START TRANSACTION"</span>
+    <span class="token punctuation">&#125;</span>
+    err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">exec</span><span class="token punctuation">(</span>q<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token operator">&amp;</span>mysqlTx<span class="token punctuation">&#123;</span>mc<span class="token punctuation">&#125;</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> mc<span class="token punctuation">.</span><span class="token function">markBadConn</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="4-2-提交-回滚"><a href="#4-2-提交-回滚" class="headerlink" title="4.2 提交&amp;回滚"></a>4.2 提交&amp;回滚</h2><p>对应的提交事务和回滚事务的流程也都很简单，通过将 <code>commit</code> 和 <code>rollback</code> 指令借由 <code>conn</code> 的 <code>exec</code> 方法发放 <code>mysql</code> 服务端即可：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>tx <span class="token operator">*</span>mysqlTx<span class="token punctuation">)</span> <span class="token function">Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> tx<span class="token punctuation">.</span>mc <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token operator">||</span> tx<span class="token punctuation">.</span>mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> ErrInvalidConn
+    <span class="token punctuation">&#125;</span>
+    err <span class="token operator">=</span> tx<span class="token punctuation">.</span>mc<span class="token punctuation">.</span><span class="token function">exec</span><span class="token punctuation">(</span><span class="token string">"COMMIT"</span><span class="token punctuation">)</span>
+    tx<span class="token punctuation">.</span>mc <span class="token operator">=</span> <span class="token boolean">nil</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>tx <span class="token operator">*</span>mysqlTx<span class="token punctuation">)</span> <span class="token function">Rollback</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> tx<span class="token punctuation">.</span>mc <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token operator">||</span> tx<span class="token punctuation">.</span>mc<span class="token punctuation">.</span>closed<span class="token punctuation">.</span><span class="token function">Load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> ErrInvalidConn
+    <span class="token punctuation">&#125;</span>
+    err <span class="token operator">=</span> tx<span class="token punctuation">.</span>mc<span class="token punctuation">.</span><span class="token function">exec</span><span class="token punctuation">(</span><span class="token string">"ROLLBACK"</span><span class="token punctuation">)</span>
+    tx<span class="token punctuation">.</span>mc <span class="token operator">=</span> <span class="token boolean">nil</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="5-执行结果"><a href="#5-执行结果" class="headerlink" title="5 执行结果"></a>5 执行结果</h1><p>最后要聊的是执行结果的部分.</p>
+<h2 id="5-1-查询类"><a href="#5-1-查询类" class="headerlink" title="5.1 查询类"></a>5.1 查询类</h2><p>首先是对应于查询类请求的响应格式——<code>Rows</code>，其本质是对应了多行数据的数据流. <code>database/sql </code>库中定义的接口标准如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Rows <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 返回所有列明</span>
+    <span class="token function">Columns</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+
+    <span class="token comment">// 关闭 rows </span>
+    <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+
+    <span class="token comment">// 将下一行数据加载到 dest 中</span>
+    <span class="token function">Next</span><span class="token punctuation">(</span>dest <span class="token punctuation">[</span><span class="token punctuation">]</span>Value<span class="token punctuation">)</span> <span class="token builtin">error</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>go-sql-driver/mysql</code> 库中实现的 <code>rows</code> 类如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> mysqlRows <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// mysql 数据库连接</span>
+    mc     <span class="token operator">*</span>mysqlConn
+    <span class="token comment">// 结果集，包含了各列的信息 </span>
+    rs     resultSet
+    finish <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>结果集，包含了各列的信息 ：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> resultSet <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    columns     <span class="token punctuation">[</span><span class="token punctuation">]</span>mysqlField
+    columnNames <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+    done        <span class="token builtin">bool</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>列字段信息：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> mysqlField <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    tableName <span class="token builtin">string</span>
+    name      <span class="token builtin">string</span>
+    length    <span class="token builtin">uint32</span>
+    flags     fieldFlag
+    fieldType fieldType
+    decimals  <span class="token builtin">byte</span>
+    charSet   <span class="token builtin">uint8</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>mysqlRows</code> 实现的 <code>Columns</code> 方法中，直接从 <code>rows</code> 中内置的 <code>resultSet</code> 中读取列信息即可. 此前列信息数据已经通过 <code>readColumns</code> 方法预加载到 <code>resultSet</code> 中了：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>rows <span class="token operator">*</span>mysqlRows<span class="token punctuation">)</span> <span class="token function">Columns</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columnNames <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columnNames
+    <span class="token punctuation">&#125;</span>
+
+
+    columns <span class="token operator">:=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">,</span> <span class="token function">len</span><span class="token punctuation">(</span>rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columns<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> rows<span class="token punctuation">.</span>mc <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token operator">&amp;&amp;</span> rows<span class="token punctuation">.</span>mc<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>ColumnsWithAlias <span class="token punctuation">&#123;</span>
+        <span class="token keyword">for</span> i <span class="token operator">:=</span> <span class="token keyword">range</span> columns <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> tableName <span class="token operator">:=</span> rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columns<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>tableName<span class="token punctuation">;</span> <span class="token function">len</span><span class="token punctuation">(</span>tableName<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+                columns<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> tableName <span class="token operator">+</span> <span class="token string">"."</span> <span class="token operator">+</span> rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columns<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name
+            <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+                columns<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columns<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">for</span> i <span class="token operator">:=</span> <span class="token keyword">range</span> columns <span class="token punctuation">&#123;</span>
+            columns<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columns<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+    rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>columnNames <span class="token operator">=</span> columns
+    <span class="token keyword">return</span> columns
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>关闭 <code>mysqlRows</code> 的核心是移除其中内置的 <code>mysqlConn</code>：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>rows <span class="token operator">*</span>mysqlRows<span class="token punctuation">)</span> <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> f <span class="token operator">:=</span> rows<span class="token punctuation">.</span>finish<span class="token punctuation">;</span> f <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">f</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        rows<span class="token punctuation">.</span>finish <span class="token operator">=</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span>
+
+    mc <span class="token operator">:=</span> rows<span class="token punctuation">.</span>mc
+    <span class="token keyword">if</span> mc <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> err
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// ...</span>
+    <span class="token comment">// Remove unread packets from stream</span>
+    <span class="token keyword">if</span> <span class="token operator">!</span>rows<span class="token punctuation">.</span>rs<span class="token punctuation">.</span>done <span class="token punctuation">&#123;</span>
+        err <span class="token operator">=</span> mc<span class="token punctuation">.</span><span class="token function">readUntilEOF</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        handleOk <span class="token operator">:=</span> mc<span class="token punctuation">.</span><span class="token function">clearResult</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">=</span> handleOk<span class="token punctuation">.</span><span class="token function">discardResults</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> err
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+    rows<span class="token punctuation">.</span>mc <span class="token operator">=</span> <span class="token boolean">nil</span>
+    <span class="token keyword">return</span> err
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>有关于 <code>Rows</code> 的 <code>Next</code> 遍历方法，分别在 <code>mysqlRows</code> 的两个子类予以实现，分为 <code>textRows</code> 和 <code>binaryRows</code> 两种类型：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// prepare 模式的查询请求响应格式</span>
+<span class="token keyword">type</span> binaryRows <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    mysqlRows
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">// 普通的模式的查询请求响应格式</span>
+<span class="token keyword">type</span> textRows <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    mysqlRows
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>textRows</code>：普通模式下的查询请求使用的响应格式<br><code>binaryRows</code>：<code>prepare statement</code> 模式下的查询请求使用的响应格式</p>
+<p><code>textRows</code> 和 <code>binaryRows</code> 所实现的 <code>Next</code> 方法流程都是类似的，主要通过 <code>readRow</code> 方法读取一行数据解析到 <code>dest</code> 中，区别在于两者的解析协议不同（<code>text protocol</code> 和 <code>binary protocol</code>）.这部分内容本文不作展开：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::ResultsetRow</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>rows <span class="token operator">*</span>textRows<span class="token punctuation">)</span> <span class="token function">readRow</span><span class="token punctuation">(</span>dest <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span>
+<span class="token comment">// http://dev.mysql.com/doc/internals/en/binary-protocol-resultset-row.html</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>rows <span class="token operator">*</span>binaryRows<span class="token punctuation">)</span> <span class="token function">readRow</span><span class="token punctuation">(</span>dest <span class="token punctuation">[</span><span class="token punctuation">]</span>driver<span class="token punctuation">.</span>Value<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="5-2-5-2-操作类"><a href="#5-2-5-2-操作类" class="headerlink" title="5.2 5.2 操作类"></a>5.2 5.2 操作类</h3><p><code>mysqlResult</code> 是用于操作类请求的响应格式.</p>
+<p><code>database/sql</code> 库中预定的接口规范如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Result <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 最后一笔插入的主键 id</span>
+    <span class="token function">LastInsertId</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token builtin">int64</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+
+    <span class="token comment">// 影响的行数</span>
+    <span class="token function">RowsAffected</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token builtin">int64</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>对应在 <code>go-sql-driver/mysql </code>库中的实现为：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> mysqlResult <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    affectedRows <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">int64</span>
+    insertIds    <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">int64</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>res <span class="token operator">*</span>mysqlResult<span class="token punctuation">)</span> <span class="token function">LastInsertId</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token builtin">int64</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> res<span class="token punctuation">.</span>insertIds<span class="token punctuation">[</span><span class="token function">len</span><span class="token punctuation">(</span>res<span class="token punctuation">.</span>insertIds<span class="token punctuation">)</span><span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>res <span class="token operator">*</span>mysqlResult<span class="token punctuation">)</span> <span class="token function">RowsAffected</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token builtin">int64</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> res<span class="token punctuation">.</span>affectedRows<span class="token punctuation">[</span><span class="token function">len</span><span class="token punctuation">(</span>res<span class="token punctuation">.</span>affectedRows<span class="token punctuation">)</span><span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>(end)</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#0-%E5%89%8D%E8%A8%80"><span class="top-box-text">0 前言</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E6%95%B0%E6%8D%AE%E5%BA%93%E9%A9%B1%E5%8A%A8"><span class="top-box-text">1 数据库驱动</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-%E9%A9%B1%E5%8A%A8"><span class="top-box-text">1.1 驱动</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E8%BF%9E%E6%8E%A5%E5%99%A8"><span class="top-box-text">1.2 连接器</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-3-%E9%85%8D%E7%BD%AE"><span class="top-box-text">1.3 配置</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-4-%E5%8D%8F%E8%AE%AE"><span class="top-box-text">1.4 协议</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%BB%E6%B5%81%E7%A8%8B%EF%BC%9A"><span class="top-box-text">读流程：</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%86%99%E6%B5%81%E7%A8%8B%EF%BC%9A"><span class="top-box-text">写流程：</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E6%95%B0%E6%8D%AE%E5%BA%93%E8%BF%9E%E6%8E%A5"><span class="top-box-text">2 数据库连接</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-%E7%BC%93%E5%86%B2%E5%8C%BA"><span class="top-box-text">2.2 缓冲区</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E6%9F%A5%E8%AF%A2"><span class="top-box-text">2.3 查询</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-%E9%A2%84%E5%A4%84%E7%90%86%E7%8A%B6%E6%80%81"><span class="top-box-text">3 预处理状态</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E9%A2%84%E5%A4%84%E7%90%86"><span class="top-box-text">3.1 预处理</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E6%9F%A5%E8%AF%A2"><span class="top-box-text">3.2 查询</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-%E6%89%A7%E8%A1%8C"><span class="top-box-text">3.3 执行</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-%E4%BA%8B%E5%8A%A1"><span class="top-box-text">4 事务</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-1-%E5%BC%80%E5%90%AF%E4%BA%8B%E5%8A%A1"><span class="top-box-text">4.1 开启事务</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-2-%E6%8F%90%E4%BA%A4-%E5%9B%9E%E6%BB%9A"><span class="top-box-text">4.2 提交&amp;回滚</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#5-%E6%89%A7%E8%A1%8C%E7%BB%93%E6%9E%9C"><span class="top-box-text">5 执行结果</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-1-%E6%9F%A5%E8%AF%A2%E7%B1%BB"><span class="top-box-text">5.1 查询类</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#5-2-5-2-%E6%93%8D%E4%BD%9C%E7%B1%BB"><span class="top-box-text">5.2 5.2 操作类</span></a></li></ol></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/28/Golang-Gorm-%E6%A1%86%E6%9E%B6%E6%BA%90%E7%A0%81%E6%B5%85%E6%9E%90/">
+          <h3 class="post-title">
+            下一篇：Golang Gorm 框架源码浅析
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
