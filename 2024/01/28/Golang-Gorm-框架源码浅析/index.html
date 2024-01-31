@@ -106,6 +106,78 @@
     <span class="token comment">// 会话被克隆的次数. 倘若 clone = 1，代表是始祖 DB 实例；倘若 clone > 1，代表是从始祖 DB 克隆出来的会话</span>
     clone        <span class="token builtin">int</span>
 <span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>###I 错误处理</p>
+<p>DB 类的 AddError 方法，用于在会话执行过程中抛出错误.</p>
+<p>一次会话在执行过程中可能会遇到多个错误，因此会通过 error wrapping 的方式，实现错误的拼接.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">AddError</span><span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">if</span> db<span class="token punctuation">.</span>Error <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span>Error <span class="token operator">=</span> err
+        <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span>Error <span class="token operator">=</span> fmt<span class="token punctuation">.</span><span class="token function">Errorf</span><span class="token punctuation">(</span><span class="token string">"%v; %w"</span><span class="token punctuation">,</span> db<span class="token punctuation">.</span>Error<span class="token punctuation">,</span> err<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> db<span class="token punctuation">.</span>Error
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>II 表名设置</p>
+<p>请求在执行时，需要明确操作的是哪张数据表.</p>
+<p>使用方可以通过链式调用 DB.Table 方法，显式声明本次操作所针对的数据表，这种方式的优先级是最高的.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Table</span><span class="token punctuation">(</span>name <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>tx <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    tx <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">getInstance</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Table <span class="token operator">=</span> name
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<p>在 <code>DB.Table</code> 方法缺省的情况下，<code>gorm</code> 则会尝试通过 <code>po</code> 类的 <code>TableName</code> 方法获取表名.</p>
+<p>在 gorm 中声明了一个 <code>tabler interface</code>：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Tabler <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token function">TableName</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">string</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>倘若 <code>po</code> 模型声明了 <code>TableName</code> 方法，则隐式实现了该 <code>interface</code>，在处理过程中会被断言成 <code>tabler</code> 类型，然后调用 <code>TableName</code> 方法获取其表名.</p>
+<p>该流程对应的源码展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>Statement<span class="token punctuation">)</span> <span class="token function">ParseWithSpecialTableName</span><span class="token punctuation">(</span>value <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> specialTableName <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    stmt<span class="token punctuation">.</span>Schema<span class="token punctuation">,</span> err <span class="token operator">=</span> schema<span class="token punctuation">.</span><span class="token function">ParseWithSpecialTableName</span><span class="token punctuation">(</span>value<span class="token punctuation">,</span> stmt<span class="token punctuation">.</span>DB<span class="token punctuation">.</span>cacheStore<span class="token punctuation">,</span> stmt<span class="token punctuation">.</span>DB<span class="token punctuation">.</span>NamingStrategy<span class="token punctuation">,</span> specialTableName<span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    stmt<span class="token punctuation">.</span>Table <span class="token operator">=</span> stmt<span class="token punctuation">.</span>Schema<span class="token punctuation">.</span>Table
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> err
+<span class="token punctuation">&#125;</span>
+<span class="token comment">// ParseWithSpecialTableName get data type from dialector with extra schema table</span>
+<span class="token keyword">func</span> <span class="token function">ParseWithSpecialTableName</span><span class="token punctuation">(</span>dest <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> cacheStore <span class="token operator">*</span>sync<span class="token punctuation">.</span>Map<span class="token punctuation">,</span> namer Namer<span class="token punctuation">,</span> specialTableName <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>Schema<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> dest <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> fmt<span class="token punctuation">.</span><span class="token function">Errorf</span><span class="token punctuation">(</span><span class="token string">"%w: %+v"</span><span class="token punctuation">,</span> ErrUnsupportedDataType<span class="token punctuation">,</span> dest<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...</span>
+    modelType <span class="token operator">:=</span> reflect<span class="token punctuation">.</span><span class="token function">Indirect</span><span class="token punctuation">(</span>value<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Type</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+
+    <span class="token comment">// ...</span>
+    modelValue <span class="token operator">:=</span> reflect<span class="token punctuation">.</span><span class="token function">New</span><span class="token punctuation">(</span>modelType<span class="token punctuation">)</span>
+    tableName <span class="token operator">:=</span> namer<span class="token punctuation">.</span><span class="token function">TableName</span><span class="token punctuation">(</span>modelType<span class="token punctuation">.</span><span class="token function">Name</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token comment">// 将 po 模型断言成 tabler interface，然后调用 TableName 方法获取表名</span>
+    <span class="token keyword">if</span> tabler<span class="token punctuation">,</span> ok <span class="token operator">:=</span> modelValue<span class="token punctuation">.</span><span class="token function">Interface</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token punctuation">(</span>Tabler<span class="token punctuation">)</span><span class="token punctuation">;</span> ok <span class="token punctuation">&#123;</span>
+        tableName <span class="token operator">=</span> tabler<span class="token punctuation">.</span><span class="token function">TableName</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 将表名信息添加到 schema 当中</span>
+    schema <span class="token operator">:=</span> <span class="token operator">&amp;</span>Schema<span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        Table<span class="token punctuation">:</span>            tableName<span class="token punctuation">,</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> schema<span class="token punctuation">,</span> schema<span class="token punctuation">.</span>err
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
 <h2 id="1-2-会话状态"><a href="#1-2-会话状态" class="headerlink" title="1.2 会话状态"></a>1.2 会话状态</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Statement <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
     <span class="token comment">// 数据库实例 </span>
     <span class="token operator">*</span>DB
@@ -158,12 +230,1007 @@
     <span class="token function">QueryRowContext</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token operator">*</span>sql<span class="token punctuation">.</span>Row
 <span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
 <p><code>connPool</code> 根据是否启用了 <code>prepare</code> 预处理模式，存在不同的实现类版本：</p>
-<p>在普通模式下，<code>connPool</code> 的实现类为 <code>database/sql</code> 库下的 <code>*DB</code> 类<br>在 prepare 模式下，connPool 实现类型为 gorm 中定义的 PreparedStmtDB 类</p>
-<h3 id="2-db-克隆"><a href="#2-db-克隆" class="headerlink" title="2. db 克隆"></a>2. db 克隆</h3>
+<p>在普通模式下，<code>connPool</code> 的实现类为 <code>database/sql</code> 库下的 <code>*DB</code> 类<br>在 <code>prepare</code> <code>模式下，connPool</code> 实现类型为 <code>gorm</code> 中定义的 <code>PreparedStmtDB</code> 类<br>&#96;</p>
+<h3 id="2-db-克隆"><a href="#2-db-克隆" class="headerlink" title="2. db 克隆"></a>2. db 克隆</h3><p>此处额外介绍一下 <code>DB</code> 的克隆流程，所有在始祖 <code>DB</code> 基础上追加状态信息，克隆出来的 <code>DB</code> 实例都可以称为“<strong>会话</strong>”.</p>
+<p>会话的状态信息主要存储在 <code>statement</code> 当中的，所以在克隆 <code>DB</code> 时，很重要的一环就是完成对 其中 <code>statement</code> 部分的创建&#x2F;克隆.</p>
+<p>该流程对应的方法为 <code>DB.getInstance</code> 方法，主要通过 <code>DB</code> 中的 <code>clone</code> 字段来判断当前是首次从始祖 <code>DB</code> 中执行克隆操作还是在一个会话的基础上克隆出一个新的会话实例，对应的源码展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">getInstance</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span>DB <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> db<span class="token punctuation">.</span>clone <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        tx <span class="token operator">:=</span> <span class="token operator">&amp;</span>DB<span class="token punctuation">&#123;</span>Config<span class="token punctuation">:</span> db<span class="token punctuation">.</span>Config<span class="token punctuation">,</span> Error<span class="token punctuation">:</span> db<span class="token punctuation">.</span>Error<span class="token punctuation">&#125;</span>
+
+        <span class="token comment">// 倘若是首次对 db 进行 clone，则需要构造出一个新的 statement 实例</span>
+        <span class="token keyword">if</span> db<span class="token punctuation">.</span>clone <span class="token operator">==</span> <span class="token number">1</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// clone with new statement</span>
+            tx<span class="token punctuation">.</span>Statement <span class="token operator">=</span> <span class="token operator">&amp;</span>Statement<span class="token punctuation">&#123;</span>
+                DB<span class="token punctuation">:</span>       tx<span class="token punctuation">,</span>
+                ConnPool<span class="token punctuation">:</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">,</span>
+                Context<span class="token punctuation">:</span>  db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Context<span class="token punctuation">,</span>
+                Clauses<span class="token punctuation">:</span>  <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span>clause<span class="token punctuation">.</span>Clause<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+                Vars<span class="token punctuation">:</span>     <span class="token function">make</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token comment">// 倘若已经 db clone 过了，则还需要 clone 原先的 statement</span>
+        <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// with clone statement</span>
+            tx<span class="token punctuation">.</span>Statement <span class="token operator">=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>DB <span class="token operator">=</span> tx
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token keyword">return</span> tx
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> db
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-3-预处理DB"><a href="#2-3-预处理DB" class="headerlink" title="2.3 预处理DB"></a>2.3 预处理DB</h2><p>在 <code>prepare</code> 预处理模式下，<code>DB</code> 中连接池 connPool 的实现类为 PreparedStmtDB. 定义该类的目的是为了使用 <code>database/sql </code>标准库中的 <code>prepare</code> 能力，完成预处理状态 <code>statement</code> 的构造和复用.</p>
+<p><code>PreparedStmtDB</code> 的类定义如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// prepare 模式下的 connPool 实现类. </span>
+<span class="token keyword">type</span> PreparedStmtDB <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 各 stmt 实例. 其中 key 为 sql 模板，stmt 是对封 database/sql 中 *Stmt 的封装 </span>
+    Stmts       <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>Stmt
+    <span class="token comment">// ...</span>
+    Mux         <span class="token operator">*</span>sync<span class="token punctuation">.</span>RWMutex
+    <span class="token comment">// 内置的 ConnPool 字段通常为 database/sql 中的 *DB</span>
+    ConnPool
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>Stmt</code> 类是 <code>gorm</code> 框架对 <code>database/sql</code> 标准库下 <code>Stmt</code> 类的简单封装，两者区别并不大：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Stmt <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// database/sql 标准库下的 statement</span>
+    <span class="token operator">*</span>sql<span class="token punctuation">.</span>Stmt
+    <span class="token comment">// 是否处于事务</span>
+    Transaction <span class="token builtin">bool</span>
+    <span class="token comment">// 标识当前 stmt 是否已初始化完成</span>
+    prepared    <span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+    prepareErr  <span class="token builtin">error</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-4-执行器"><a href="#2-4-执行器" class="headerlink" title="2.4 执行器"></a>2.4 执行器</h2><p>接下来介绍的是，<code>gorm</code> 框架执行 <code>crud</code> 操作逻辑时使用到的执行器 <code>processor</code>，针对 <code>crud</code> 操作的处理函数会以 <code>list</code> 的形式聚合在对应类型 <code>processor</code> 的 <code>fns</code> 字段当中.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> callbacks <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 对应存储了 crud 等各类操作对应的执行器 processor</span>
+    <span class="token comment">// query -> query processor</span>
+    <span class="token comment">// create -> create processor</span>
+    <span class="token comment">// update -> update processor</span>
+    <span class="token comment">// delete -> delete processor</span>
+    processors <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>processor
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<p>各类 <code>processor</code> 的初始化是通过 initializeCallbacks 方法完成，</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">initializeCallbacks</span><span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token operator">*</span>callbacks <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token operator">&amp;</span>callbacks<span class="token punctuation">&#123;</span>
+        processors<span class="token punctuation">:</span> <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>processor<span class="token punctuation">&#123;</span>
+            <span class="token string">"create"</span><span class="token punctuation">:</span> <span class="token punctuation">&#123;</span>db<span class="token punctuation">:</span> db<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+            <span class="token string">"query"</span><span class="token punctuation">:</span>  <span class="token punctuation">&#123;</span>db<span class="token punctuation">:</span> db<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+            <span class="token string">"update"</span><span class="token punctuation">:</span> <span class="token punctuation">&#123;</span>db<span class="token punctuation">:</span> db<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+            <span class="token string">"delete"</span><span class="token punctuation">:</span> <span class="token punctuation">&#123;</span>db<span class="token punctuation">:</span> db<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+            <span class="token string">"row"</span><span class="token punctuation">:</span>    <span class="token punctuation">&#123;</span>db<span class="token punctuation">:</span> db<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+            <span class="token string">"raw"</span><span class="token punctuation">:</span>    <span class="token punctuation">&#123;</span>db<span class="token punctuation">:</span> db<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+        <span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>后续在请求执行过程中，会根据 <code>crud</code> 的类型，从 <code>callbacks</code> 中获取对应类型的 <code>processor</code>. 比如一笔查询操作，会通过 <code>callbacks.Query()</code> 方法获取对应的 <code>processor</code>：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>cs <span class="token operator">*</span>callbacks<span class="token punctuation">)</span> <span class="token function">Query</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span>processor <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> cs<span class="token punctuation">.</span>processors<span class="token punctuation">[</span><span class="token string">"query"</span><span class="token punctuation">]</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>执行器 processor 具体的类定义如下，其中核心字段包括：</p>
+<ul>
+<li><code>db</code>：从属的 <code>gorm.DB</code> 实例</li>
+<li><code>Clauses</code>：根据 <code>crud</code> 类型确定的 <code>SQL</code> 格式模板，后续用于拼接生成 <code>sql</code></li>
+<li><code>fns</code>：对应于 <code>crud</code> 类型的执行函数链</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> processor <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 从属的 DB 实例</span>
+    db        <span class="token operator">*</span>DB
+    <span class="token comment">// 拼接 sql 时的关键字顺序. 比如 query 类，固定为 SELECT,FROM,WHERE,GROUP BY, ORDER BY, LIMIT, FOR</span>
+    Clauses   <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+    <span class="token comment">// 对应于 crud 类型的执行函数链</span>
+    fns       <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">func</span><span class="token punctuation">(</span><span class="token operator">*</span>DB<span class="token punctuation">)</span>
+    callbacks <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token operator">*</span>callback
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>所有请求遵循的处理思路都是，首先根据其从属的 <code>crud</code> 类型，找到对应的 <code>processor</code>，然后调用 <code>processor</code> 的 <code>Execute</code> 方法，执行该 <code>processor</code> 下的 fns 函数链.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 通用的 processor 执行函数，其中对应于 crud 的核心操作都被封装在 processor 对应的 fns list 当中了</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>p <span class="token operator">*</span>processor<span class="token punctuation">)</span> <span class="token function">Execute</span><span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token operator">*</span>DB <span class="token punctuation">&#123;</span>
+    <span class="token comment">// call scopes</span>
+    <span class="token keyword">var</span> <span class="token punctuation">(</span>
+        <span class="token comment">// ...</span>
+        stmt <span class="token operator">=</span> db<span class="token punctuation">.</span>Statement
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">)</span>
+
+
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>stmt<span class="token punctuation">.</span>BuildClauses<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 根据 crud 类型，对 buildClauses 进行复制，用于后续的 sql 拼接</span>
+        stmt<span class="token punctuation">.</span>BuildClauses <span class="token operator">=</span> p<span class="token punctuation">.</span>Clauses
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+    
+    <span class="token comment">// ...</span>
+    <span class="token comment">// dest 和 model 相互赋值</span>
+    <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>Model <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        stmt<span class="token punctuation">.</span>Model <span class="token operator">=</span> stmt<span class="token punctuation">.</span>Dest
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>Dest <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        stmt<span class="token punctuation">.</span>Dest <span class="token operator">=</span> stmt<span class="token punctuation">.</span>Model
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 解析 model，获取对应表的 schema 信息</span>
+    <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>Model <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 处理 dest 信息，将其添加到 stmt 当中</span>
+    <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>Dest <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 执行一系列的 callback 函数，其中最核心的 create/query/update/delete 操作都被包含在其中了. 还包括了一系列前、后处理函数，具体可见第 3 章</span>
+    <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> f <span class="token operator">:=</span> <span class="token keyword">range</span> p<span class="token punctuation">.</span>fns <span class="token punctuation">&#123;</span>
+        <span class="token function">f</span><span class="token punctuation">(</span>db<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">//...</span>
+    <span class="token keyword">return</span> db
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<p>在 <code>Execute</code> 方法中，还有一项很重要的事情，是根据 <code>crud</code> 的类型，获取 <code>sql</code> 拼接格式 <code>clauses</code>，将其赋值到该 <code>processor</code> 的 <code>BuildClauses</code> 字段当中. <code>crud</code> 各类 <code>clauses</code> 格式展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> <span class="token punctuation">(</span>
+    createClauses <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">&#123;</span><span class="token string">"INSERT"</span><span class="token punctuation">,</span> <span class="token string">"VALUES"</span><span class="token punctuation">,</span> <span class="token string">"ON CONFLICT"</span><span class="token punctuation">&#125;</span>
+    queryClauses  <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">&#123;</span><span class="token string">"SELECT"</span><span class="token punctuation">,</span> <span class="token string">"FROM"</span><span class="token punctuation">,</span> <span class="token string">"WHERE"</span><span class="token punctuation">,</span> <span class="token string">"GROUP BY"</span><span class="token punctuation">,</span> <span class="token string">"ORDER BY"</span><span class="token punctuation">,</span> <span class="token string">"LIMIT"</span><span class="token punctuation">,</span> <span class="token string">"FOR"</span><span class="token punctuation">&#125;</span>
+    updateClauses <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">&#123;</span><span class="token string">"UPDATE"</span><span class="token punctuation">,</span> <span class="token string">"SET"</span><span class="token punctuation">,</span> <span class="token string">"WHERE"</span><span class="token punctuation">&#125;</span>
+    deleteClauses <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">&#123;</span><span class="token string">"DELETE"</span><span class="token punctuation">,</span> <span class="token string">"FROM"</span><span class="token punctuation">,</span> <span class="token string">"WHERE"</span><span class="token punctuation">&#125;</span>
+<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-5-条件"><a href="#2-5-条件" class="headerlink" title="2.5 条件"></a>2.5 条件</h2><p>接下来要介绍的是 <code>gorm</code> 框架中的条件 <code>Clause</code>. 一条执行 sql 中，各个部分都属于一个 clause，比如一条 SELECT * FROM reward WHERE id &lt; 10 ORDER by id 的 SQL，其中就包含了 SELECT、FROM、WHERE 和 ORDER 四个 clause.</p>
+<p>当使用方通过链式操作克隆 DB时，对应追加的状态信息就会生成一个新的 clause，追加到 statement 对应的 clauses 集合当中. 当请求实际执行时，会取出 clauses 集合，拼接生成完整的 sql 用于执行.</p>
+<p>条件 clause 本身是个抽象的 interface，定义如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Interface clause interface</span>
+<span class="token keyword">type</span> Interface <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// clause 名称</span>
+    <span class="token function">Name</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">string</span>
+    <span class="token comment">// 生成对应的 sql 部分</span>
+    <span class="token function">Build</span><span class="token punctuation">(</span>Builder<span class="token punctuation">)</span>
+    <span class="token comment">// 和同类 clause 合并</span>
+    <span class="token function">MergeClause</span><span class="token punctuation">(</span><span class="token operator">*</span>Clause<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>不同的 clause 有不同的实现类，我们以 SELECT 为例进行展示：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Select <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 使用使用 distinct 模式</span>
+    Distinct   <span class="token builtin">bool</span>
+    <span class="token comment">// 是否 select 查询指定的列，如 select id,name</span>
+    Columns    <span class="token punctuation">[</span><span class="token punctuation">]</span>Column
+    Expression Expression
+<span class="token punctuation">&#125;</span>
+
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>s Select<span class="token punctuation">)</span> <span class="token function">Name</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">string</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token string">"SELECT"</span>
+<span class="token punctuation">&#125;</span>
+
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>s Select<span class="token punctuation">)</span> <span class="token function">Build</span><span class="token punctuation">(</span>builder Builder<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// select  查询指定的列</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>s<span class="token punctuation">.</span>Columns<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> s<span class="token punctuation">.</span>Distinct <span class="token punctuation">&#123;</span>
+            builder<span class="token punctuation">.</span><span class="token function">WriteString</span><span class="token punctuation">(</span><span class="token string">"DISTINCT "</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token comment">// 将指定列追加到 sql 语句中</span>
+        <span class="token keyword">for</span> idx<span class="token punctuation">,</span> column <span class="token operator">:=</span> <span class="token keyword">range</span> s<span class="token punctuation">.</span>Columns <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> idx <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+                builder<span class="token punctuation">.</span><span class="token function">WriteByte</span><span class="token punctuation">(</span><span class="token char">','</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+            builder<span class="token punctuation">.</span><span class="token function">WriteQuoted</span><span class="token punctuation">(</span>column<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 不查询指定列，则使用 select *</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        builder<span class="token punctuation">.</span><span class="token function">WriteByte</span><span class="token punctuation">(</span><span class="token char">'*'</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>拼接 sql 是通过调用 <code>Statement.Build</code> 方法来实现的，入参对应的是 <code>crud</code> 中某一类 <code>processor</code> 的 <code>BuildClauses</code>.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>Statement<span class="token punctuation">)</span> <span class="token function">Build</span><span class="token punctuation">(</span>clauses <span class="token operator">...</span><span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> firstClauseWritten <span class="token builtin">bool</span>
+
+
+    <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> name <span class="token operator">:=</span> <span class="token keyword">range</span> clauses <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> c<span class="token punctuation">,</span> ok <span class="token operator">:=</span> stmt<span class="token punctuation">.</span>Clauses<span class="token punctuation">[</span>name<span class="token punctuation">]</span><span class="token punctuation">;</span> ok <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> firstClauseWritten <span class="token punctuation">&#123;</span>
+                stmt<span class="token punctuation">.</span><span class="token function">WriteByte</span><span class="token punctuation">(</span><span class="token char">' '</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+
+            firstClauseWritten <span class="token operator">=</span> <span class="token boolean">true</span>
+            <span class="token keyword">if</span> b<span class="token punctuation">,</span> ok <span class="token operator">:=</span> stmt<span class="token punctuation">.</span>DB<span class="token punctuation">.</span>ClauseBuilders<span class="token punctuation">[</span>name<span class="token punctuation">]</span><span class="token punctuation">;</span> ok <span class="token punctuation">&#123;</span>
+                <span class="token function">b</span><span class="token punctuation">(</span>c<span class="token punctuation">,</span> stmt<span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+                c<span class="token punctuation">.</span><span class="token function">Build</span><span class="token punctuation">(</span>stmt<span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>以 <code>query</code> 查询类为例，会遵循<code> &quot;SELECT&quot;-&gt;&quot;FROM&quot;-&gt;&quot;WHERE&quot;-&gt;&quot;GROUP BY&quot;-&gt;&quot;ORDER BY&quot;-&gt;&quot;LIMIT&quot;-&gt;&quot;FOR&quot;</code> 的顺序，依次从 <code>statement</code> 中获取对应的 <code>clause</code>，通过调用 <code>clause.Build</code> 方法，将 <code>sql</code> 本文组装到 <code>statement</code> 的 <code>SQL</code> 字段中.</p>
+<p>以 <code>query</code> 流程为例，拼接 <code>sql</code> 的流程入口可以参见 4.3 小节代码展示当中的 <code>BuildQuerySQL</code>(…) 方法.</p>
+<h1 id="3-初始化"><a href="#3-初始化" class="headerlink" title="3 初始化"></a>3 初始化</h1><p>本章中，我们将会以 <code>gorm.Open</code> 方法作为入口，详细展开创建 <code>gorm.DB</code> 实例的源码细节.</p>
+<h2 id="3-1-创建-db"><a href="#3-1-创建-db" class="headerlink" title="3.1 创建 db"></a>3.1 创建 db</h2><p><code>gorm.Open</code> 方法是创建 <code>DB</code> 实例的入口方法，其中包含如下几项核心步骤：</p>
+<ul>
+<li>完成 <code>gorm.Config</code> 配置的创建和注入</li>
+<li>完成连接器 <code>dialector</code> 的注入，本篇使用的是 <code>mysql</code> 版本</li>
+<li>完成 <code>callbacks</code> 中 <code>crud</code> 等几类 <code>processor</code> 的创建 ( 通过 <code>initializeCallbacks(...)</code> 方法 )</li>
+<li>完成 <code>connPool</code> 的创建以及各类 <code>processor fns</code> 函数的注册（ 通过<code> dialector.Initialize(...)</code> 方法 ）</li>
+<li>倘若启用了 <code>prepare</code> 模式，需要使用 <code>preparedStmtDB</code> 进行 <code>connPool</code> 的平替</li>
+<li>构造 <code>statement</code> 实例</li>
+<li>根据策略，决定是否通过 <code>ping</code> 请求测试连接</li>
+<li>返回创建好的 <code>db</code> 实例</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">Open</span><span class="token punctuation">(</span>dialector Dialector<span class="token punctuation">,</span> opts <span class="token operator">...</span>Option<span class="token punctuation">)</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    config <span class="token operator">:=</span> <span class="token operator">&amp;</span>Config<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...</span>
+    
+    <span class="token comment">// 表、列命名策略</span>
+    <span class="token keyword">if</span> config<span class="token punctuation">.</span>NamingStrategy <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        config<span class="token punctuation">.</span>NamingStrategy <span class="token operator">=</span> schema<span class="token punctuation">.</span>NamingStrategy<span class="token punctuation">&#123;</span>IdentifierMaxLength<span class="token punctuation">:</span> <span class="token number">64</span><span class="token punctuation">&#125;</span> <span class="token comment">// Default Identifier length is 64</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 连接器</span>
+    <span class="token keyword">if</span> dialector <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        config<span class="token punctuation">.</span>Dialector <span class="token operator">=</span> dialector
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...</span>
+
+    db <span class="token operator">=</span> <span class="token operator">&amp;</span>DB<span class="token punctuation">&#123;</span>Config<span class="token punctuation">:</span> config<span class="token punctuation">,</span> clone<span class="token punctuation">:</span> <span class="token number">1</span><span class="token punctuation">&#125;</span>
+    
+    <span class="token comment">// 初始化 callback 当中的各个 processor</span>
+    db<span class="token punctuation">.</span>callbacks <span class="token operator">=</span> <span class="token function">initializeCallbacks</span><span class="token punctuation">(</span>db<span class="token punctuation">)</span>
+
+
+    <span class="token comment">// ...</span>
+    <span class="token keyword">if</span> config<span class="token punctuation">.</span>Dialector <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 在其中会对 crud 各个方法的 callback 方法进行注册</span>
+        <span class="token comment">// 会对 db.connPool 进行初始化，通常情况下是 database/sql 库下 *sql.DB 的类型        </span>
+        err <span class="token operator">=</span> config<span class="token punctuation">.</span>Dialector<span class="token punctuation">.</span><span class="token function">Initialize</span><span class="token punctuation">(</span>db<span class="token punctuation">)</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 是否启用 prepare 模式</span>
+    <span class="token keyword">if</span> config<span class="token punctuation">.</span>PrepareStmt <span class="token punctuation">&#123;</span>
+        preparedStmt <span class="token operator">:=</span> <span class="token function">NewPreparedStmtDB</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>ConnPool<span class="token punctuation">)</span>
+        db<span class="token punctuation">.</span>cacheStore<span class="token punctuation">.</span><span class="token function">Store</span><span class="token punctuation">(</span>preparedStmtDBKey<span class="token punctuation">,</span> preparedStmt<span class="token punctuation">)</span>
+        <span class="token comment">// 倘若启用了 prepare 模式，会对 conn 进行替换</span>
+        db<span class="token punctuation">.</span>ConnPool <span class="token operator">=</span> preparedStmt
+    <span class="token punctuation">&#125;</span>
+ <span class="token comment">// 构造一个 statement 用于存储处理链路中的一些状态信息</span>
+    db<span class="token punctuation">.</span>Statement <span class="token operator">=</span> <span class="token operator">&amp;</span>Statement<span class="token punctuation">&#123;</span>
+        DB<span class="token punctuation">:</span>       db<span class="token punctuation">,</span>
+        ConnPool<span class="token punctuation">:</span> db<span class="token punctuation">.</span>ConnPool<span class="token punctuation">,</span>
+        Context<span class="token punctuation">:</span>  context<span class="token punctuation">.</span><span class="token function">Background</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        Clauses<span class="token punctuation">:</span>  <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span>clause<span class="token punctuation">.</span>Clause<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// 倘若未禁用 AutomaticPing，</span>
+    <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>config<span class="token punctuation">.</span>DisableAutomaticPing <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> pinger<span class="token punctuation">,</span> ok <span class="token operator">:=</span> db<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span> <span class="token function">Ping</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span> ok <span class="token punctuation">&#123;</span>
+            err <span class="token operator">=</span> pinger<span class="token punctuation">.</span><span class="token function">Ping</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-2-初始化-dialector"><a href="#3-2-初始化-dialector" class="headerlink" title="3.2 初始化 dialector"></a>3.2 初始化 dialector</h2><p><code>mysql</code> 是我们常用的数据库，对应于 <code>mysql</code> 版本的 <code>dialector</code> 实现类位于 <a target="_blank" rel="noopener" href="http://github.com/go-sql-driver/mysql">http://github.com/go-sql-driver/mysql</a> 包下. 使用方可以通过 <code>Open</code> 方法，将传入的 <code>dsn</code> 解析成配置，然后返回 <code>mysql</code> 版本的 <code>Dialector</code> 实例.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">package</span> mysql
+
+<span class="token keyword">func</span> <span class="token function">Open</span><span class="token punctuation">(</span>dsn <span class="token builtin">string</span><span class="token punctuation">)</span> gorm<span class="token punctuation">.</span>Dialector <span class="token punctuation">&#123;</span>
+    dsnConf<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">:=</span> mysql<span class="token punctuation">.</span><span class="token function">ParseDSN</span><span class="token punctuation">(</span>dsn<span class="token punctuation">)</span>
+    <span class="token keyword">return</span> <span class="token operator">&amp;</span>Dialector<span class="token punctuation">&#123;</span>Config<span class="token punctuation">:</span> <span class="token operator">&amp;</span>Config<span class="token punctuation">&#123;</span>DSN<span class="token punctuation">:</span> dsn<span class="token punctuation">,</span> DSNConfig<span class="token punctuation">:</span> dsnConf<span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>通过 <code>Dialector.Initialize</code> 方法完成连接器初始化操作，其中也会涉及到对连接池 <code>connPool</code> 的初构造，并通过 <code>callbacks.RegisterDefaultCallbacks</code> 方法完成 <code>crud</code> 四类 <code>processor</code> 当中 <code>fns</code> 的注册操作：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">import</span><span class="token punctuation">(</span>
+    <span class="token string">"github.com/go-sql-driver/mysql"</span>
+<span class="token punctuation">)</span>
+
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>dialector Dialector<span class="token punctuation">)</span> <span class="token function">Initialize</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> dialector<span class="token punctuation">.</span>DriverName <span class="token operator">==</span> <span class="token string">""</span> <span class="token punctuation">&#123;</span>
+        dialector<span class="token punctuation">.</span>DriverName <span class="token operator">=</span> <span class="token string">"mysql"</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// connPool 初始化</span>
+    <span class="token keyword">if</span> dialector<span class="token punctuation">.</span>Conn <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span>ConnPool <span class="token operator">=</span> dialector<span class="token punctuation">.</span>Conn
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span>ConnPool<span class="token punctuation">,</span> err <span class="token operator">=</span> sql<span class="token punctuation">.</span><span class="token function">Open</span><span class="token punctuation">(</span>dialector<span class="token punctuation">.</span>DriverName<span class="token punctuation">,</span> dialector<span class="token punctuation">.</span>DSN<span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> err
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...</span>
+    <span class="token comment">// register callbacks</span>
+    callbackConfig <span class="token operator">:=</span> <span class="token operator">&amp;</span>callbacks<span class="token punctuation">.</span>Config<span class="token punctuation">&#123;</span>
+        CreateClauses<span class="token punctuation">:</span> CreateClauses<span class="token punctuation">,</span>
+        QueryClauses<span class="token punctuation">:</span>  QueryClauses<span class="token punctuation">,</span>
+        UpdateClauses<span class="token punctuation">:</span> UpdateClauses<span class="token punctuation">,</span>
+        DeleteClauses<span class="token punctuation">:</span> DeleteClauses<span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token comment">// ...完成 crud 类操作 callback 函数的注册</span>
+    callbacks<span class="token punctuation">.</span><span class="token function">RegisterDefaultCallbacks</span><span class="token punctuation">(</span>db<span class="token punctuation">,</span> callbackConfig<span class="token punctuation">)</span>
+
+
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-3-注册-crud-函数"><a href="#3-3-注册-crud-函数" class="headerlink" title="3.3 注册 crud 函数"></a>3.3 注册 crud 函数</h2><p>对应于 <code>crud</code> 四类 <code>processor</code>，注册的函数链 <code>fns</code> 的内容和顺序是固定的.<br>相应的源码展示如下，对应的方法为 <code>RegisterDefaultCallbacks(...)</code>：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">RegisterDefaultCallbacks</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">,</span> config <span class="token operator">*</span>Config<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">//  创建类 create processor</span>
+    createCallback <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">Callback</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Create</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+ createCallback<span class="token punctuation">.</span><span class="token function">Match</span><span class="token punctuation">(</span>enableTransaction<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:begin_transaction"</span><span class="token punctuation">,</span> BeginTransaction<span class="token punctuation">)</span>
+    createCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:before_create"</span><span class="token punctuation">,</span> BeforeCreate<span class="token punctuation">)</span>
+    createCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:save_before_associations"</span><span class="token punctuation">,</span> <span class="token function">SaveBeforeAssociations</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    createCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:create"</span><span class="token punctuation">,</span> <span class="token function">Create</span><span class="token punctuation">(</span>config<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    createCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:save_after_associations"</span><span class="token punctuation">,</span> <span class="token function">SaveAfterAssociations</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    createCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:after_create"</span><span class="token punctuation">,</span> AfterCreate<span class="token punctuation">)</span>
+    createCallback<span class="token punctuation">.</span><span class="token function">Match</span><span class="token punctuation">(</span>enableTransaction<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:commit_or_rollback_transaction"</span><span class="token punctuation">,</span> CommitOrRollbackTransaction<span class="token punctuation">)</span>
+    createCallback<span class="token punctuation">.</span>Clauses <span class="token operator">=</span> config<span class="token punctuation">.</span>CreateClauses
+
+    <span class="token comment">// 查询类 query processor</span>
+    queryCallback <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">Callback</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Query</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    queryCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:query"</span><span class="token punctuation">,</span> Query<span class="token punctuation">)</span>
+    queryCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:preload"</span><span class="token punctuation">,</span> Preload<span class="token punctuation">)</span>
+    queryCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:after_query"</span><span class="token punctuation">,</span> AfterQuery<span class="token punctuation">)</span>
+    queryCallback<span class="token punctuation">.</span>Clauses <span class="token operator">=</span> config<span class="token punctuation">.</span>QueryClauses
+
+    <span class="token comment">// 删除类 delete processor</span>
+    deleteCallback <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">Callback</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Delete</span><span class="token punctuation">(</span><span class="token punctuation">)</span>    deleteCallback<span class="token punctuation">.</span><span class="token function">Match</span><span class="token punctuation">(</span>enableTransaction<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:begin_transaction"</span><span class="token punctuation">,</span> BeginTransaction<span class="token punctuation">)</span>
+    deleteCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:before_delete"</span><span class="token punctuation">,</span> BeforeDelete<span class="token punctuation">)</span>
+    deleteCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:delete_before_associations"</span><span class="token punctuation">,</span> DeleteBeforeAssociations<span class="token punctuation">)</span>
+    deleteCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:delete"</span><span class="token punctuation">,</span> <span class="token function">Delete</span><span class="token punctuation">(</span>config<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    deleteCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:after_delete"</span><span class="token punctuation">,</span> AfterDelete<span class="token punctuation">)</span>
+deleteCallback<span class="token punctuation">.</span><span class="token function">Match</span><span class="token punctuation">(</span>enableTransaction<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:commit_or_rollback_transaction"</span><span class="token punctuation">,</span> CommitOrRollbackTransaction<span class="token punctuation">)</span>
+    deleteCallback<span class="token punctuation">.</span>Clauses <span class="token operator">=</span> config<span class="token punctuation">.</span>DeleteClauses
+
+  <span class="token comment">// 更新类 update processor</span>
+    updateCallback <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">Callback</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Update</span><span class="token punctuation">(</span><span class="token punctuation">)</span>    updateCallback<span class="token punctuation">.</span><span class="token function">Match</span><span class="token punctuation">(</span>enableTransaction<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:begin_transaction"</span><span class="token punctuation">,</span> BeginTransaction<span class="token punctuation">)</span>
+    updateCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:setup_reflect_value"</span><span class="token punctuation">,</span> SetupUpdateReflectValue<span class="token punctuation">)</span>
+    updateCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:before_update"</span><span class="token punctuation">,</span> BeforeUpdate<span class="token punctuation">)</span>
+    updateCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:save_before_associations"</span><span class="token punctuation">,</span> <span class="token function">SaveBeforeAssociations</span><span class="token punctuation">(</span><span class="token boolean">false</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    updateCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:update"</span><span class="token punctuation">,</span> <span class="token function">Update</span><span class="token punctuation">(</span>config<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    updateCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:save_after_associations"</span><span class="token punctuation">,</span> <span class="token function">SaveAfterAssociations</span><span class="token punctuation">(</span><span class="token boolean">false</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    updateCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:after_update"</span><span class="token punctuation">,</span> AfterUpdate<span class="token punctuation">)</span>    updateCallback<span class="token punctuation">.</span><span class="token function">Match</span><span class="token punctuation">(</span>enableTransaction<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:commit_or_rollback_transaction"</span><span class="token punctuation">,</span> CommitOrRollbackTransaction<span class="token punctuation">)</span>
+    updateCallback<span class="token punctuation">.</span>Clauses <span class="token operator">=</span> config<span class="token punctuation">.</span>UpdateClauses
+
+    <span class="token comment">// row 类</span>
+    rowCallback <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">Callback</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Row</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    rowCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:row"</span><span class="token punctuation">,</span> RowQuery<span class="token punctuation">)</span>
+    rowCallback<span class="token punctuation">.</span>Clauses <span class="token operator">=</span> config<span class="token punctuation">.</span>QueryClauses
+
+    <span class="token comment">// raw 类</span>
+    rawCallback <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">Callback</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Raw</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    rawCallback<span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span><span class="token string">"gorm:raw"</span><span class="token punctuation">,</span> RawExec<span class="token punctuation">)</span>
+    rawCallback<span class="token punctuation">.</span>Clauses <span class="token operator">=</span> config<span class="token punctuation">.</span>QueryClauses
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>注册某个特定 <code>fn</code> 函数的入口是 <code>processor.Register</code> 方法，对应的核心源码链路展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>p <span class="token operator">*</span>processor<span class="token punctuation">)</span> <span class="token function">Register</span><span class="token punctuation">(</span>name <span class="token builtin">string</span><span class="token punctuation">,</span> fn <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token operator">*</span>DB<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token punctuation">(</span><span class="token operator">&amp;</span>callback<span class="token punctuation">&#123;</span>processor<span class="token punctuation">:</span> p<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Register</span><span class="token punctuation">(</span>name<span class="token punctuation">,</span> fn<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>callback<span class="token punctuation">)</span> <span class="token function">Register</span><span class="token punctuation">(</span>name <span class="token builtin">string</span><span class="token punctuation">,</span> fn <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token operator">*</span>DB<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    c<span class="token punctuation">.</span>name <span class="token operator">=</span> name
+    c<span class="token punctuation">.</span>handler <span class="token operator">=</span> fn
+    c<span class="token punctuation">.</span>processor<span class="token punctuation">.</span>callbacks <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span>c<span class="token punctuation">.</span>processor<span class="token punctuation">.</span>callbacks<span class="token punctuation">,</span> c<span class="token punctuation">)</span>
+    <span class="token keyword">return</span> c<span class="token punctuation">.</span>processor<span class="token punctuation">.</span><span class="token function">compile</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>p <span class="token operator">*</span>processor<span class="token punctuation">)</span> <span class="token function">compile</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> callbacks <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token operator">*</span>callback
+    <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> callback <span class="token operator">:=</span> <span class="token keyword">range</span> p<span class="token punctuation">.</span>callbacks <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> callback<span class="token punctuation">.</span>match <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token operator">||</span> callback<span class="token punctuation">.</span><span class="token function">match</span><span class="token punctuation">(</span>p<span class="token punctuation">.</span>db<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            callbacks <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span>callbacks<span class="token punctuation">,</span> callback<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    p<span class="token punctuation">.</span>callbacks <span class="token operator">=</span> callbacks
+    <span class="token keyword">if</span> p<span class="token punctuation">.</span>fns<span class="token punctuation">,</span> err <span class="token operator">=</span> <span class="token function">sortCallbacks</span><span class="token punctuation">(</span>p<span class="token punctuation">.</span>callbacks<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        p<span class="token punctuation">.</span>db<span class="token punctuation">.</span>Logger<span class="token punctuation">.</span><span class="token function">Error</span><span class="token punctuation">(</span>context<span class="token punctuation">.</span><span class="token function">Background</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"Got error when compile callbacks, got %v"</span><span class="token punctuation">,</span> err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token function">sortCallbacks</span><span class="token punctuation">(</span>cs <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token operator">*</span>callback<span class="token punctuation">)</span> <span class="token punctuation">(</span>fns <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">func</span><span class="token punctuation">(</span><span class="token operator">*</span>DB<span class="token punctuation">)</span><span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> <span class="token punctuation">(</span>
+        names<span class="token punctuation">,</span> sorted <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+        sortCallback  <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token operator">*</span>callback<span class="token punctuation">)</span> <span class="token builtin">error</span>
+    <span class="token punctuation">)</span>
+    
+    <span class="token comment">// ...</span>
+    sortCallback <span class="token operator">=</span> <span class="token keyword">func</span><span class="token punctuation">(</span>c <span class="token operator">*</span>callback<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token comment">// if current callback haven't been sorted, append it to last</span>
+        <span class="token keyword">if</span> <span class="token function">getRIndex</span><span class="token punctuation">(</span>sorted<span class="token punctuation">,</span> c<span class="token punctuation">.</span>name<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token operator">-</span><span class="token number">1</span> <span class="token punctuation">&#123;</span>
+            sorted <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span>sorted<span class="token punctuation">,</span> c<span class="token punctuation">.</span>name<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> c <span class="token operator">:=</span> <span class="token keyword">range</span> cs <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> err <span class="token operator">=</span> <span class="token function">sortCallback</span><span class="token punctuation">(</span>c<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> name <span class="token operator">:=</span> <span class="token keyword">range</span> sorted <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> idx <span class="token operator">:=</span> <span class="token function">getRIndex</span><span class="token punctuation">(</span>names<span class="token punctuation">,</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token operator">!</span>cs<span class="token punctuation">[</span>idx<span class="token punctuation">]</span><span class="token punctuation">.</span>remove <span class="token punctuation">&#123;</span>
+            fns <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span>fns<span class="token punctuation">,</span> cs<span class="token punctuation">[</span>idx<span class="token punctuation">]</span><span class="token punctuation">.</span>handler<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="4-查询"><a href="#4-查询" class="headerlink" title="4 查询"></a>4 查询</h1><p>接下来以 <code>db.First</code> 方法作为入口，展示数据库查询的方法链路：</p>
+<h2 id="4-1-入口"><a href="#4-1-入口" class="headerlink" title="4.1 入口"></a>4.1 入口</h2><p>在 <code>db.First</code> 方法当中：</p>
+<ul>
+<li>遵循 <code>First</code> 的语义，通过 <code>limit</code> 和 <code>order</code> 追加 <code>clause</code>，限制只取满足条件且主键最小的一笔数据</li>
+<li>追加用户传入的一系列 <code>condition</code>，进行 <code>clause</code> 追加</li>
+<li>在 <code>First、Take、Last</code> 等方法中，会设置 <code>RaiseErrorOnNotFound</code> 标识为 <code>true</code>，倘若未找到记录，则会抛出 <code>ErrRecordNotFound</code> 错误</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> ErrRecordNotFound <span class="token operator">=</span> logger<span class="token punctuation">.</span>ErrRecordNotFound<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<ul>
+<li>设置 <code>statement</code> 中的 <code>dest</code> 为用户传入的 <code>dest</code>，作为反序列化响应结果的对象实例</li>
+<li>获取 <code>query</code> 类型的 <code>processor</code>，调用 <code>Execute</code> 方法执行其中的 <code>fn</code> 函数链，完成 <code>query</code> 操作</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">First</span><span class="token punctuation">(</span>dest <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> conds <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>tx <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// order by id limit 1</span>
+    tx <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">Limit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Order</span><span class="token punctuation">(</span>clause<span class="token punctuation">.</span>OrderByColumn<span class="token punctuation">&#123;</span>
+        Column<span class="token punctuation">:</span> clause<span class="token punctuation">.</span>Column<span class="token punctuation">&#123;</span>Table<span class="token punctuation">:</span> clause<span class="token punctuation">.</span>CurrentTable<span class="token punctuation">,</span> Name<span class="token punctuation">:</span> clause<span class="token punctuation">.</span>PrimaryKey<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+    <span class="token comment">// append clauses</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>conds<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> exprs <span class="token operator">:=</span> tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">BuildCondition</span><span class="token punctuation">(</span>conds<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> conds<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token operator">...</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token function">len</span><span class="token punctuation">(</span>exprs<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClause</span><span class="token punctuation">(</span>clause<span class="token punctuation">.</span>Where<span class="token punctuation">&#123;</span>Exprs<span class="token punctuation">:</span> exprs<span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// set RaiseErrorOnNotFound</span>
+    tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>RaiseErrorOnNotFound <span class="token operator">=</span> <span class="token boolean">true</span>
+    <span class="token comment">// set dest</span>
+    tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Dest <span class="token operator">=</span> dest
+    <span class="token comment">// execute ...</span>
+    <span class="token keyword">return</span> tx<span class="token punctuation">.</span>callbacks<span class="token punctuation">.</span><span class="token function">Query</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Execute</span><span class="token punctuation">(</span>tx<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="4-2-添加条件"><a href="#4-2-添加条件" class="headerlink" title="4.2 添加条件"></a>4.2 添加条件</h2><p>执行查询类操作时，通常会通过链式调用的方式，传入一些查询限制条件，比如 <code>Where、Group By、Order、Limit</code> 之类. 我们以 <code>Limit</code> 为例，进行展开介绍：</p>
+<p>首先调用 <code>db.getInstance()</code> 方法，克隆出一份 <code>DB</code> 会话实例<br>调用 <code>statement.AddClause</code> 方法，将 <code>limit</code> 条件追加到 <code>statement</code> 的 <code>Clauses map</code> 中</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Limit</span><span class="token punctuation">(</span>limit <span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>tx <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    tx <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">getInstance</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClause</span><span class="token punctuation">(</span>clause<span class="token punctuation">.</span>Limit<span class="token punctuation">&#123;</span>Limit<span class="token punctuation">:</span> <span class="token operator">&amp;</span>limit<span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>stmt <span class="token operator">*</span>Statement<span class="token punctuation">)</span> <span class="token function">AddClause</span><span class="token punctuation">(</span>v clause<span class="token punctuation">.</span>Interface<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    name <span class="token operator">:=</span> v<span class="token punctuation">.</span><span class="token function">Name</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    c <span class="token operator">:=</span> stmt<span class="token punctuation">.</span>Clauses<span class="token punctuation">[</span>name<span class="token punctuation">]</span>
+    c<span class="token punctuation">.</span>Name <span class="token operator">=</span> name
+    v<span class="token punctuation">.</span><span class="token function">MergeClause</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>c<span class="token punctuation">)</span>
+    stmt<span class="token punctuation">.</span>Clauses<span class="token punctuation">[</span>name<span class="token punctuation">]</span> <span class="token operator">=</span> c   
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="4-3-核心方法"><a href="#4-3-核心方法" class="headerlink" title="4.3 核心方法"></a>4.3 核心方法</h2><p>在 <code>query</code> 类型 <code>processor</code> 的 <code>fns</code> 函数链中，最主要的函数是 <code>Query</code>，其中涉及的核心步骤包括：</p>
+<ul>
+<li>调用 <code>BuildQuerySQL(...)</code> 方法，根据传入的 <code>clauses</code> 组装生成 <code>sql</code></li>
+<li>调用 <code>connPool.QueryContext(...)</code>，完成查询类 <code>sql</code> 的执行，返回查到的行数据 <code>rows</code>（非 <code>prepare</code> 模式下，此处会对接 <code>database/sql</code> 库，走到 <code>sql.DB.QueryContext(...)</code> 方法中）</li>
+<li>调用 <code>gorm.Scan()</code> 方法，将结果数据反序列化到 <code>statement</code> 的 <code>dest</code> 当中</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">Query</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> db<span class="token punctuation">.</span>Error <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 拼接生成 sql</span>
+        <span class="token function">BuildQuerySQL</span><span class="token punctuation">(</span>db<span class="token punctuation">)</span>
+
+        <span class="token keyword">if</span> <span class="token operator">!</span>db<span class="token punctuation">.</span>DryRun <span class="token operator">&amp;&amp;</span> db<span class="token punctuation">.</span>Error <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            rows<span class="token punctuation">,</span> err <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token function">QueryContext</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">String</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Vars<span class="token operator">...</span><span class="token punctuation">)</span>
+            <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+                <span class="token keyword">return</span>
+            <span class="token punctuation">&#125;</span>
+            <span class="token keyword">defer</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+                db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>rows<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            gorm<span class="token punctuation">.</span><span class="token function">Scan</span><span class="token punctuation">(</span>rows<span class="token punctuation">,</span> db<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="4-4-扫描数据"><a href="#4-4-扫描数据" class="headerlink" title="4.4 扫描数据"></a>4.4 扫描数据</h2><p>接下来展示一下，<code>gorm.Scan()</code> 方法，其作用是将查询结果数据反序列化到 <code>dest</code> 当中：</p>
+<p>通过对 <code>statement</code> 中的 <code>dest</code> 进行分类，采取的不同的处理方式<br>核心方法都是通过 <code>rows.Scan(...)</code> 方法，将响应数据反序列化到 <code>dest</code> 当中<br>调用 <code>rows.Err()</code> 方法，抛出请求过程中遇到的错误<br>倘若启用了 <code>RaiseErrorOnNotFound</code> 模式且查询到的行数为 <code>0</code>，则抛出错误 ErrRecordNotFound<br>对应源码展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Scan 方法将 rows 中的数据扫描解析到 db statement 中的 dest 当中</span>
+<span class="token comment">// 其中 rows 通常为 database/sql 下的 *Rows 类型</span>
+<span class="token comment">// 扫描数据的核心在于调用了 rows.Scan 方法</span>
+<span class="token keyword">func</span> <span class="token function">Scan</span><span class="token punctuation">(</span>rows Rows<span class="token punctuation">,</span> db <span class="token operator">*</span>DB<span class="token punctuation">,</span> mode ScanMode<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> <span class="token punctuation">(</span>
+        columns<span class="token punctuation">,</span> <span class="token boolean">_</span>          <span class="token operator">=</span> rows<span class="token punctuation">.</span><span class="token function">Columns</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        values              <span class="token operator">=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token function">len</span><span class="token punctuation">(</span>columns<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        initialized         <span class="token operator">=</span> mode<span class="token operator">&amp;</span>ScanInitialized <span class="token operator">!=</span> <span class="token number">0</span>
+        update              <span class="token operator">=</span> mode<span class="token operator">&amp;</span>ScanUpdate <span class="token operator">!=</span> <span class="token number">0</span>
+        onConflictDonothing <span class="token operator">=</span> mode<span class="token operator">&amp;</span>ScanOnConflictDoNothing <span class="token operator">!=</span> <span class="token number">0</span>
+    <span class="token punctuation">)</span>
+    <span class="token comment">// 影响的行数</span>
+    db<span class="token punctuation">.</span>RowsAffected <span class="token operator">=</span> <span class="token number">0</span>
+    <span class="token comment">// 根据 dest 类型进行断言分配</span>
+    <span class="token keyword">switch</span> dest <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Dest<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token keyword">type</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>        
+    <span class="token keyword">case</span> <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> initialized <span class="token operator">||</span> rows<span class="token punctuation">.</span><span class="token function">Next</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// ...</span>
+            db<span class="token punctuation">.</span>RowsAffected<span class="token operator">++</span>
+            <span class="token comment">// 扫描数据的核心在于，调用 rows</span>
+            db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>rows<span class="token punctuation">.</span><span class="token function">Scan</span><span class="token punctuation">(</span>values<span class="token operator">...</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token comment">// ...</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token keyword">case</span> <span class="token operator">*</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">:</span>
+        columnTypes<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">:=</span> rows<span class="token punctuation">.</span><span class="token function">ColumnTypes</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">for</span> initialized <span class="token operator">||</span> rows<span class="token punctuation">.</span><span class="token function">Next</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// ...</span>
+            db<span class="token punctuation">.</span>RowsAffected<span class="token operator">++</span>
+       
+            db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>rows<span class="token punctuation">.</span><span class="token function">Scan</span><span class="token punctuation">(</span>values<span class="token operator">...</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+
+            mapValue <span class="token operator">:=</span> <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+            <span class="token function">scanIntoMap</span><span class="token punctuation">(</span>mapValue<span class="token punctuation">,</span> values<span class="token punctuation">,</span> columns<span class="token punctuation">)</span>
+            <span class="token operator">*</span>dest <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span><span class="token operator">*</span>dest<span class="token punctuation">,</span> mapValue<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token keyword">case</span> <span class="token operator">*</span><span class="token builtin">int</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">int8</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">int16</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">int32</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">int64</span><span class="token punctuation">,</span>
+        <span class="token operator">*</span><span class="token builtin">uint</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">uint8</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">uint16</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">uint32</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">uint64</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">uintptr</span><span class="token punctuation">,</span>
+        <span class="token operator">*</span><span class="token builtin">float32</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">float64</span><span class="token punctuation">,</span>
+        <span class="token operator">*</span><span class="token builtin">bool</span><span class="token punctuation">,</span> <span class="token operator">*</span><span class="token builtin">string</span><span class="token punctuation">,</span> <span class="token operator">*</span>time<span class="token punctuation">.</span>Time<span class="token punctuation">,</span>
+        <span class="token operator">*</span>sql<span class="token punctuation">.</span>NullInt32<span class="token punctuation">,</span> <span class="token operator">*</span>sql<span class="token punctuation">.</span>NullInt64<span class="token punctuation">,</span> <span class="token operator">*</span>sql<span class="token punctuation">.</span>NullFloat64<span class="token punctuation">,</span>
+        <span class="token operator">*</span>sql<span class="token punctuation">.</span>NullBool<span class="token punctuation">,</span> <span class="token operator">*</span>sql<span class="token punctuation">.</span>NullString<span class="token punctuation">,</span> <span class="token operator">*</span>sql<span class="token punctuation">.</span>NullTime<span class="token punctuation">:</span>
+        <span class="token keyword">for</span> initialized <span class="token operator">||</span> rows<span class="token punctuation">.</span><span class="token function">Next</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            initialized <span class="token operator">=</span> <span class="token boolean">false</span>
+            db<span class="token punctuation">.</span>RowsAffected<span class="token operator">++</span>
+            db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>rows<span class="token punctuation">.</span><span class="token function">Scan</span><span class="token punctuation">(</span>dest<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token keyword">default</span><span class="token punctuation">:</span>
+        <span class="token comment">// ...</span>
+        <span class="token comment">// 根据 dest 类型进行前处理 ...</span>
+        db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>rows<span class="token punctuation">.</span><span class="token function">Scan</span><span class="token punctuation">(</span>dest<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token comment">// 倘若 rows 中存在错误，需要抛出</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> rows<span class="token punctuation">.</span><span class="token function">Err</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token operator">&amp;&amp;</span> err <span class="token operator">!=</span> db<span class="token punctuation">.</span>Error <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 在 first、last、take 模式下，RaiseErrorOnNotFound 标识为 true，在没有查找到数据时，会抛出 ErrRecordNotFound 错误</span>
+    <span class="token keyword">if</span> db<span class="token punctuation">.</span>RowsAffected <span class="token operator">==</span> <span class="token number">0</span> <span class="token operator">&amp;&amp;</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>RaiseErrorOnNotFound <span class="token operator">&amp;&amp;</span> db<span class="token punctuation">.</span>Error <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>ErrRecordNotFound<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="5-创建"><a href="#5-创建" class="headerlink" title="5 创建"></a>5 创建</h1><p>本章以 <code>db.Create(...) </code> 方法为入口，展开介绍一下创建数据记录的流程.</p>
+<h2 id="5-1-入口"><a href="#5-1-入口" class="headerlink" title="5.1 入口"></a>5.1 入口</h2><p>创建数据记录操作主要通过调用 <code>gorm.DB</code> 的 <code>Create</code> 方法完成，其包括如下核心步骤：</p>
+<ul>
+<li>通过<code> db.getInstance()</code> 克隆出一个 <code>DB</code> 会话实例</li>
+<li>设置 <code>statement</code> 中的 <code>dest</code> 为用户传入的 <code>dest</code></li>
+<li>获取到 <code>create</code> 类型的 <code>processor</code></li>
+<li>调用 <code>processor</code> 的 <code>Execute</code> 方法，遍历执行 <code>fns</code> 函数链，完成创建操作</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Create inserts value, returning the inserted data's primary key in value's id</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Create</span><span class="token punctuation">(</span>value <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>tx <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 克隆 db 会话实例</span>
+    tx <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">getInstance</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 设置 dest</span>
+    tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Dest <span class="token operator">=</span> value
+    <span class="token comment">// 执行 create processor</span>
+    <span class="token keyword">return</span> tx<span class="token punctuation">.</span>callbacks<span class="token punctuation">.</span><span class="token function">Create</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Execute</span><span class="token punctuation">(</span>tx<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="5-2-核心方法"><a href="#5-2-核心方法" class="headerlink" title="5.2 核心方法"></a>5.2 核心方法</h2><p>在 <code>create</code> 类型 <code>processor</code> 的 <code>fns</code> 函数链中，最主要的执行函数就是 <code>Create</code>，其中核心步骤包括：</p>
+<ul>
+<li>调用 <code>statement.Build(...)</code> 方法，生成 <code>sql</code></li>
+<li>调用 <code>connPool.ExecContext(...)</code> 方法，请求 <code>mysql</code> 服务端执行 <code>sql</code>（默认情况下，此处使用 <code>database/sql</code> 标准库的 <code>db.ExecContext(...)</code> 方法）</li>
+<li>调用 <code>result.RowsAffected()</code>，获取到本次创建操作影响的数据行数</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Create create hook</span>
+<span class="token keyword">func</span> <span class="token function">Create</span><span class="token punctuation">(</span>config <span class="token operator">*</span>Config<span class="token punctuation">)</span> <span class="token keyword">func</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    supportReturning <span class="token operator">:=</span> utils<span class="token punctuation">.</span><span class="token function">Contains</span><span class="token punctuation">(</span>config<span class="token punctuation">.</span>CreateClauses<span class="token punctuation">,</span> <span class="token string">"RETURNING"</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 生成 sql</span>
+        <span class="token keyword">if</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">Len</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">Grow</span><span class="token punctuation">(</span><span class="token number">180</span><span class="token punctuation">)</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClauseIfNotExists</span><span class="token punctuation">(</span>clause<span class="token punctuation">.</span>Insert<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClause</span><span class="token punctuation">(</span><span class="token function">ConvertToCreateValues</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Statement<span class="token punctuation">)</span><span class="token punctuation">)</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">Build</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>BuildClauses<span class="token operator">...</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// ... 执行 sql</span>
+        result<span class="token punctuation">,</span> err <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token function">ExecContext</span><span class="token punctuation">(</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">String</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Vars<span class="token operator">...</span><span class="token punctuation">,</span>
+        <span class="token punctuation">)</span>
+        <span class="token comment">// ... 获取影响的行数</span>
+        db<span class="token punctuation">.</span>RowsAffected<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">=</span> result<span class="token punctuation">.</span><span class="token function">RowsAffected</span><span class="token punctuation">(</span><span class="token punctuation">)</span>        
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="6-删除"><a href="#6-删除" class="headerlink" title="6 删除"></a>6 删除</h1><p>接下来是数据记录删除流程，以 <code>db.Delete</code> 方法作为走读入口：</p>
+<h2 id="6-1-入口"><a href="#6-1-入口" class="headerlink" title="6.1 入口"></a>6.1 入口</h2><p>在 <code>db.Delete</code> 方法中，核心步骤包括：</p>
+<ul>
+<li>通过 <code>db.getInstance()</code> 方法获取 <code>db</code> 的克隆实例</li>
+<li>通过 <code>statement.AddClause(...)</code> 方法追加使用方传入的条件 <code>condition</code></li>
+<li>设置 <code>statement dest</code> 为使用方传入的 <code>value</code></li>
+<li>获取 <code>delete</code> 类型的 <code>processor</code></li>
+<li>执行 <code>processor.Execute(...)</code> 方法，遍历调用 <code>fns</code> 函数链</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Delete</span><span class="token punctuation">(</span>value <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> conds <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>tx <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    tx <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">getInstance</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>conds<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> exprs <span class="token operator">:=</span> tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">BuildCondition</span><span class="token punctuation">(</span>conds<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> conds<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token operator">...</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token function">len</span><span class="token punctuation">(</span>exprs<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClause</span><span class="token punctuation">(</span>clause<span class="token punctuation">.</span>Where<span class="token punctuation">&#123;</span>Exprs<span class="token punctuation">:</span> exprs<span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Dest <span class="token operator">=</span> value
+    <span class="token keyword">return</span> tx<span class="token punctuation">.</span>callbacks<span class="token punctuation">.</span><span class="token function">Delete</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Execute</span><span class="token punctuation">(</span>tx<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="6-2-核心方法"><a href="#6-2-核心方法" class="headerlink" title="6.2 核心方法"></a>6.2 核心方法</h2><p>在 <code>delete</code> 类型的 <code>processor</code> 的 <code>fns</code> 函数链中，最核心的函数是 <code>Delete</code>，其中的核心步骤包括：</p>
+<ul>
+<li>调用 <code>statement.Build(...)</code> 方法，生成 <code>sql</code></li>
+<li>倘若未启用 <code>AllowGlobalUpdate</code> 模式，则会校验使用方是否设置了 <code>where</code> 条件，未设置会抛出 <code>gorm.ErrMissingWhereClause</code> 错误（对应 <code>checkMissingWhereConditions()</code> 方法）</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> ErrMissingWhereClause <span class="token operator">=</span> errors<span class="token punctuation">.</span><span class="token function">New</span><span class="token punctuation">(</span><span class="token string">"WHERE conditions required"</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<ul>
+<li>调用 <code>connPool.ExecContext(...)</code> 方法，执行删除操作（默认使用的是标准库 <code>database/sql</code> 中的 <code>db.ExecContxt(...)</code> 方法）</li>
+<li>调用 <code>result.RowsAffected()</code> 方法，获取本次删除操作影响的数据行数</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">Delete</span><span class="token punctuation">(</span>config <span class="token operator">*</span>Config<span class="token punctuation">)</span> <span class="token keyword">func</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    supportReturning <span class="token operator">:=</span> utils<span class="token punctuation">.</span><span class="token function">Contains</span><span class="token punctuation">(</span>config<span class="token punctuation">.</span>DeleteClauses<span class="token punctuation">,</span> <span class="token string">"RETURNING"</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+       <span class="token comment">// ...</span>
+        <span class="token keyword">if</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Schema <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> c <span class="token operator">:=</span> <span class="token keyword">range</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Schema<span class="token punctuation">.</span>DeleteClauses <span class="token punctuation">&#123;</span>
+                db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClause</span><span class="token punctuation">(</span>c<span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// 生成 sql</span>
+        <span class="token keyword">if</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">Len</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">Grow</span><span class="token punctuation">(</span><span class="token number">100</span><span class="token punctuation">)</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClauseIfNotExists</span><span class="token punctuation">(</span>clause<span class="token punctuation">.</span>Delete<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+
+            <span class="token comment">// ...</span>
+
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClauseIfNotExists</span><span class="token punctuation">(</span>clause<span class="token punctuation">.</span>From<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">Build</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>BuildClauses<span class="token operator">...</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// ...</span>
+
+        <span class="token function">checkMissingWhereConditions</span><span class="token punctuation">(</span>db<span class="token punctuation">)</span>
+
+        <span class="token comment">// ...</span>
+        <span class="token keyword">if</span> <span class="token operator">!</span>db<span class="token punctuation">.</span>DryRun <span class="token operator">&amp;&amp;</span> db<span class="token punctuation">.</span>Error <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// ...</span>
+            result<span class="token punctuation">,</span> err <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token function">ExecContext</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">String</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Vars<span class="token operator">...</span><span class="token punctuation">)</span>
+            <span class="token keyword">if</span> db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                db<span class="token punctuation">.</span>RowsAffected<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">=</span> result<span class="token punctuation">.</span><span class="token function">RowsAffected</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<p><code>checkMissingWhereConditions</code> 方法的源码如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">checkMissingWhereConditions</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 倘若 AllowGlobalUpdate 标识不为 true 且 error 为空，则需要对 where 条件进行校验</span>
+    <span class="token keyword">if</span> <span class="token operator">!</span>db<span class="token punctuation">.</span>AllowGlobalUpdate <span class="token operator">&amp;&amp;</span> db<span class="token punctuation">.</span>Error <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        where<span class="token punctuation">,</span> withCondition <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Clauses<span class="token punctuation">[</span><span class="token string">"WHERE"</span><span class="token punctuation">]</span>
+        <span class="token comment">// ...</span>
+        <span class="token comment">// 不存在 where 条件，则需要抛出错误</span>
+        <span class="token keyword">if</span> <span class="token operator">!</span>withCondition <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>gorm<span class="token punctuation">.</span>ErrMissingWhereClause<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token keyword">return</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="7-更新"><a href="#7-更新" class="headerlink" title="7 更新"></a>7 更新</h1><p>下面展示的是通过 <code>gorm</code> 更新数据的流程，以 <code>db.Update(...)</code> 方法作为源码走读的入口：</p>
+<h2 id="7-1-入口"><a href="#7-1-入口" class="headerlink" title="7.1 入口"></a>7.1 入口</h2><p>在 <code>db.Update</code> 方法中，核心步骤包括：</p>
+<ul>
+<li>通过 <code>db.getInstance()</code> 方法获取 <code>db</code> 的克隆实例</li>
+<li>设置 <code>statement dest</code> 为使用方传入的 <code>value</code></li>
+<li>获取 <code>update</code> 类型的 <code>processor</code></li>
+<li>执行 <code>processor.Execute(...)</code> 方法，遍历调用 <code>fns</code> 函数链</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Updates</span><span class="token punctuation">(</span>values <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>tx <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    tx <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">getInstance</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Dest <span class="token operator">=</span> values
+    <span class="token keyword">return</span> tx<span class="token punctuation">.</span>callbacks<span class="token punctuation">.</span><span class="token function">Update</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Execute</span><span class="token punctuation">(</span>tx<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="7-2-核心方法"><a href="#7-2-核心方法" class="headerlink" title="7.2 核心方法"></a>7.2 核心方法</h2><p>在 <code>update</code> 类型 <code>processor</code> 的 <code>fns</code> 函数链中，最核心的函数就是 <code>Update</code>，其中核心步骤包括：</p>
+<ul>
+<li>调用 <code>statement.Build(...)</code> 方法，生成 <code>sql</code></li>
+<li>和 <code>Delete</code> 流程类似，倘若未启用 <code>AllowGlobalUpdate</code> 模式，则会校验使用方是否设置了 <code>where</code> 条件，未设置会抛出 <code>gorm.ErrMissingWhereClause</code> 错误</li>
+<li>调用 <code>connPool.ExecContext(...)</code> 方法，执行 <code>sql</code>（默认情况下，此处会使用 <code>database/sql</code> 标准库的 <code>db.ExecContext(...)</code> 方法）</li>
+<li>调用 <code>result.RowsAffected()</code> 方法，获取到本次更新操作影响的行数</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Update update hook</span>
+<span class="token keyword">func</span> <span class="token function">Update</span><span class="token punctuation">(</span>config <span class="token operator">*</span>Config<span class="token punctuation">)</span> <span class="token keyword">func</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    supportReturning <span class="token operator">:=</span> utils<span class="token punctuation">.</span><span class="token function">Contains</span><span class="token punctuation">(</span>config<span class="token punctuation">.</span>UpdateClauses<span class="token punctuation">,</span> <span class="token string">"RETURNING"</span><span class="token punctuation">)</span>
+
+
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>db <span class="token operator">*</span>gorm<span class="token punctuation">.</span>DB<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">if</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Schema <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> c <span class="token operator">:=</span> <span class="token keyword">range</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Schema<span class="token punctuation">.</span>UpdateClauses <span class="token punctuation">&#123;</span>
+                db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClause</span><span class="token punctuation">(</span>c<span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>  
+        <span class="token comment">// 生成 sql</span>
+        <span class="token keyword">if</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">Len</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">Grow</span><span class="token punctuation">(</span><span class="token number">180</span><span class="token punctuation">)</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">AddClauseIfNotExists</span><span class="token punctuation">(</span>clause<span class="token punctuation">.</span>Update<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+            <span class="token comment">// ...</span>
+            db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span><span class="token function">Build</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>BuildClauses<span class="token operator">...</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+        
+        <span class="token comment">// ... 校验 where 条件</span>
+        <span class="token function">checkMissingWhereConditions</span><span class="token punctuation">(</span>db<span class="token punctuation">)</span>
+        <span class="token keyword">if</span> <span class="token operator">!</span>db<span class="token punctuation">.</span>DryRun <span class="token operator">&amp;&amp;</span> db<span class="token punctuation">.</span>Error <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// ... 执行 sql</span>
+            result<span class="token punctuation">,</span> err <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token function">ExecContext</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>SQL<span class="token punctuation">.</span><span class="token function">String</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Vars<span class="token operator">...</span><span class="token punctuation">)</span>
+
+            <span class="token keyword">if</span> db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                <span class="token comment">// 获取影响的行数</span>
+                db<span class="token punctuation">.</span>RowsAffected<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">=</span> result<span class="token punctuation">.</span><span class="token function">RowsAffected</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>       
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="8-事务"><a href="#8-事务" class="headerlink" title="8 事务"></a>8 事务</h1><p>通过 <code>gorm</code> 框架同样能够很方便地使用事务相关的功能：</p>
+<ul>
+<li>调用 <code>db.Transaction(...)</code> 方法</li>
+<li>传入闭包函数 <code>fc</code>，其中入参 <code>tx</code> 为带有事务会话属性的 <code>db</code> 实例，后续事务内所有执行操作都需要围绕这个 <code>tx</code> 展开</li>
+<li>可以使用该 <code>tx</code> 实例完成事务的提交 <code>tx.Commit()</code> 和回滚 <code>tx.Rollback()</code> 操作</li>
+</ul>
+<h2 id="8-1-入口"><a href="#8-1-入口" class="headerlink" title="8.1 入口"></a>8.1 入口</h2><p><code>db.Transaction(...)</code> 方法是启动事务的入口：</p>
+<ul>
+<li>首先会调用 <code>db.Begin(...)</code> 方法启动事务，此时会克隆出一个带有事务属性的 DB 会话实例：tx</li>
+<li>以 tx 为入参，调用使用方传入的闭包函数 <code>fc(tx)</code></li>
+<li>倘若 fc 执行成功，则自动为用户执行 <code>tx.Commit()</code> 操作</li>
+<li>倘若 fc 执行出错或者发生 <code>panic</code>，则会 <code>defer</code> 保证执行 <code>tx.Rollback()</code> 操作</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Transaction</span><span class="token punctuation">(</span>fc <span class="token keyword">func</span><span class="token punctuation">(</span>tx <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token builtin">error</span><span class="token punctuation">,</span> opts <span class="token operator">...</span><span class="token operator">*</span>sql<span class="token punctuation">.</span>TxOptions<span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    panicked <span class="token operator">:=</span> <span class="token boolean">true</span>
+
+
+    <span class="token keyword">if</span> committer<span class="token punctuation">,</span> ok <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token punctuation">(</span>TxCommitter<span class="token punctuation">)</span><span class="token punctuation">;</span> ok <span class="token operator">&amp;&amp;</span> committer <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 开启事务</span>
+        tx <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">Begin</span><span class="token punctuation">(</span>opts<span class="token operator">...</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> tx<span class="token punctuation">.</span>Error <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> tx<span class="token punctuation">.</span>Error
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token keyword">defer</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// 倘若发生错误或者 panic，则进行 rollback 回滚</span>
+            <span class="token keyword">if</span> panicked <span class="token operator">||</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+                tx<span class="token punctuation">.</span><span class="token function">Rollback</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+
+        <span class="token comment">// 执行事务内的逻辑</span>
+        <span class="token keyword">if</span> err <span class="token operator">=</span> <span class="token function">fc</span><span class="token punctuation">(</span>tx<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            panicked <span class="token operator">=</span> <span class="token boolean">false</span>
+            <span class="token comment">// 指定成功会进行 commit 操作</span>
+            <span class="token keyword">return</span> tx<span class="token punctuation">.</span><span class="token function">Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>Error
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    panicked <span class="token operator">=</span> <span class="token boolean">false</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<h2 id="8-2-开启事务"><a href="#8-2-开启事务" class="headerlink" title="8.2 开启事务"></a>8.2 开启事务</h2><p>对于 <code>DB.Begin()</code> 方法，在默认模式下会使用 <code>database/sql</code> 库下的 <code>sql.DB.BeginTx</code> 方法创建出一个 <code>sql.Tx</code> 对象，将其赋给当前事务会话 <code>DB</code> 的 <strong>statement.ConnPool</strong> 字段，以供后续使用：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Begin begins a transaction with any transaction options opts</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Begin</span><span class="token punctuation">(</span>opts <span class="token operator">...</span><span class="token operator">*</span>sql<span class="token punctuation">.</span>TxOptions<span class="token punctuation">)</span> <span class="token operator">*</span>DB <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> <span class="token punctuation">(</span>
+        <span class="token comment">// clone statement</span>
+        tx  <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">getInstance</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Session</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>Session<span class="token punctuation">&#123;</span>Context<span class="token punctuation">:</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> NewDB<span class="token punctuation">:</span> db<span class="token punctuation">.</span>clone <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+        opt <span class="token operator">*</span>sql<span class="token punctuation">.</span>TxOptions
+        err <span class="token builtin">error</span>
+    <span class="token punctuation">)</span>
+
+
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>opts<span class="token punctuation">)</span> <span class="token operator">></span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        opt <span class="token operator">=</span> opts<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token keyword">switch</span> beginner <span class="token operator">:=</span> tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token keyword">type</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 标准模式，会走到 sql.DB.BeginTX 方法</span>
+    <span class="token keyword">case</span> TxBeginner<span class="token punctuation">:</span>
+        <span class="token comment">// 创建好的 tx 赋给 statment.ConnPool</span>
+        tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">,</span> err <span class="token operator">=</span> beginner<span class="token punctuation">.</span><span class="token function">BeginTx</span><span class="token punctuation">(</span>tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> opt<span class="token punctuation">)</span>
+    <span class="token comment">// prepare 模式，会走到 PreparedStmtDB.BeginTx 方法中</span>
+    <span class="token keyword">case</span> ConnPoolBeginner<span class="token punctuation">:</span>
+        <span class="token comment">// 创建好的 tx 赋给 statment.ConnPool</span>
+        tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">,</span> err <span class="token operator">=</span> beginner<span class="token punctuation">.</span><span class="token function">BeginTx</span><span class="token punctuation">(</span>tx<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> opt<span class="token punctuation">)</span>
+    <span class="token keyword">default</span><span class="token punctuation">:</span>
+        err <span class="token operator">=</span> ErrInvalidTransaction
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        tx<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    <span class="token keyword">return</span> tx
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="8-3-提交-回滚"><a href="#8-3-提交-回滚" class="headerlink" title="8.3 提交&amp;回滚"></a>8.3 提交&amp;回滚</h2><p>事务的提交和回滚操作，会执行 statement 中的 connPool 的 Commit 和 Rollback 方法完成：</p>
+<p>执行事务提交操作：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Commit commits the changes in a transaction</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span>DB <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 默认情况下，此处的 ConnPool 实现类为 database/sql.Tx</span>
+    <span class="token keyword">if</span> committer<span class="token punctuation">,</span> ok <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token punctuation">(</span>TxCommitter<span class="token punctuation">)</span><span class="token punctuation">;</span> ok <span class="token operator">&amp;&amp;</span> committer <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>reflect<span class="token punctuation">.</span><span class="token function">ValueOf</span><span class="token punctuation">(</span>committer<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">IsNil</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>committer<span class="token punctuation">.</span><span class="token function">Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>ErrInvalidTransaction<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> db
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>执行事务回滚操作：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// Rollback rollbacks the changes in a transaction</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>DB<span class="token punctuation">)</span> <span class="token function">Rollback</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span>DB <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 默认情况下，此处的 ConnPool 实现类为 database/sql.Tx</span>
+    <span class="token keyword">if</span> committer<span class="token punctuation">,</span> ok <span class="token operator">:=</span> db<span class="token punctuation">.</span>Statement<span class="token punctuation">.</span>ConnPool<span class="token punctuation">.</span><span class="token punctuation">(</span>TxCommitter<span class="token punctuation">)</span><span class="token punctuation">;</span> ok <span class="token operator">&amp;&amp;</span> committer <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> <span class="token operator">!</span>reflect<span class="token punctuation">.</span><span class="token function">ValueOf</span><span class="token punctuation">(</span>committer<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">IsNil</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>committer<span class="token punctuation">.</span><span class="token function">Rollback</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span><span class="token function">AddError</span><span class="token punctuation">(</span>ErrInvalidTransaction<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> db
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="9-预处理"><a href="#9-预处理" class="headerlink" title="9 预处理"></a>9 预处理</h1><p>倘若创建 <code>gorm.DB</code> 时，倘若在 <code>Config</code> 中设置了 <code>PrepareStmt</code> 标识，则代表后续会启用 <code>prepare</code> 预处理模式. 其次，在执行 <code>query</code> 或者 <code>exec</code> 操作时，使用的 <code>ConnPool</code> 的实现版本是 <code>PreparedStmtDB</code>，执行时会拆分为两个步骤：</p>
+<p>通过 <code>PreparedStmtDB.prepare(...)</code> 操作创建&#x2F;复用 <code>stmt</code>，后续相同 <code>sql</code> 模板可以复用此 <code>stmt</code><br>通过 <code>stmt.Query(...)/Exec(...)</code> 执行 sql</p>
+<h2 id="9-1-prepare"><a href="#9-1-prepare" class="headerlink" title="9.1 prepare"></a>9.1 prepare</h2><p>在 <code>PreparedStmtDB.prepare</code> 方法中，会通过加锁 <code>double check</code> 的方式，创建或复用 sql 模板对应的 stmt. 创建 stmt 的操作通过调用 conn.PrepareContext 方法完成.（通常此处的 conn 为 database&#x2F;sql 库下的 sql.DB）</p>
+<p><code>PreparedStmtDB.prepare</code> 方法核心流程梳理如下：</p>
+<p>加读锁，然后以 <code>sql</code> 模板为 <code>key</code>，尝试从 <code>db.Stmts map</code> 中获取 <code>stmt</code> 复用<br>倘若 <code>stmt</code> 不存在，则加写锁 <code>double check</code><br>调用 <code>conn.PrepareContext(...)</code> 方法，创建新的 <code>stmt</code>，并存放到 <code>map</code> 中供后续复用<br>完整的代码和对应的注释展示如下：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>PreparedStmtDB<span class="token punctuation">)</span> <span class="token function">prepare</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> conn ConnPool<span class="token punctuation">,</span> isTransaction <span class="token builtin">bool</span><span class="token punctuation">,</span> query <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>Stmt<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">RLock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 以 sql 模板为 key，优先复用已有的 stmt </span>
+    <span class="token keyword">if</span> stmt<span class="token punctuation">,</span> ok <span class="token operator">:=</span> db<span class="token punctuation">.</span>Stmts<span class="token punctuation">[</span>query<span class="token punctuation">]</span><span class="token punctuation">;</span> ok <span class="token operator">&amp;&amp;</span> <span class="token punctuation">(</span><span class="token operator">!</span>stmt<span class="token punctuation">.</span>Transaction <span class="token operator">||</span> isTransaction<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">RUnlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token comment">// 并发场景下，只允许有一个 goroutine 完成 stmt 的初始化操作</span>
+        <span class="token operator">&lt;-</span>stmt<span class="token punctuation">.</span>prepared
+        <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>prepareErr <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> Stmt<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> stmt<span class="token punctuation">.</span>prepareErr
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token keyword">return</span> <span class="token operator">*</span>stmt<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span>
+    db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">RUnlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+
+    <span class="token comment">// 加锁 double check，确认未完成 stmt 初始化则执行初始化操作</span>
+    db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// double check</span>
+    <span class="token keyword">if</span> stmt<span class="token punctuation">,</span> ok <span class="token operator">:=</span> db<span class="token punctuation">.</span>Stmts<span class="token punctuation">[</span>query<span class="token punctuation">]</span><span class="token punctuation">;</span> ok <span class="token operator">&amp;&amp;</span> <span class="token punctuation">(</span><span class="token operator">!</span>stmt<span class="token punctuation">.</span>Transaction <span class="token operator">||</span> isTransaction<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token comment">// wait for other goroutines prepared</span>
+        <span class="token operator">&lt;-</span>stmt<span class="token punctuation">.</span>prepared
+        <span class="token keyword">if</span> stmt<span class="token punctuation">.</span>prepareErr <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> Stmt<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> stmt<span class="token punctuation">.</span>prepareErr
+        <span class="token punctuation">&#125;</span>
+
+
+        <span class="token keyword">return</span> <span class="token operator">*</span>stmt<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token comment">// 创建 stmt 实例，并添加到 stmts map 中</span>
+    cacheStmt <span class="token operator">:=</span> Stmt<span class="token punctuation">&#123;</span>Transaction<span class="token punctuation">:</span> isTransaction<span class="token punctuation">,</span> prepared<span class="token punctuation">:</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">chan</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">&#125;</span>
+    db<span class="token punctuation">.</span>Stmts<span class="token punctuation">[</span>query<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token operator">&amp;</span>cacheStmt
+    <span class="token comment">// 此时可以提前解锁是因为还通过 channel 保证了其他使用者会阻塞等待初始化操作完成</span>
+    db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+
+    <span class="token comment">// 所有工作执行完之后会关闭 channel，唤醒其他阻塞等待使用 stmt 的 goroutine</span>
+    <span class="token keyword">defer</span> <span class="token function">close</span><span class="token punctuation">(</span>cacheStmt<span class="token punctuation">.</span>prepared<span class="token punctuation">)</span>
+
+
+    <span class="token comment">// 调用 *sql.DB 的 prepareContext 方法，创建真正的 stmt</span>
+    stmt<span class="token punctuation">,</span> err <span class="token operator">:=</span> conn<span class="token punctuation">.</span><span class="token function">PrepareContext</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        cacheStmt<span class="token punctuation">.</span>prepareErr <span class="token operator">=</span> err
+        db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token function">delete</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Stmts<span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+        db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span> Stmt<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+
+
+    db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    cacheStmt<span class="token punctuation">.</span>Stmt <span class="token operator">=</span> stmt
+    db<span class="token punctuation">.</span>PreparedSQL <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>PreparedSQL<span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+    db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">return</span> cacheStmt<span class="token punctuation">,</span><span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="9-2-查询"><a href="#9-2-查询" class="headerlink" title="9.2 查询"></a>9.2 查询</h2><p>在 <code>prepare</code> 模式下，查询操作通过 PreparedStmtDB.QueryContext(…) 方法实现. 首先通过 PreparedStmtDB.prepare(…) 方法尝试复用 stmt，然后调用 .QueryContext(…) 执行查询操作.</p>
+<p>此处 stm.QueryContext(…) 方法本质上会使用 database&#x2F;sql 中的 sql.Stmt 完成任务.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>PreparedStmtDB<span class="token punctuation">)</span> <span class="token function">QueryContext</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>rows <span class="token operator">*</span>sql<span class="token punctuation">.</span>Rows<span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    stmt<span class="token punctuation">,</span> err <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">prepare</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> db<span class="token punctuation">.</span>ConnPool<span class="token punctuation">,</span> <span class="token boolean">false</span><span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        rows<span class="token punctuation">,</span> err <span class="token operator">=</span> stmt<span class="token punctuation">.</span><span class="token function">QueryContext</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> args<span class="token operator">...</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">defer</span> db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+
+
+
+            <span class="token keyword">go</span> stmt<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token function">delete</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Stmts<span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> rows<span class="token punctuation">,</span> err
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="9-3-执行"><a href="#9-3-执行" class="headerlink" title="9.3 执行"></a>9.3 执行</h2><p>在 <code>prepare</code> 模式下，执行操作通过 <code>PreparedStmtDB.ExecContext(...)</code> 方法实现. 首先通过 <code>PreparedStmtDB.prepare(...)</code> 方法尝试复用 <code>stmt</code>，然后调用 <code>stmt.ExecContext(...)</code> 执行查询操作.</p>
+<p>此处 <code>stm.ExecContext(...)</code> 方法本质上会使用 <code>database/sql</code> 中的 <code>sql.Stmt</code> 完成任务.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>db <span class="token operator">*</span>PreparedStmtDB<span class="token punctuation">)</span> <span class="token function">ExecContext</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> query <span class="token builtin">string</span><span class="token punctuation">,</span> args <span class="token operator">...</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>result sql<span class="token punctuation">.</span>Result<span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    stmt<span class="token punctuation">,</span> err <span class="token operator">:=</span> db<span class="token punctuation">.</span><span class="token function">prepare</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> db<span class="token punctuation">.</span>ConnPool<span class="token punctuation">,</span> <span class="token boolean">false</span><span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        result<span class="token punctuation">,</span> err <span class="token operator">=</span> stmt<span class="token punctuation">.</span><span class="token function">ExecContext</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> args<span class="token operator">...</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">defer</span> db<span class="token punctuation">.</span>Mux<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">go</span> stmt<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token function">delete</span><span class="token punctuation">(</span>db<span class="token punctuation">.</span>Stmts<span class="token punctuation">,</span> query<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> result<span class="token punctuation">,</span> err
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>(end)</p>
+
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-%E6%A0%B8%E5%BF%83%E7%B1%BB"><span class="top-box-text">1 核心类</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-%E6%95%B0%E6%8D%AE%E5%BA%93"><span class="top-box-text">1.1 数据库</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E4%BC%9A%E8%AF%9D%E7%8A%B6%E6%80%81"><span class="top-box-text">1.2 会话状态</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-connPool"><span class="top-box-text">1. connPool</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-db-%E5%85%8B%E9%9A%86"><span class="top-box-text">2. db 克隆</span></a></li></ol></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-%E6%A0%B8%E5%BF%83%E7%B1%BB"><span class="top-box-text">1 核心类</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-%E6%95%B0%E6%8D%AE%E5%BA%93"><span class="top-box-text">1.1 数据库</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E4%BC%9A%E8%AF%9D%E7%8A%B6%E6%80%81"><span class="top-box-text">1.2 会话状态</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-connPool"><span class="top-box-text">1. connPool</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-db-%E5%85%8B%E9%9A%86"><span class="top-box-text">2. db 克隆</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E9%A2%84%E5%A4%84%E7%90%86DB"><span class="top-box-text">2.3 预处理DB</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-4-%E6%89%A7%E8%A1%8C%E5%99%A8"><span class="top-box-text">2.4 执行器</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-5-%E6%9D%A1%E4%BB%B6"><span class="top-box-text">2.5 条件</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="top-box-text">3 初始化</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E5%88%9B%E5%BB%BA-db"><span class="top-box-text">3.1 创建 db</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E5%88%9D%E5%A7%8B%E5%8C%96-dialector"><span class="top-box-text">3.2 初始化 dialector</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-%E6%B3%A8%E5%86%8C-crud-%E5%87%BD%E6%95%B0"><span class="top-box-text">3.3 注册 crud 函数</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-%E6%9F%A5%E8%AF%A2"><span class="top-box-text">4 查询</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-1-%E5%85%A5%E5%8F%A3"><span class="top-box-text">4.1 入口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-2-%E6%B7%BB%E5%8A%A0%E6%9D%A1%E4%BB%B6"><span class="top-box-text">4.2 添加条件</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-3-%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95"><span class="top-box-text">4.3 核心方法</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-4-%E6%89%AB%E6%8F%8F%E6%95%B0%E6%8D%AE"><span class="top-box-text">4.4 扫描数据</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#5-%E5%88%9B%E5%BB%BA"><span class="top-box-text">5 创建</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-1-%E5%85%A5%E5%8F%A3"><span class="top-box-text">5.1 入口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-2-%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95"><span class="top-box-text">5.2 核心方法</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#6-%E5%88%A0%E9%99%A4"><span class="top-box-text">6 删除</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#6-1-%E5%85%A5%E5%8F%A3"><span class="top-box-text">6.1 入口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#6-2-%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95"><span class="top-box-text">6.2 核心方法</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#7-%E6%9B%B4%E6%96%B0"><span class="top-box-text">7 更新</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-1-%E5%85%A5%E5%8F%A3"><span class="top-box-text">7.1 入口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-2-%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95"><span class="top-box-text">7.2 核心方法</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#8-%E4%BA%8B%E5%8A%A1"><span class="top-box-text">8 事务</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#8-1-%E5%85%A5%E5%8F%A3"><span class="top-box-text">8.1 入口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#8-2-%E5%BC%80%E5%90%AF%E4%BA%8B%E5%8A%A1"><span class="top-box-text">8.2 开启事务</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#8-3-%E6%8F%90%E4%BA%A4-%E5%9B%9E%E6%BB%9A"><span class="top-box-text">8.3 提交&amp;回滚</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#9-%E9%A2%84%E5%A4%84%E7%90%86"><span class="top-box-text">9 预处理</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#9-1-prepare"><span class="top-box-text">9.1 prepare</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#9-2-%E6%9F%A5%E8%AF%A2"><span class="top-box-text">9.2 查询</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#9-3-%E6%89%A7%E8%A1%8C"><span class="top-box-text">9.3 执行</span></a></li></ol>
         </div>
           
       </div>
