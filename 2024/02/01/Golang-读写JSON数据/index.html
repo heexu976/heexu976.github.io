@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang 读写JSON数据</title>
+<meta name="keywords" content="Golang 读写JSON数据, HeXu">
+<meta name="description" content="0 前言JSON(JavaScript Object Notation)是一种简单的数据交换格式。从语法上来说，它综合了 JavaScript 的对象 (objects) 和列表 (lists)。通常用于在 web 后端和运行在浏览器中的 ">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang 读写JSON数据">
+<meta property="og:description" content="0 前言JSON(JavaScript Object Notation)是一种简单的数据交换格式。从语法上来说，它综合了 JavaScript 的对象 (objects) 和列表 (lists)。通常用于在 web 后端和运行在浏览器中的 ">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang 读写JSON数据</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-02-01</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="0-前言"><a href="#0-前言" class="headerlink" title="0 前言"></a>0 前言</h1><p><code>JSON(JavaScript Object Notation)</code>是一种简单的数据交换格式。<br>从语法上来说，它综合了 <code>JavaScript</code> 的对象 <code>(objects)</code> 和列表 <code>(lists)</code>。通常用于在 <code>web</code> 后端和运行在浏览器中的 <code>JavaScript</code> 程序之间通信，不过也可以用在很多其他的地方。官</p>
+<p>使用 <code>json</code> 包可以轻松地在Go程序中读写 <code>JSON</code> 数据</p>
+<h1 id="1-编码"><a href="#1-编码" class="headerlink" title="1 编码"></a>1 编码</h1><p>通过函数 <code>Marshal</code> 编码 <code>JSON</code> 数据。</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">Marshal</span><span class="token punctuation">(</span>v <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+
+<p>给定Go的数据结构， <code>Message</code>，</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Message <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Name <span class="token builtin">string</span>
+    Body <span class="token builtin">string</span>
+    Time <span class="token builtin">int64</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>以及 <code>Message</code> 的一个实例</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">m <span class="token operator">:=</span> Message<span class="token punctuation">&#123;</span><span class="token string">"Alice"</span><span class="token punctuation">,</span> <span class="token string">"Hello"</span><span class="token punctuation">,</span> <span class="token number">1294706395881547000</span><span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>通过 <code>json.Marshal</code> 就可以得到一个JSON格式的m：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">b<span class="token punctuation">,</span> err <span class="token operator">:=</span> json<span class="token punctuation">.</span><span class="token function">Marshal</span><span class="token punctuation">(</span>m<span class="token punctuation">)</span>  <span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>如果一切顺利，<code>err</code> 将会是 <code>nil</code>， <code>b</code> 将会是一个包含JSON数据的 <code>[]byte</code></p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">b <span class="token operator">==</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token function">byte</span><span class="token punctuation">(</span><span class="token string">`&#123;"Name":"Alice","Body":"Hello","Time":1294706395881547000&#125;`</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>只有能够被表示成合法的 · 的数据才会被编码：</p>
+<ul>
+<li><code>JSON objects</code> 只支持字符串作为 <code>keys</code> ；要对 <code>Go map</code> 类型编码，必须是这是形式 <code>map[string]T</code>（其中T任意一种 <code>json</code> 包支持的 <code>Go</code> 类型）</li>
+<li><code>Channel</code>， <code>complex</code> 以及函数不能被编码</li>
+<li>不支持循环的数据结构；这会导致 <code>Marshal</code> 进入死循环</li>
+<li>指针会被编码成它们指向的值（或者 <code>null</code> 如果指针是 <code>nil</code> ）</li>
+</ul>
+<h1 id="2-解码"><a href="#2-解码" class="headerlink" title="2 解码"></a>2 解码</h1><p>通过函数 <code>Unmarshal</code> 解码JSON数据。</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">Unmarshal</span><span class="token punctuation">(</span>data <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> v <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token builtin">error</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>首先，声明一个变量用于存放解码后的数据</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> m Message<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>然后调用json.Unmarshal，传递参数JSON数据的[]byte以及指向m的指针</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">err <span class="token operator">:=</span> json<span class="token punctuation">.</span><span class="token function">Unmarshal</span><span class="token punctuation">(</span>b<span class="token punctuation">,</span> <span class="token operator">&amp;</span>m<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>如果b中包含匹配m的合法的 <code>JSON</code>，那么函数调用之后，<code>err</code> 值为 <code>nil</code>，b 中的数据会存到结构体m中，就像下面这样的赋值</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">m <span class="token operator">=</span> Message<span class="token punctuation">&#123;</span>
+    Name<span class="token punctuation">:</span> <span class="token string">"Alice"</span><span class="token punctuation">,</span>
+    Body<span class="token punctuation">:</span> <span class="token string">"Hello"</span><span class="token punctuation">,</span>
+    Time<span class="token punctuation">:</span> <span class="token number">1294706395881547000</span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>Unmarshal</code> 是如何定义存放解码的数据的呢？对于一个给定的 <code>JSON key &quot;Foo&quot;``，Unmarshal</code> 会查询结构体的域来寻找（in order of preference）：</p>
+<ul>
+<li>一个带有标签”Foo” 的可导出域（更多关于结构体标签见Go spec）</li>
+<li>一个名为”Foo” 的可导出域，或者一个名为”FOO” 或者 “FoO 或者其他大小写的匹配”Foo”的可导出域</li>
+</ul>
+<p>当 JSON 数据结构跟 Go 类型不一致会怎么样呢？</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">b <span class="token operator">:=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token function">byte</span><span class="token punctuation">(</span><span class="token string">`&#123;"Name":"Bob","Food":"Pickle"&#125;`</span><span class="token punctuation">)</span>
+<span class="token keyword">var</span> m Message
+err <span class="token operator">:=</span> json<span class="token punctuation">.</span><span class="token function">Unmarshal</span><span class="token punctuation">(</span>b<span class="token punctuation">,</span> <span class="token operator">&amp;</span>m<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p><code>Unmarshal</code> 只会解码在目标类型中出现的域。在上面的例子中，<code>m</code> 只有 <code>Name</code> 域会被填充，<code>Food</code> 域将被忽略。这种行为在你想从一个大的 <code>JSON blob</code> 中选择几个指定的域时会特别有用。这也意味着 <code>Unmarshal</code> 不会影响目标结构体中的不可导出域。</p>
+<p>但是，如果你事先并不了解 <code>JSON</code> 数据的结构，又该如何呢？</p>
+<h1 id="Generic-JSON-with-interface"><a href="#Generic-JSON-with-interface" class="headerlink" title="Generic JSON with interface{}"></a>Generic JSON with interface{}</h1><p><code>interface&#123;&#125;</code> 类型（空接口）表示一个没有方法的接口。每一个 <code>Go</code> 类型至少实现了0个方法，因此都符合空接口。</p>
+<p>空接口可以作为一个通用的容器类型：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> i <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+i <span class="token operator">=</span> <span class="token string">"a string"</span>
+i <span class="token operator">=</span> <span class="token number">2011</span>
+i <span class="token operator">=</span> <span class="token number">2.777</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>类型断言可以访问底层的具体类型：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">r <span class="token operator">:=</span> i<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token builtin">float64</span><span class="token punctuation">)</span>
+fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"the circle's area"</span><span class="token punctuation">,</span> math<span class="token punctuation">.</span>Pi<span class="token operator">*</span>r<span class="token operator">*</span>r<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<p>或者，如果底层的类型是未知的，通过类型 <code>switch</code> 来确定类型：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">switch</span> v <span class="token operator">:=</span> i<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token keyword">type</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">case</span> <span class="token builtin">int</span><span class="token punctuation">:</span>
+    fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"twice i is"</span><span class="token punctuation">,</span> v<span class="token operator">*</span><span class="token number">2</span><span class="token punctuation">)</span>
+<span class="token keyword">case</span> <span class="token builtin">float64</span><span class="token punctuation">:</span>
+    fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"the reciprocal of i is"</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token operator">/</span>v<span class="token punctuation">)</span>
+<span class="token keyword">case</span> <span class="token builtin">string</span><span class="token punctuation">:</span>
+    h <span class="token operator">:=</span> <span class="token function">len</span><span class="token punctuation">(</span>v<span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token number">2</span>
+    fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"i swapped by halves is"</span><span class="token punctuation">,</span> v<span class="token punctuation">[</span>h<span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token operator">+</span>v<span class="token punctuation">[</span><span class="token punctuation">:</span>h<span class="token punctuation">]</span><span class="token punctuation">)</span>
+<span class="token keyword">default</span><span class="token punctuation">:</span>
+    <span class="token comment">// i isn't one of the types above</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>json</code> 包使用 <code>map[string]interface&#123;&#125;</code> 和 <code>[]interface&#123;&#125;</code> 来存储任意 <code>JSON objects</code> 以及 <code>arrays</code>；它很乐意将任意合法的 <code>JSON blob unmarshal</code> 到普通的 <code>interface&#123;&#125;</code> 中。默认的具体 <code>Go</code> 类型是：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token builtin">bool</span> JSON booleans
+<span class="token builtin">float64</span> JSON numbers
+<span class="token builtin">string</span> JSON strings
+<span class="token boolean">nil</span> JSON null<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="解码任意数据"><a href="#解码任意数据" class="headerlink" title="解码任意数据"></a>解码任意数据</h1><p>考虑这样一个存放在变量b中的JSON数据：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">b <span class="token operator">:=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token function">byte</span><span class="token punctuation">(</span><span class="token string">`&#123;"Name":"Wednesday","Age":6,"Parents":["Gomez","Morticia"]&#125;`</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>当不知道数据结构时，我们可以将它 <code>Unmarshal</code> 到 <code>interface&#123;&#125;</code>  ：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> f <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+err <span class="token operator">:=</span> json<span class="token punctuation">.</span><span class="token function">Unmarshal</span><span class="token punctuation">(</span>b<span class="token punctuation">,</span> <span class="token operator">&amp;</span>f<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<p>现在f中的值就是一个 <code>map，key</code> 为字符串，值就是以空接口存储的自身：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">f <span class="token operator">=</span> <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#123;</span>
+    <span class="token string">"Name"</span><span class="token punctuation">:</span> <span class="token string">"Wednesday"</span><span class="token punctuation">,</span>
+    <span class="token string">"Age"</span><span class="token punctuation">:</span>  <span class="token number">6</span><span class="token punctuation">,</span>
+    <span class="token string">"Parents"</span><span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#123;</span>
+        <span class="token string">"Gomez"</span><span class="token punctuation">,</span>
+        <span class="token string">"Morticia"</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>要访问这样的数据，我们通过类型断言来访问f底层的 <code>map[string]interface&#123;&#125;</code>：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">m <span class="token operator">:=</span> f<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>通过 <code>range</code> 语句来迭代 <code>map</code>，并通过类型选择来访问具体类型的值：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">for</span> k<span class="token punctuation">,</span> v <span class="token operator">:=</span> <span class="token keyword">range</span> m <span class="token punctuation">&#123;</span>
+    <span class="token keyword">switch</span> vv <span class="token operator">:=</span> v<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token keyword">type</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">case</span> <span class="token builtin">string</span><span class="token punctuation">:</span>
+        fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>k<span class="token punctuation">,</span> <span class="token string">"is string"</span><span class="token punctuation">,</span> vv<span class="token punctuation">)</span>
+    <span class="token keyword">case</span> <span class="token builtin">int</span><span class="token punctuation">:</span>
+        fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>k<span class="token punctuation">,</span> <span class="token string">"is int"</span><span class="token punctuation">,</span> vv<span class="token punctuation">)</span>
+    <span class="token keyword">case</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">:</span>
+        fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>k<span class="token punctuation">,</span> <span class="token string">"is an array:"</span><span class="token punctuation">)</span>
+        <span class="token keyword">for</span> i<span class="token punctuation">,</span> u <span class="token operator">:=</span> <span class="token keyword">range</span> vv <span class="token punctuation">&#123;</span>
+            fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>i<span class="token punctuation">,</span> u<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token keyword">default</span><span class="token punctuation">:</span>
+        fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>k<span class="token punctuation">,</span> <span class="token string">"is of a type I don't know how to handle"</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>通过这种方式我们可以访问未知的 JSON 数据，同时还获得了类型安全的好处。</p>
+<h1 id="引用类型"><a href="#引用类型" class="headerlink" title="引用类型"></a>引用类型</h1><p>现在定义一个 <code>Go</code> 类型来包含上一个例子中的数据：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> FamilyMember <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Name    <span class="token builtin">string</span>
+    Age     <span class="token builtin">int</span>
+    Parents <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">var</span> m FamilyMember
+err <span class="token operator">:=</span> json<span class="token punctuation">.</span><span class="token function">Unmarshal</span><span class="token punctuation">(</span>b<span class="token punctuation">,</span> <span class="token operator">&amp;</span>m<span class="token punctuation">)</span>    <span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>可以正常地将数据 <code>unmarshal</code> 到 <code>FamilyMember</code> 中，但是如果仔细观察就能看到有意思的事情发生了。通过 <code>var</code> 语句我们分配了一个 <code>FamilyMember</code> 结构体，然后将指向结构体的指针传递给 <code>Unmarshal</code>，但是现在 <code>Parents</code> 还是一个 <code>nil</code> 的 <code>slice</code>。为了填充 <code>Parents</code>域， <code>Unmarshal</code> 在内部分配了一个新的 <code>slice</code> 。这是 <code>Unmarshal</code> 支持 <code>reference（pointers，slices和maps）</code>类型的典型做法。</p>
+<p>考虑 <code>unmarshal</code> 数据到这个结构：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Foo <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Bar <span class="token operator">*</span>Bar
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>如果在 <code>JSON object</code> 中有一个域 <code>Bar</code>，那么 <code>Unmarshal</code> 就会分配一个新的 <code>Bar</code> 并填充。如果没有，<code>Bar</code> 就是一个 <code>nil</code> 指针。</p>
+<p>根据这个可以得到一个规则：如果应用接收几个不同的消息类型，你可能会像下面这样定义<code>”receiver”</code> 结构：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> IncomingMessage <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Cmd <span class="token operator">*</span>Command
+    Msg <span class="token operator">*</span>Message
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>取决于要通信的消息类型，发送方以 <code>top-level JSON object </code>填充 <code>Cmd</code> 域和 <code>/</code> 或者<code>Msg</code>域。<code>Unmarshal</code> 在将数据解码到 <code>IncomingMessage</code> 结构中时，只会分配在出现在 JSON 数据中的结构。要知道处理哪个消息，程序员只需简单的测试下 <code>Cmd</code> 还是 <code>Msg</code> 不是 <code>nil</code>。</p>
+<h1 id="流式编解码"><a href="#流式编解码" class="headerlink" title="流式编解码"></a>流式编解码</h1><p><code>json</code> 包提供了 <code>Decoder</code> 和 <code>Encoder</code> 用来支持 <code>JSON</code> 数据流的读写。函数<code>NewDecoder</code> 和 <code>NewEncoder</code> 封装了<code>io.Reader</code>和<code>io.Writer</code> 接口类型。</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">NewDecoder</span><span class="token punctuation">(</span>r io<span class="token punctuation">.</span>Reader<span class="token punctuation">)</span> <span class="token operator">*</span>Decoder
+<span class="token keyword">func</span> <span class="token function">NewEncoder</span><span class="token punctuation">(</span>w io<span class="token punctuation">.</span>Writer<span class="token punctuation">)</span> <span class="token operator">*</span>Encoder<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<p>下面是一个从标准输入读入连续的<code>JSON object</code>的实例程序，每个结构体只留下<code>Name</code>域，然后把<code>objects</code>写到标准输出：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">package</span> main
+
+<span class="token keyword">import</span> <span class="token punctuation">(</span>
+    <span class="token string">"encoding/json"</span>
+    <span class="token string">"log"</span>
+    <span class="token string">"os"</span>
+<span class="token punctuation">)</span>
+
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    dec <span class="token operator">:=</span> json<span class="token punctuation">.</span><span class="token function">NewDecoder</span><span class="token punctuation">(</span>os<span class="token punctuation">.</span>Stdin<span class="token punctuation">)</span>
+    enc <span class="token operator">:=</span> json<span class="token punctuation">.</span><span class="token function">NewEncoder</span><span class="token punctuation">(</span>os<span class="token punctuation">.</span>Stdout<span class="token punctuation">)</span>
+    <span class="token keyword">for</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">var</span> v <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> dec<span class="token punctuation">.</span><span class="token function">Decode</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>v<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            log<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+            <span class="token keyword">return</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token keyword">for</span> k <span class="token operator">:=</span> <span class="token keyword">range</span> v <span class="token punctuation">&#123;</span>
+            <span class="token keyword">if</span> k <span class="token operator">!=</span> <span class="token string">"Name"</span> <span class="token punctuation">&#123;</span>
+                <span class="token function">delete</span><span class="token punctuation">(</span>v<span class="token punctuation">,</span> k<span class="token punctuation">)</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> enc<span class="token punctuation">.</span><span class="token function">Encode</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>v<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            log<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>由于读写操作的普遍性，类型<code>Encoder</code>和<code>Decoder</code>可以用于多种场合，例如读写<code>HTTP</code> 链接，<code>WebSockets</code>或者文件。</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#0-%E5%89%8D%E8%A8%80"><span class="top-box-text">0 前言</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E7%BC%96%E7%A0%81"><span class="top-box-text">1 编码</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E8%A7%A3%E7%A0%81"><span class="top-box-text">2 解码</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#Generic-JSON-with-interface"><span class="top-box-text">Generic JSON with interface{}</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E8%A7%A3%E7%A0%81%E4%BB%BB%E6%84%8F%E6%95%B0%E6%8D%AE"><span class="top-box-text">解码任意数据</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%BC%95%E7%94%A8%E7%B1%BB%E5%9E%8B"><span class="top-box-text">引用类型</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E6%B5%81%E5%BC%8F%E7%BC%96%E8%A7%A3%E7%A0%81"><span class="top-box-text">流式编解码</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/01/30/Golang-mysql-%E9%A9%B1%E5%8A%A8%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/">
+          <h3 class="post-title">
+            下一篇：Golang mysql 驱动源码解析
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
