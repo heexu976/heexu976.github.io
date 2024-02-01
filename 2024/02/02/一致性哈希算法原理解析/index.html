@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>一致性哈希算法原理解析</title>
+<meta name="keywords" content="一致性哈希算法原理解析, HeXu">
+<meta name="description" content="1 问题背景在正式学习一致性哈希算法之前，我们先从一个场景问题开始切入.
+1.1 状态服务首先，我们需要先理清楚两个概念——何谓 ”有状态服务“，何谓”无状态服务“？
+无状态服务指的是一类无需负责存储状态数据、仅需要内聚业务执行逻辑的服务.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="一致性哈希算法原理解析">
+<meta property="og:description" content="1 问题背景在正式学习一致性哈希算法之前，我们先从一个场景问题开始切入.
+1.1 状态服务首先，我们需要先理清楚两个概念——何谓 ”有状态服务“，何谓”无状态服务“？
+无状态服务指的是一类无需负责存储状态数据、仅需要内聚业务执行逻辑的服务.">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">一致性哈希算法原理解析</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-02-02</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Distributed/">
+              Distributed
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="1-问题背景"><a href="#1-问题背景" class="headerlink" title="1 问题背景"></a>1 问题背景</h1><p>在正式学习一致性哈希算法之前，我们先从一个场景问题开始切入.</p>
+<h2 id="1-1-状态服务"><a href="#1-1-状态服务" class="headerlink" title="1.1 状态服务"></a>1.1 状态服务</h2><p>首先，我们需要先理清楚两个概念——何谓 ”<code>有状态服务</code>“，何谓”<code>无状态服务</code>“？</p>
+<h3 id="无状态服务"><a href="#无状态服务" class="headerlink" title="无状态服务"></a><strong>无状态服务</strong></h3><p>指的是一类<strong>无需负责存储状态数据、仅需要内聚业务执行逻辑的服务</strong>. 比如我们日常维护的后台系统，服务只需要负责执行 CRUD 逻辑，真正的状态数据是托管于第三方组件中进行存储管理，比如关系型数据库或者 NOSQL 缓存组件之类.</p>
+<p>对于这类无状态服务而言，一笔请求被分发到哪个节点并不重要，因为执行逻辑都是相同的. 因此无状态服务集群倘若需要执行横向扩缩容操作，是很灵活自由的.</p>
+<h3 id="有状态服务"><a href="#有状态服务" class="headerlink" title="有状态服务"></a><strong>有状态服务</strong></h3><p>指的是一类本身需要通过内存或磁盘实现状态数据存储的服务. 比如数据库、消息队列等组件都属于有状态服务</p>
+<p>针对于这类服务，由于其存储了状态数据，因此在对集群进行横向分治（为防止单点故障而对数据进行冗余备份）时，需要考虑数据的一致性问题；在对集群进行纵向分治（为提高集群整体性能上限，不同节点各自分担部分数据存储工作，共同构成全集）时，需要明确数据与所从属节点之间的映射关系.</p>
+<p><strong>针对于无状态服务，对应的负载均衡流程是要简单很多的.</strong><br>比如我们可以采用<code>轮询算法（RR，Round Robin）</code>、<code>加权轮询算法（WRR，Weighted Round Robin）</code>、<code>平滑加权轮询算法（SWRR，Smoth Round Robin）</code>实现集群内各节点对请求流量的平均分配.</p>
+<p><strong>然而对于有状态服务而言，倘若存在纵向分治策略，那么我们就需要维护好状态数据与所从属之间的映射关系.</strong> 一旦集群发生扩缩容，节点数量发生变更，对应的映射关系就需要发生变化，对应的状态数据就要发生迁移，这会是一个很复杂且笨重的流程. </p>
+<p>而咱们今天所探讨的<strong>一致性哈希算法</strong>，且核心价值正是为了<strong>有效地降低有状态服务集群扩缩容流程的数据迁移成本</strong>.</p>
+<h2 id="纵向分治"><a href="#纵向分治" class="headerlink" title="纵向分治"></a>纵向分治</h2><p>我们知道，对于单个服务节点而言，受限于自身的硬件条件，会存在对应于某个水平的性能瓶颈. 倘若完全局限于单兵作战的思路，那么这个节点本身的瓶颈就会成为整个系统的天花板.</p>
+<p>但是倘若我们引入了纵向分治的策略，那么这块天花板就还能有提高的空间.</p>
+<p>打个比方，已知总工作量为 100，倘若我们只让一个人参与工作，那么这个人需要承担的工作量就是 100；倘若我们让 10 个人参与协作，对工作进行平均拆分，每个人负责其中的一小部分，那么每个人需要承担的工作量就大约是 100&#x2F;10 &#x3D; 10.</p>
+<p>当然，在真实场景中，这种纵向分治的策略无法在性能上带来这种线性的提升效率，因为在多人协作时，难免在边界分配、交接工作、结果聚合等环节会存在效率的损耗. 但即便如此，这种纵向扩容分治的思路也能在很大程度上减轻每个独立节点所需要承担的工作强度，因此能够提高整个系统的性能上限.</p>
+<p><strong>我们可以通过哈希散列的方式实现数据的纵向分治，基于哈希函数的离散性，保证每个节点分配的数据量均可能趋于平均：</strong></p>
+<ul>
+<li>在写数据的 <code>set</code> 流程中：<ul>
+<li>根据数据的 <code>key</code> 取 <code>hash</code> 值</li>
+<li><code>hash</code> 值对节点数量取模，得到其所属的节点 <code>index</code></li>
+<li>将数据写入到对应 <code>index</code> 的节点中</li>
+</ul>
+</li>
+<li>在读数据的 <code>get</code> 流程中：<ul>
+<li>根据数据的 <code>key</code> 取 <code>hash</code> 值</li>
+<li><code>hash</code> 值对节点数量取模，得到其所属的节点 <code>index</code></li>
+<li>从 <code>index</code> 对应的节点中读取数据</li>
+</ul>
+</li>
+</ul>
+<h2 id="1-3-带权分治"><a href="#1-3-带权分治" class="headerlink" title="1.3 带权分治"></a>1.3 带权分治</h2><p>在实际场景中，<strong>不同节点的性能可能存在差距</strong>. 我们希望做到能者多劳，让性能好的节点多完成一些任务，性能差的节点少承担一些工作. 此时，<strong>我们可以给每个节点设置一个权重值，用于反映其性能水平的强弱.</strong></p>
+<p>接下来我们可以<strong>设置一条水平轴</strong>，<strong>每个节点根据其权重值大小在轴上占据对应的比例分区</strong>. 接下来每当有数据到来，我们都会根据数据的 key 取得 hash 值并对水平轴的总长度取模，找到其在水平轴上的刻度位置，再根据该刻度所从属的分区，推断出这笔数据应该从属于哪一个节点.</p>
+<h2 id="1-4-数据迁移"><a href="#1-4-数据迁移" class="headerlink" title="1.4 数据迁移"></a>1.4 数据迁移</h2><p>下面我们来聊一聊，有状态服务所存在的痛点问题：<strong>集群扩缩容时存在的数据迁移流程.</strong></p>
+<p>通过 1.2 小节介绍的纵向分治流程，我们明白每条数据和所从属的节点之间会一个明确且稳定的映射关系. 以我们通常采用的哈希散列的方案为例，数据所从属的节点 index 会与集群节点的总数有关（ 节点 <strong>index &#x3D; 数据 hash 值 % 节点个数</strong>），所以这个映射关系能生效的前提是，集群节点的数量需要维持不变.</p>
+<p><strong>(痛点所在)</strong><br><strong>换言之，一旦集群需要执行扩缩容流程，集群节点数量变更后，原有的映射关系就会被破坏. 为了继续维护这份映射规则，我们需要执行数据迁移操作，将旧数据迁移到能够满足新映射关系的对应位置. 这必然会是一个很重的迁移流程，涉及影响的范围是全量的旧节点.</strong></p>
+<h1 id="2-一致性哈希"><a href="#2-一致性哈希" class="headerlink" title="2 一致性哈希"></a>2 一致性哈希</h1><p>梳理完传统负载均衡方案的流程以及存在的痛点后，下面引入我们今天的主题——一致性哈希算法.</p>
+<h2 id="2-1-哈希环"><a href="#2-1-哈希环" class="headerlink" title="2.1 哈希环"></a>2.1 哈希环</h2><h3 id="2-1-1-哈希环构造"><a href="#2-1-1-哈希环构造" class="headerlink" title="2.1.1 哈希环构造"></a>2.1.1 哈希环构造</h3><p>现在，我们需要打破固有的数据与节点之间的点对点映射关系.</p>
+<p>我们首先构造出一个 **<code>哈希环（Hash Ring）</code>**：</p>
+<ul>
+<li>哈希环是一个首尾衔接的环</li>
+<li>起点位置数值为 0</li>
+<li>终点位置数值为 2^32，与 0 重合</li>
+<li>环上每个刻度对应一个 0~2^32 - 1 之间的数值</li>
+<li>哈希环的构造图如下所示：<br><a class="simple-lightbox" href="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/hashRing.png"><img   src="/images/loading.svg" data-src="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/hashRing.png"  alt="hashRing" lazyload></a></li>
+</ul>
+<h3 id="2-1-2-节点入环"><a href="#2-1-2-节点入环" class="headerlink" title="2.1.2 节点入环"></a>2.1.2 节点入环</h3><p>接下来，<strong>每个节点需要在哈希环中找到找到属于自己的位置</strong>. <strong>入环的方式是，针对于节点的标识键 index 取 hash 值，然后使用该 hash 值对 2^32 取模，最后得到的结果就是该节点在哈希环上对应的位置.</strong></p>
+<p>遵循上述流程，我们可以依次把集群中的各个节点加入哈希环中.</p>
+<h3 id="2-1-3-数据出-入环"><a href="#2-1-3-数据出-入环" class="headerlink" title="2.1.3 数据出&#x2F;入环"></a>2.1.3 数据出&#x2F;入环</h3><p>在读数据与写数据的流程中，核心是要在读数据与写数据的流程中，核心是要找到与这笔数据所归属的节点 index，这里我们采取的方式是：</p>
+<ul>
+<li>对数据的 key 取哈希值</li>
+<li>哈希值对哈希环长度（2^32） 取模，找到在哈希环上的位置</li>
+<li><strong>接下来一步是关键. 我们会沿着节点在哈希环上的位置顺时针往下（包括位置本身），找到第一个节点，作为数据所归属的节点</strong></li>
+</ul>
+<p>这里需要注意的是，哈希环是首尾相连的，因此倘若来到 2^32 - 1 的位置都没找到目标节点，则需要从 0（2^32）开始接着向后检索.</p>
+<p><a class="simple-lightbox" href="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/hash_key.png"><img   src="/images/loading.svg" data-src="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/hash_key.png"  alt="hash_key" lazyload></a></p>
+<h2 id="2-2-数据迁移"><a href="#2-2-数据迁移" class="headerlink" title="2.2 数据迁移"></a>2.2 数据迁移</h2><p>引入哈希环之后，在数据与节点映射规则上没有传统方案来得那么直观，<strong>但是在数据迁移流程中，这种环状结构的优势就能体现出来了.</strong></p>
+<p>以下图对应的新增节点的场景为例，我们对集群扩容的流程加以梳理：</p>
+<h4 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h4><ul>
+<li>原本集群存在存在 A、B、C、D、E、F 六个节点，已分别添加到哈希换中，位置如下图所示.</li>
+<li>此时需要新增一个节点 G，经过哈希散列和取模运算后，节点 G 在哈希环上的位置位于 B 与 C 之间，我们把位置关系记为 B-G-C</li>
+</ul>
+<h4 id="新增节点流程："><a href="#新增节点流程：" class="headerlink" title="新增节点流程："></a>新增节点流程：</h4><ul>
+<li>找到节点 G 顺时针往下的第一个节点 C</li>
+<li>检索节点 C 中的数据，将从属于 (B,G] 范围的这部分数据摘出来，迁移到节点 G</li>
+<li>节点 G 添加入环</li>
+</ul>
+<p><a class="simple-lightbox" href="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/ADD.png"><img   src="/images/loading.svg" data-src="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/ADD.png"  alt="ADD" lazyload></a></p>
+<p>2.2.2 删除节点</p>
+<p>删除节点时的处理思路与新增节点流程相类似，我们也梳理一下：</p>
+<h4 id="背景-1"><a href="#背景-1" class="headerlink" title="背景"></a>背景</h4><ul>
+<li>原本集群中存在 A、B、C、D、E、F、G 七个节点，均已添加到哈希环中</li>
+<li>现在需要删除其中的节点 G，且节点 G 在哈希环上位于节点 B、C 之间.</li>
+</ul>
+<h4 id="删除节点流程："><a href="#删除节点流程：" class="headerlink" title="删除节点流程："></a>删除节点流程：</h4><ul>
+<li>找到 G 顺时针向下的第一个节点 C</li>
+<li>将 G 中的全量数据迁移至节点 C</li>
+<li>从哈希环中移除节点 G</li>
+</ul>
+<p>至此，删除节点场景下的数据迁移操作完成.</p>
+<p><a class="simple-lightbox" href="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/delete.png"><img   src="/images/loading.svg" data-src="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/delete.png"  alt="delete" lazyload></a></p>
+<p>我们将 2.2 小节中一致性哈希算法下的数据迁移操作与 1.4 小节中的方案就行对比，可以很直观地感受到前者的核心优势，<strong>这本质上是因为这种环状结构加 ceiling（向上开放寻址） 的方式，使得数据所从属的节点 index 不再与集群的节点总数强相关，而仅仅取决于数据与节点在哈希环上的拓扑结构，最终因节点变更而引起数据迁移时，也仅仅需要对局部位置进行变更即可，而不需要将影响面放大到全局.</strong></p>
+<h2 id="2-3-负载均衡"><a href="#2-3-负载均衡" class="headerlink" title="2.3 负载均衡"></a>2.3 负载均衡</h2><p>那么聊到这里方案是否就已经严丝合缝，不存在任何问题了呢？答案是否定的.</p>
+<p>在 2.1 小节中我们提到，每个节点进入哈希环时，所属的位置是根据节点 index 取哈希，并进一步对哈希环长度（2^32） 取模后得到的.</p>
+<p><strong>(新的痛点)</strong><br><strong>我们知道，哈希具有离散的性质，能保证在输入内容不同时，输出结果会均匀地散布在输出域范围之内. 然而这种所谓的“离散”和“均匀”是建立在数据样本足够大的情况下，倘若集群节点数量很少，那么就很可能出现节点位置分布不均匀的情况.</strong></p>
+<p>倘若在哈希环中仅存在 A、B、C 三个节点，其中 A-B、C-A 的相对距离都很短，但是 B-C 的相对距离则很远. 在这种情况下就会导致，在节点 A 和节点 B 中只能分配到少陵的数据，而绝大部分的数据都会被集中分配到节点 C 中.</p>
+<p>产生上述问题的根本原因在于，各个节点分配到的数据量，其实取决于其和上一个节点之间相对距离的长短.</p>
+<h2 id="2-4-虚拟节点"><a href="#2-4-虚拟节点" class="headerlink" title="2.4 虚拟节点"></a>2.4 虚拟节点</h2><h3 id="2-4-1-误差弥合"><a href="#2-4-1-误差弥合" class="headerlink" title="2.4.1 误差弥合"></a>2.4.1 误差弥合</h3><p>针对于 2.3 小节中提出的负载均衡问题，在一致性哈希算法中给出的应对策略是<strong>虚拟节点路由</strong>的方案.</p>
+<p>前面我们提到，<strong>哈希散列本身是具有离散性的，节点数据分配不均的问题通常只会发生在集群节点数量较少的情况下</strong>. 那么，倘若我们采用某种手段，将节点数量放大，那么更大的数据样本就自然而然地能够弥合或者缩小这部分误差所产生的影响，进一步突显出哈希函数的离散性质.</p>
+<p>虚拟节点策略正是这样来做的：</p>
+<ul>
+<li>我们定义出“<code>真实节点</code>”和“<code>虚拟节点</code>”两个概念：<ul>
+<li><strong>真实节点</strong>：集群中的各个节点，是物理意义上存在的服务器节点</li>
+<li><strong>虚拟节点</strong>：真实节点进入哈希环时使用的一系列代理节点，是逻辑意义上的代理节点</li>
+</ul>
+</li>
+<li>对于各个真实节点，我们指定一个策略，确定其虚拟节点的个数，比如放大一定的倍数. 需要注意的是，<strong>虚拟节点越多，那么未来可能抢占到的数据量就越大</strong></li>
+<li>我们需要<strong>维护好一个路由表</strong>，建立好每个虚拟节点与真实节点的映射关系</li>
+<li>我们使用虚拟节点作为真实节点的代理，<strong>将所有虚拟节点添加到哈希环中</strong></li>
+<li>在数据出、入哈希环时，使用虚拟节点进行数据的抢占和关联，流程同 2.1.3 小节</li>
+<li><strong>每当找到一笔数据所从属的虚拟节点时，通过路由表，找到其所映射的真实节点，然后返回真实节点的 index</strong></li>
+</ul>
+<p>基于以上流程，<strong>只要我们合理设置好真实节点到虚拟节点之间数量的放大倍数，那么最终位于哈希环上的代理节点的数量就会足够多，这一系列节点在哈希环上的位置就会越均匀，负载均衡的效果就会越好.</strong></p>
+<p><a class="simple-lightbox" href="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/replica.png"><img   src="/images/loading.svg" data-src="/../images/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/replica.png"  alt="replica" lazyload></a></p>
+<h3 id="2-4-2-带权分治"><a href="#2-4-2-带权分治" class="headerlink" title="2.4.2 带权分治"></a>2.4.2 带权分治</h3><p>此外，这种虚拟节点的技术方案还存在另一个优势，就是<strong>能够支持带权分治的诉求</strong>.</p>
+<p><strong>我们可以根据各个节点的性能水平，为其设置一个不同的权重值，最终这个权重值会作用在真实节点与虚拟节点之间的数量放大过程中，这样我们就能保证性能强的节点拥有更高数量的虚拟节点，未来就有能力抢占到更多的数据.</strong></p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E9%97%AE%E9%A2%98%E8%83%8C%E6%99%AF"><span class="top-box-text">1 问题背景</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-%E7%8A%B6%E6%80%81%E6%9C%8D%E5%8A%A1"><span class="top-box-text">1.1 状态服务</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%97%A0%E7%8A%B6%E6%80%81%E6%9C%8D%E5%8A%A1"><span class="top-box-text">无状态服务</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%9C%89%E7%8A%B6%E6%80%81%E6%9C%8D%E5%8A%A1"><span class="top-box-text">有状态服务</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%BA%B5%E5%90%91%E5%88%86%E6%B2%BB"><span class="top-box-text">纵向分治</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-3-%E5%B8%A6%E6%9D%83%E5%88%86%E6%B2%BB"><span class="top-box-text">1.3 带权分治</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-4-%E6%95%B0%E6%8D%AE%E8%BF%81%E7%A7%BB"><span class="top-box-text">1.4 数据迁移</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C"><span class="top-box-text">2 一致性哈希</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-%E5%93%88%E5%B8%8C%E7%8E%AF"><span class="top-box-text">2.1 哈希环</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-1-1-%E5%93%88%E5%B8%8C%E7%8E%AF%E6%9E%84%E9%80%A0"><span class="top-box-text">2.1.1 哈希环构造</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-1-2-%E8%8A%82%E7%82%B9%E5%85%A5%E7%8E%AF"><span class="top-box-text">2.1.2 节点入环</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-1-3-%E6%95%B0%E6%8D%AE%E5%87%BA-%E5%85%A5%E7%8E%AF"><span class="top-box-text">2.1.3 数据出&#x2F;入环</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-%E6%95%B0%E6%8D%AE%E8%BF%81%E7%A7%BB"><span class="top-box-text">2.2 数据迁移</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1"><span class="top-box-text">2.3 负载均衡</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-4-%E8%99%9A%E6%8B%9F%E8%8A%82%E7%82%B9"><span class="top-box-text">2.4 虚拟节点</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-4-1-%E8%AF%AF%E5%B7%AE%E5%BC%A5%E5%90%88"><span class="top-box-text">2.4.1 误差弥合</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-4-2-%E5%B8%A6%E6%9D%83%E5%88%86%E6%B2%BB"><span class="top-box-text">2.4.2 带权分治</span></a></li></ol></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/02/01/%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86/">
+          <h3 class="post-title">
+            下一篇：分布式事务实现原理
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
