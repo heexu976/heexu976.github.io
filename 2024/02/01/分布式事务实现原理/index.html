@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>分布式事务实现原理</title>
+<meta name="keywords" content="分布式事务实现原理, HeXu">
+<meta name="description" content="1 分布式事务场景1.1 事务核心特性在聊分布式事务之前，我们先理清楚有关于 “事务” 的定义.
+事务 Transaction，是一段特殊的执行程序，其需要具备如下四项核心性质：
+
+A : Atomicity : 原子性，要么全部成功，要么">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="分布式事务实现原理">
+<meta property="og:description" content="1 分布式事务场景1.1 事务核心特性在聊分布式事务之前，我们先理清楚有关于 “事务” 的定义.
+事务 Transaction，是一段特殊的执行程序，其需要具备如下四项核心性质：
+
+A : Atomicity : 原子性，要么全部成功，要么">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">分布式事务实现原理</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-02-01</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Distributed/">
+              Distributed
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="1-分布式事务场景"><a href="#1-分布式事务场景" class="headerlink" title="1 分布式事务场景"></a>1 分布式事务场景</h1><h2 id="1-1-事务核心特性"><a href="#1-1-事务核心特性" class="headerlink" title="1.1 事务核心特性"></a>1.1 事务核心特性</h2><p>在聊分布式事务之前，我们先理清楚有关于 “事务” 的定义.</p>
+<p>事务 <strong>Transaction</strong>，是一段特殊的执行程序，其需要具备如下四项核心性质：</p>
+<ol>
+<li><strong>A : Atomicity</strong> : 原子性，要么全部成功，要么全部失败</li>
+<li><strong>C : Consistency</strong> : 一致性：宏观角度下，数据包纸一致性</li>
+<li><strong>I : Isolation</strong> : 隔离性，并发事务不互相干扰</li>
+<li><strong>D : Durabilty</strong> : 持久性，事务提交后，改变永久生效</li>
+</ol>
+<p>上面四项核心要素被称为事务的 <code>acid</code> 四大特性. 当事务的影响范围局限在一个关系型数据库范围内时，很多时候上述四项性质是能够水到渠成地得到实现的，<strong>但是倘若事务涉及修改的对象是跨数据库甚至跨服务跨存储组件时，这个问题就开始变得复杂且有趣了</strong>，也就正式迈入我们今天所重点探讨的“分布式事务”领域的问题.</p>
+<h2 id="1-2-分布式事务场景问题"><a href="#1-2-分布式事务场景问题" class="headerlink" title="1.2 分布式事务场景问题"></a>1.2 分布式事务场景问题</h2><p>下面我们通过一个常见的场景问题引出有关于<code>分布式事务</code>的话题.</p>
+<p>假设我们在维护一个电商后台系统，每当在处理一笔来自用户创建订单的请求时，需要执行两步操作：</p>
+<p><code>从账户系统中，扣减用户的账户余额</code><br><code>从库存系统中，扣减商品的剩余库存</code></p>
+<p>从<strong>业务流程</strong>上来说，这个流程需要保证具备事务的原子性，即两个操作需要能够一气呵成地完成执行，要么同时成功，要么同时失败，不能够出现数据状态不一致的问题，比如发生从用户账户扣除了金额但商品库存却扣减失败的问题.</p>
+<p>然而从<strong>技术流程</strong>上来讲，两个步骤是相对独立的两个操作，底层涉及到的存储介质也是相互独立的，因此无法基于本地事务的实现方式.</p>
+<p>因此，这本质上就是我们今天所要谈及的分布式事务问题.</p>
+<p>分布式事务的实现难度是很高的，但是不用慌，办法总比困难多，在业界针对于分布式事务早已提出一套被广泛认可应用的解决方案，这部分内容将在本文第2、3章内容中详细展开介绍. 在这里，我们需要明确所谓分布式事务的实现中，其中所谓的数据状态一致性是需要做出妥协的：</p>
+<ul>
+<li><p><strong>在分布式事务中，我们谈到的“数据状态一致性”，指的是数据的最终一致性，而非数据的即时一致性，因为即时一致性通常是不切实际的</strong></p>
+</li>
+<li><p><strong>没有分布式事务能够保证数据状态具备百分之百的一致性，根本原因就在于网络环境和第三方系统的不稳定性</strong></p>
+</li>
+</ul>
+<h1 id="2-事务消息方案"><a href="#2-事务消息方案" class="headerlink" title="2 事务消息方案"></a>2 事务消息方案</h1><p>首先，一类偏狭义的分布式事务解决方案是基于消息队列 <code>MessageQueue（后续简称 MQ）</code>实现的事务消息 <code>Transaction Message</code>.</p>
+<h2 id="2-1-RocketMQ-简介"><a href="#2-1-RocketMQ-简介" class="headerlink" title="2.1 RocketMQ 简介"></a>2.1 RocketMQ 简介</h2><p><code>RocketMQ</code> 是阿里基于 <code>java</code> 实现并托管于 <code>apache</code> 基金会的顶级开源消息队列组件，其中事务消息 <code>TX Msg</code> 也是 <code>RocketMQ</code> 现有的一项能力. 本章将主要基于 RocketMQ 针对事务消息的实现思路展开介绍.</p>
+<h2 id="2-2-基于-MQ-实现分布式事务"><a href="#2-2-基于-MQ-实现分布式事务" class="headerlink" title="2.2 基于 MQ 实现分布式事务"></a>2.2 基于 MQ 实现分布式事务</h2><p>我们知道在 <code>MQ</code> 组件中，通常能够为我们保证的一项能力是：投递到 <code>MQ</code> 中的消息能至少被下游消费者 <code>consumer</code> 消费到一次，即所谓的 <code>at least once</code> 语义.</p>
+<p>基于此，<code>MQ</code> 组件能够保证消息不会在消费环节丢失，但是无法解决消息的重复性问题. 因此，倘若我们需要追求精确消费一次的目标，则下游的 <code>consumer</code> 还需要基于消息的唯一键执行幂等去重操作，在 <code>at least once</code> 的基础上过滤掉重复消息，最终达到 <code>exactly once</code> 的语义.</p>
+<p><strong>依赖于 <code>MQ</code> 中 <code>at least once</code> 的性质，我们简单认为，只要把一条消息成功投递到 <code>MQ</code> 组件中，它就一定被下游 <code>consumer</code> 端消费端，至少不会发生消息丢失的问题.</strong></p>
+<p>倘若我们需要执行一个分布式事务，事务流程中包含需要在服务 A 中执行的动作 I 以及需要在服务 B 中执行的动作 II，此时我们可以基于如下思路串联流程：</p>
+<ul>
+<li>以服务 A 作为 MQ 生产方 producer，服务 B 作为 MQ 消费方 consumer</li>
+<li>服务 A 首先在执行动作 I，执行成功后往 MQ 中投递消息，驱动服务 B 执行动作 II</li>
+<li>服务 B 消费到消息后，完成动作 II 的执行</li>
+</ul>
+<p>对上述流程进行总结，其具备如下<strong>优势</strong>：</p>
+<ul>
+<li>服务 A 和服务 B 通过 MQ 组件实现异步解耦，从而提高系统处理整个事务流程的吞吐量</li>
+<li>当服务 A 执行 动作 I 失败后，可以选择不投递消息从而熔断流程，因此保证不会出现动作 II 执行成功，而动作 I 执行失败的不一致问题</li>
+<li>基于 MQ at least once 的语义，服务 A 只要成功消息的投递，就可以相信服务 B 一定能消费到该消息，至少服务 B 能感知到动作 II 需要执行的这一项情报</li>
+<li>依赖于 MQ 消费侧的 ack 机制，可以实现服务 B 有限轮次的重试能力. 即当服务 B 执行动作 II 失败后，可以给予 MQ bad ack，从而通过消息重发的机制实现动作 II 的重试，提高动作 II 的执行成功率</li>
+</ul>
+<p>与之相对的，上述流程也具备如下几项<strong>局限性</strong>：</p>
+<ul>
+<li>问题 1：服务 B 消费到消息执行动作 II 可能发生失败，即便依赖于 MQ 重试也无法保证动作一定能执行成功，此时缺乏令服务 A 回滚动作 I 的机制. 因此很可能出现动作 I 执行成功，而动作 II 执行失败的不一致问题</li>
+<li>问题 2：在这个流程中，服务 A 需要执行的操作有两步：（1）执行动作 I；（2）投递消息. 这两个步骤本质上也无法保证原子性，即可能出现服务 A 执行动作 I 成功，而投递消息失败的问题.</li>
+</ul>
+<p>在本章谈及的事务消息实现方案中：</p>
+<ul>
+<li>针对问题 1 是无能为力的，因为这个问题本身就脱离于事务消息的领域范畴之外，需要放到第 3 章中通过另一类分布式事务的实现方案加以解决.</li>
+<li>而针对于问题 2 的解决思路，则正是本章中所需要重点探讨的话题.</li>
+</ul>
+<h2 id="2-3-本地事务-消息投递"><a href="#2-3-本地事务-消息投递" class="headerlink" title="2.3 本地事务+消息投递"></a>2.3 本地事务+消息投递</h2><p>2.2 小节中，聊到的服务 A 所要执行的操作分为两步：<strong>本地事务+消息投递</strong>. 这里我们需要如何保证这两个步骤的执行能够步调统一呢，下面不妨一起来推演一下我们的流程设计思路：</p>
+<p>首先，这两个步骤在流程中一定会存在一个执行的先后顺序，我们首先来思考看看不同的组织顺序可能会分别衍生出怎样的问题：</p>
+<h3 id="组合-I：先执行本地事务，后执行消息投递"><a href="#组合-I：先执行本地事务，后执行消息投递" class="headerlink" title="组合 I：先执行本地事务，后执行消息投递"></a>组合 I：先执行本地事务，后执行消息投递</h3><p><strong>组合 I 的优势</strong>：不会出现消息投递成功而本地事务执行失败的情况. 这是因为在本地事务执行失败时，可以主动熔断消息投递的动作.</p>
+<p><strong>组合 I 的劣势</strong>：可能出现本地事务执行成功而消息投递失败的问题. 比如本地事务成功后，想要尝试执行消息投递操作时一直出现失败，最终消息无法发出. 此时由于本地事务已经提交，要执行回滚操作会存在着很高的成本.</p>
+<h3 id="组合-II：先执行消息投递，后执行本地事务"><a href="#组合-II：先执行消息投递，后执行本地事务" class="headerlink" title="组合 II：先执行消息投递，后执行本地事务"></a>组合 II：先执行消息投递，后执行本地事务</h3><p><strong>组合 II 的优势</strong>：不会出现本地事务执行成功而消息投递失败的问题. 因为在消息投递失败时，可以不开启本地事务的执行操作.</p>
+<p><strong>组合 II 的劣势</strong>：可能出现消息投递成功而本地事务执行失败问题. 比如消息投递成功后，本地事务始终无法成功执行，而消息一经发出，就已经覆水难收了.</p>
+<p>捋完上述两种流程中存在的问题后，一种比较容易想到的实现思路是：基于本地事务包裹消息投递操作的实现方式，对应执行步骤如下：</p>
+<ol>
+<li>首先 <code>begin transaction</code>，开启本地事务</li>
+<li>在事务中，执行本地状态数据的更新</li>
+<li>完成数据更新后，不立即 <code>commit transaction</code></li>
+<li>执行消息投递操作</li>
+<li>倘若消息投递成功，则 <code>commit transaction</code></li>
+<li>倘若消息投递失败，则 <code>rollback transaction</code></li>
+</ol>
+<p>这个流程乍一看没啥毛病，重复利用了本地事务回滚的能力，解决了本地修改操作成功、消息投递失败后本地数据修正成本高的问题.</p>
+<p>然而，这仅仅是表现. 上述流程实际上是经不住推敲的，其中存在三个致命问题：</p>
+<ol>
+<li>在和数据库交互的本地事务中，夹杂了和第三方组件的 IO 操作，可能存在引发<strong>长事务</strong>的风险</li>
+<li>执行消息投递时，可能因为超时或其他意外原因，导致出现消息在事实上已投递成功，但 <strong>producer 获得的投递响应发生异常的问题，这样就会导致本地事务被误回滚的问题</strong></li>
+<li><strong>在执行事务提交操作时，可能发生失败</strong>. 此时事务内的数据库修改操作自然能够回滚，然而 MQ 消息一经发出，就已经无法回收了.</li>
+</ol>
+<h2 id="2-4-事务消息原理"><a href="#2-4-事务消息原理" class="headerlink" title="2.4 事务消息原理"></a>2.4 事务消息原理</h2><p>2.3 小节聊完后，我猜测大家心头多少产生一点点窒息感，同时也对我们今天所探讨的分布式事务这个话题产生了更充分的敬畏之心.</p>
+<p>下面，我们就正式开始介绍解决这个问题的正解——**<code>事务消息 Transaction Message</code>**.</p>
+<p>我们以 <code>RocketMQ</code> 中 <code>TX Msg</code> 的实现方案为例展开介绍. 首先抛出结论，TX Msg 能保证我们做到在本地事务执行成功的情况下，后置的投递消息操作能以接近百分之百的概率被发出. 其实现的核心流程为：</p>
+<ol>
+<li>生产方 <code>producer</code> 首先向 <code>RocketMQ</code> 生产一条半事务消息，此消息处于中间态，会暂存于 <code>RocketMQ</code> 不会被立即发出</li>
+<li><code>producer</code> 执行本地事务</li>
+<li>如果本地事务执行成功，<code>producer</code> 直接提交本地事务，并且向 <code>RocketMQ</code> 发出一条确认消息</li>
+<li>如果本地事务执行失败，<code>producer</code> 向 <code>RocketMQ</code> 发出一条回滚指令</li>
+<li>倘若 <code>RocketMQ</code> 接收到确认消息，则会执行消息的发送操作，供下游消费者 consumer 消费</li>
+<li>倘若 <code>RocketMQ</code> 接收到回滚指令，则会删除对应的半事务消息，不会执行实际的消息发送操作</li>
+<li>此外，在 <code>RocketMQ</code> 侧，针对半事务消息会有一个轮询任务，倘若半事务消息一直未收到来自 <code>producer</code> 侧的二次确认，则 <code>RocketMQ</code> 会持续主动询问 <code>producer</code> 侧本地事务的执行状态，从而引导半事务消息走向终态</li>
+</ol>
+<p>在 <code>TX Msg</code> 的实现流程中，能够保证 2.3 小节中谈及的各种 badcase 都能被很好地消化：</p>
+<ul>
+<li>倘若本地事务执行失败，则 <code>producer</code> 会向 <code>RocketMQ</code> 发出删除半事务消息的回滚指令，因此保证消息不会被发出</li>
+<li>倘若本地事务执行成功， 则 <code>producer</code> 会向 <code>RocketMQ</code> 发出事务成功的确认指令，因此消息能够被正常发出</li>
+<li>倘若 <code>producer</code> 端在发出第二轮的确认或回滚指令前发生意外状况，导致第二轮结果指令确实. 则 <code>RocketMQ</code> 会基于自身的轮询机制主动询问本地事务的执行状况，最终帮助半事务消息推进进度.</li>
+</ul>
+<h2 id="2-5-事务消息局限性"><a href="#2-5-事务消息局限性" class="headerlink" title="2.5 事务消息局限性"></a>2.5 事务消息局限性</h2><p>在本章一开始时，就有提到，事务消息<code> TX Msg</code> 只是一类偏狭义的分布式事务解决方案. 因此我们在使用这项能力时，需要在心中需要有一个明确的认知和预期.</p>
+<p>现在我们就来总结梳理一下，<strong>TX Msg 中存在的几项局限性：</strong></p>
+<ul>
+<li><strong>流程高度抽象</strong>：TX Msg 把流程抽象成<strong>本地事务+投递</strong>消息两个步骤. 然而在实际业务场景中，分布式事务内包含的步骤数量可能很多，因此就需要把更多的内容更重的内容糅合在所谓的“本地事务”环节中，上游 producer 侧可能会存在比较大的压力</li>
+<li><strong>不具备逆向回滚能力</strong>：倘若接收消息的下游 consumer 侧执行操作失败，此时至多只能依赖于 MQ 的重发机制通过重试动作的方式提高执行成功率，但是无法从根本上解决下游 consumer 操作失败后回滚上游 producer 的问题. 这一点正是 TX Msg 中存在的最大的局限性.</li>
+</ul>
+<p>关于上面第二点，我们再展开谈几句. 我们知道，<strong>并非所有动作都能通过简单的重试机制加以解决.</strong></p>
+<p>打个比方，倘若下游是一个库存管理系统，而对应商品的库存在事实上已经被扣减为 0，此时无论重试多少次请求都是徒然之举，这就是一个客观意义上的失败动作.</p>
+<p>而遵循正常的事务流程，后置操作失败时，我们应该连带前置操作一起执行回滚，然而这部分能力在 TX Msg 的主流程中并没有予以体现.</p>
+<p>要实现这种事务的逆向回滚能力，就必然需要构筑打通一条由下游逆流而上回调上游的通道，这一点并不属于 TX Msg 探讨的范畴.</p>
+<h1 id="3-TCC-实现方案"><a href="#3-TCC-实现方案" class="headerlink" title="3 TCC 实现方案"></a>3 TCC 实现方案</h1><h2 id="3-1-TCC-概念简述"><a href="#3-1-TCC-概念简述" class="headerlink" title="3.1 TCC 概念简述"></a>3.1 TCC 概念简述</h2><p><code>TCC</code>，全称 <code>Try-Confirm-Cancel</code>，指的是将一笔状态数据的修改操作拆分成两个阶段：</p>
+<ul>
+<li>第一个阶段是 <code>Try</code>，指的是先对资源进行锁定，资源处于中间态但不处于最终态</li>
+<li>第二个阶段分为 <code>Confirm</code> 和 <code>Cancel</code>，指的是在 <code>Try</code> 操作的基础上，真正提交这次修改操作还是回滚这次变更操作</li>
+</ul>
+<h3 id="关于-TCC-的概念介绍"><a href="#关于-TCC-的概念介绍" class="headerlink" title="关于 TCC 的概念介绍:"></a>关于 TCC 的概念介绍:</h3><p><strong>每一个初步操作，最终都会被确认或取消</strong>。因此，针对一个具体的业务服务，TCC事务机制需要业务系统提供三段业务逻辑：<code>初步操作Try</code>、<code>确认操作Confirm</code>、<code>取消操作Cancel</code>。</p>
+<h4 id="1-初步操作（Try）"><a href="#1-初步操作（Try）" class="headerlink" title="1. 初步操作（Try）"></a>1. 初步操作（Try）</h4><p><code>TCC</code>事务机制中的业务逻辑（<code>Try</code>），<strong>从执行阶段来看，与传统事务机制中业务逻辑相同。但从业务角度来看，却不一样。TCC机制中的Try仅是一个初步操作，它和后续的确认一起才能真正构成一个完整的业务逻辑</strong>。可以认为</p>
+<p><code>[传统事务机制]的业务逻辑 = [TCC事务机制]的初步操作（Try） + [TCC事务机制]的确认逻辑（Confirm）</code></p>
+<p><code>TCC</code>机制将传统事务机制中的业务逻辑一分为二，拆分后保留的部分即为初步操作（<code>Try</code>）；而分离出的部分即为确认操作（<code>Confirm</code>），被延迟到事务提交阶段执行。</p>
+<p><code>TCC</code>事务机制以初步操作（<code>Try</code>）为中心的，确认操作（<code>Confirm</code>）和取消操作（<code>Cancel</code>）都是围绕初步操作（<code>Try</code>）而展开。因此，<code>Try</code>阶段中的操作，其保障性是最好的，即使失败，仍然有取消操作（<code>Cancel</code>）可以将其不良影响进行回撤。</p>
+<h4 id="2-确认操作（Confirm）"><a href="#2-确认操作（Confirm）" class="headerlink" title="2. 确认操作（Confirm）"></a>2. 确认操作（Confirm）</h4><p>确认操作（<code>Confirm</code>）是对初步操作（<code>Try</code>）的一个补充。当TCC事务管理器决定<code>commit</code>全局事务时，就会逐个执行初步操作（<code>Try</code>）指定的确认操作（<code>Confirm</code>），将初步操作（<code>Try</code>）未完成的事项最终完成。</p>
+<ol start="3">
+<li>取消操作（<code>Cancel</code>）<br>取消操作（<code>Cancel</code>）是对初步操作（<code>Try</code>）的一个回撤。当TCC事务管理器决定<code>rollback</code>全局事务时，就会逐个执行初步操作（<code>Try</code>）指定的取消操作（<code>Cancel</code>），将初步操作（<code>Try</code>）已完成的事项全部撤回。</li>
+</ol>
+<p>在传统事务机制中，<strong>业务逻辑的执行</strong>和<strong>事务的处理</strong>，是在不同的阶段由不同的部件来完成的：<strong>业务逻辑部分访问资源实现数据存储，其处理是由业务系统负责</strong>；<strong>事务处理部分通过协调资源管理器以实现事务管理，其处理由事务管理器来负责</strong>。二者没有太多交互的地方，所以，传统事务管理器的事务处理逻辑，仅需要着眼于事务完成（commit&#x2F;rollback）阶段，而不必关注业务执行阶段。</p>
+<p>而在TCC事务机制中的业务逻辑处理和事务处理，其关系就错综复杂：业务逻辑（Try&#x2F;Confirm&#x2F;Cancel）阶段涉及所参与资源事务的commit&#x2F;rollback；全局事务commit&#x2F;rollback时又涉及到业务逻辑（Try&#x2F;Confirm&#x2F;Cancel）的执行。</p>
+<h2 id="3-2-TCC-宏观架构"><a href="#3-2-TCC-宏观架构" class="headerlink" title="3.2 TCC 宏观架构"></a>3.2 TCC 宏观架构</h2><p>下面是 <code>TCC</code> 分布式事务实现方案的整体架构，大家可以先整体浏览一下存个印象，下面我们会逐一展开介绍：</p>
+<p>在 <code>TCC</code> 分布式事务架构中，包含三类角色：</p>
+<p><a class="simple-lightbox" href="/../images/%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86/tcc.png"><img   src="/images/loading.svg" data-src="/../images/%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86/tcc.png"  alt="tcc" lazyload></a></p>
+<ul>
+<li>应用方 <code>Application</code>：<strong>指的是需要使用到分布式事务能力的应用方，即这套 TCC 框架服务的甲方</strong></li>
+<li>TCC 组件 <code>TCC Component</code>：<strong>指的是需要完成分布式事务中某个特定步骤的子模块</strong>. 这个模块通常负责一些状态数据的维护和更新操作，需要对外暴露出 <code>Try</code>、<code>Confirm</code> 和 <code>Cancel</code> 三个 API：<ul>
+<li><code>Try：锁定资源，通常以类似【冻结】的语义对资源的状态进行描述，保留后续变化的可能性</code></li>
+<li><code>Confirm：对 Try 操作进行二次确认，将记录中的【冻结】态改为【成功】态</code></li>
+<li><code>Cancel：对 Try 操作进行回滚，将记录中的【冻结】状消除或者改为【失败】态. 其底层对应的状态数据会进行回滚</code></li>
+</ul>
+</li>
+<li>事务协调器 <code>TX Manager</code>：<strong>负责统筹分布式事务的执行</strong>：<ul>
+<li><code>实现 TCC Component 的注册管理功能</code></li>
+<li><code>负责和 Application 交互，提供分布式事务的创建入口，给予 Application 事务执行结果的响应</code></li>
+<li><code>串联 Try -&gt; Confirm/Cancel 的两阶段流程. 在第一阶段中批量调用 TCC Component 的 Try 接口，根据其结果，决定第二阶段是批量调用 TCC Component 的 Confirm 接口还是 Cancel 接口</code></li>
+</ul>
+</li>
+</ul>
+<h2 id="3-3-TCC-案例分析"><a href="#3-3-TCC-案例分析" class="headerlink" title="3.3 TCC 案例分析"></a>3.3 TCC 案例分析</h2><p>前面我们大致捋了一遍 <code>TCC</code> 的整体架构，但干料概念还是过于抽象，理解认知上不够形象和立体，下面我们引入一个具体的分布式事务场景问题，并通过 <code>TCC</code> 架构加以实现，帮助大家进一步提高对 <code>TCC</code> 分布式事务方案的感性认识.</p>
+<p>现在假设我们需要维护一个电商后台系统，需要处理来自用户的支付请求. 每当有一笔支付请求到达，我们需要执行下述三步操作，并要求其前后状态保持一致性：</p>
+<ul>
+<li>在订单模块中，创建出这笔订单流水记录</li>
+<li>在账户模块中，对用户的账户进行相应金额的扣减</li>
+<li>在库存模块中，对商品的库存数量进行扣减</li>
+</ul>
+<p>上面这三步操作分别需要对接订单、账户、库存三个不同的子模块，底层的状态数据是基于不同的数据库和存储组件实现的，并且我们这套后台系统是基于当前流行的微服务架构实现的，这三子个模块本身对应的就是三个相互独立的微服务，因此如何实现在一笔支付请求处理流程中，使得这三笔操作对应的状态数据始终保持高度一致性，就成了一个非常具有技术挑战性的问题.</p>
+<p>首先，我们基于 <code>TCC</code> 的设计理念，将订单模块、账户模块、库存模块分别改造成三个 <code>TCC Component</code>，每个 <code>Component</code> 对应需要暴露出 <code>Try</code>、<code>Confirm</code>、<code>Cancel</code> 三个 <code>API</code>，对应于冻结资源、确认更新资源、回滚解冻资源三个行为.</p>
+<p>同时，为了能够简化后续 <code>TX Manager</code> 和 <code>Application</code> 之间的交互协议，每个 <code>TCC Component</code> 会以插件的形式提前注册到 <code>TX Manager</code> 维护的组件市场 <code>Component Market</code> 中，并提前声明好一个全局唯一键与之进行映射关联.</p>
+<p>由于每个 <code>TCC Component</code> 需要支持 <code>Try</code> 接口的锁定操作，因此其中维护的数据需要在明细记录中拆出一个用于标识 <strong>“冻结”</strong> 状态的标签，或者在状态机中拆出一个 <strong>“冻结”</strong> 状态.</p>
+<p>最终在第二阶段的 <code>Confirm</code> 或者 <code>Cancel</code> 请求到达时，再把 <strong>”冻结“</strong> 状态调整为 <strong>”成功“</strong> 或者 <strong>”失败“</strong> 的终态.</p>
+<p><strong>下面描述一下，基于 TCC 架构实现后，对应于一次支付请求的分布式事务处理流程：</strong></p>
+<ol>
+<li><code>Application</code> 调用 <code>TX Manager</code> 的接口，创建一轮分布式事务：</li>
+<li><code>Application</code> 需要向 <code>TX Manager</code> 声明，这次操作涉及到的 <code>TCC Component</code> 范围，包括 订单组件、账户组件和库存组件</li>
+<li><code>Application</code> 需要向 <code>TX Manager</code> 提前传递好，用于和每个 <code>TCC Component</code> 交互的请求参数（ <code>TX Manager</code> 调用 <code>Component Try</code> 接口时需要传递）</li>
+<li><code>TX Manager</code> 需要为这笔新开启的分布式事务分配一个全局唯一的事务主键 <code>Transaction ID</code></li>
+<li><code>TX Manager</code> 将这笔分布式事务的明细记录添加到事务日志表中</li>
+<li><code>TX Manager</code> 分别调用订单、账户、库存组件的 <code>Try</code> 接口，试探各个子模块的响应状况，比并尝试锁定对应的资源</li>
+<li><code>TX Manager</code> 收集每个 <code>TCC Component</code> <code>Try</code> 接口的响应结果，根据结果决定下一轮的动作是 <code>Confirm</code> 还是 &#96;Cancel</li>
+<li>倘若三笔 Try 请求中，有任意一笔未请求成功：<ol>
+<li><code>TX Manager</code> 给予 <code>Application</code> 事务执行失败的 <code>Response</code></li>
+<li><code>TX Manager</code> 批量调用订单、账户、库存 <code>Component</code> 的 <code>Cancel</code> 接口，回滚释放对应的资源</li>
+<li>在三笔 <code>Cancel</code> 请求都响应成功后，<code>TX Manager</code> 在事务日志表中将这笔事务记录置为<code>【失败】</code>状态</li>
+</ol>
+</li>
+<li>倘若三笔 <code>Try</code> 请求均响应成功了：<ol>
+<li><code>TX Manager</code> 给予 <code>Application</code> 事务执行成功的 <code>ACK</code></li>
+<li><code>TX Manager</code> 批量调用订单、账户、库存 <code>Component</code> 的 <code>Confirm</code> 接口，使得对应的变更记录实际生效</li>
+<li>在三笔 <code>Confirm</code> 请求都响应成功后，<code>TX Manager</code> 将这笔事务日志置为<code>【成功】</code>状态</li>
+</ol>
+</li>
+</ol>
+<p><strong>在上述流程中，有一个很重要的环节需要补充说明：</strong></p>
+<p>首先，<code>TCC</code> 本质上是一个两阶段提交<code>（Two Phase Commitment Protocol，2PC）</code>的实现方案，分为 <code>Try</code> 和 <code>Confirm/Cancel</code> 的两个阶段：</p>
+<ul>
+<li><code>Try</code> 操作的容错率是比较高的，原因在于有人帮它兜底. <code>Try</code> 只是一个试探性的操作，不论成功或失败，后续可以通过第二轮的 <code>Confirm</code> 或 <code>Cancel</code> 操作对最终结果进行修正.</li>
+<li><code>Confirm/Cancel</code> 操作是没有容错的，倘若在第二阶段出现问题，可能会导致 <code>Component</code> 中的状态数据被长时间 <strong><code>”冻结“</code></strong> 或者 <strong><code>数据状态不一致</code></strong> 的问题</li>
+</ul>
+<p>针对于这个场景，TCC 架构中采用的解决方案是：<strong>在第二阶段中，TX Manager 轮询重试 + TCC Component 幂等去重. 通过这两套动作形成的组合拳，保证 Confirm&#x2F; Cancel 操作至少会被 TCC Component 执行一次.</strong></p>
+<p><strong>首先，针对于 <code>TX Manager</code> 而言：</strong></p>
+<ul>
+<li>需要启动一个<strong>定时轮询</strong>任务</li>
+<li>对于事务日志表中，所有未被更新为<code>【成功/失败】</code>对应终态的事务，需要摘出进行检查</li>
+<li>检查时查看其涉及的每个组件的 <code>Try</code> 接口的响应状态以及这笔事务的持续时长</li>
+<li>倘若事务应该被置为<code>【失败】</code>（存在某个 TCC Component Try 接口请求失败），但状态却并未更新，说明之前批量执行 Cancel 操作时可能发生了错误. 此时需要补偿性地批量调用事务所涉及的所有 Component 的 Cancel 操作，待所有 Cancel 操作都成功后，将事务置为<code>【失败</code>】状态</li>
+<li>倘若事务应该被置为<code>【成功】</code>（所有 TCC Component Try 接口均请求成功），但状态却并未更新，说明之前批量执行 Confirm 操作时可能发生了错误. 此时需要补偿性地批量调用事务所涉及的所有 Component 的 Confirm 操作，待所有 Confirm 操作都成功后，将事务置为<code>【成功】</code>状态</li>
+<li>倘若事务仍处于【<code>进行中】</code>状态（TCC Component Try 接口请求未出现失败，但并非所有 Component Try 接口都请求成功），则检查事务的创建时间，倘若其耗时过长，同样需要按照事务失败的方式进行处理</li>
+</ul>
+<p>需要注意，在 <code>TX Manager</code> 轮询重试的流程中，针对下游 <code>TCC Component</code> 的 <code>Confirm</code> 和 <code>Cancel</code> 请求只能保证<code> at least once</code> 的语义，换句话说，这部分请求是可能出现重复的.</p>
+<p>因此，在下游 <code>TCC Component</code> 中，需要在接收到 <code>Confirm/Cancel</code> 请求时，<strong>执行幂等去重操作</strong>. <strong>幂等去重操作需要有一个唯一键作为去重的标识</strong>，这个标识键就是 <code>TX Manager</code> 在开启事务时为其分配的全局唯一的 <code>Transaction ID</code>，它既要作为这项事务在事务日志表中的唯一键，同时在 <code>TX Manager</code> 每次向 <code>TCC Component</code> 发起请求时，都要携带上这笔 <code>Transaction ID</code>.</p>
+<h2 id="3-4-TX-Manager-职责"><a href="#3-4-TX-Manager-职责" class="headerlink" title="3.4 TX Manager 职责"></a>3.4 TX Manager 职责</h2><p>通过上面这个实际案例的流程剖析后，相信大家已经对这套 TCC 架构有了一定的理解. 接下来我们再从 <code>TX Manager</code> 和 <code>TCC Component</code> 职责领域划分的视角出发，进行一轮梳理.</p>
+<p>首先针对于事务协调器 <code>TX Manager</code>，其核心要点包括：</p>
+<ul>
+<li>暴露出注册 <code>TCC Component</code> 的接口，进行 <code>Component</code> 的注册和管理</li>
+<li>暴露出启动分布式事务的接口，作为和 <code>Application</code> 交互的唯一入口，并基于 <code>Application</code> 事务执行结果的反馈</li>
+<li>为每个事务维护全局唯一的 <code>Transaction ID</code>，基于事务日志表记录每项分布式事务的进展明细</li>
+<li>串联 <code>Try——Confirm/Cancel</code> 的两阶段流程，根据 <code>Try</code> 的结果，推进执行 <code>Confirm</code> 或 <code>Cancel</code> 流程</li>
+<li>持续运行轮询检查任务，推进每个处于中间态的分布式事务流转到终态</li>
+</ul>
+<h2 id="3-5-TCC-Component-职责"><a href="#3-5-TCC-Component-职责" class="headerlink" title="3.5 TCC Component 职责"></a>3.5 TCC Component 职责</h2><p>对于 <code>TCC Component</code> 而言，其需要关心和处理的工作包括：</p>
+<ul>
+<li>暴露出 <code>Try、Confirm、Cancel</code> 三个入口，对应于 <code>TCC</code> 的语义</li>
+<li>针对数据记录，新增出一个对应于 <code>Try</code> 操作的中间状态枚举值</li>
+<li>针对于同一笔事务的重复请求，需要执行<strong>幂等性校验</strong></li>
+<li>需要支持空回滚操作. 即针对于一笔新的 Transaction ID，在没收到 Try 的前提下，若提前收到了 Cancel 操作，也需要将这个信息记录下来，但不需要对真实的状态数据发生变更</li>
+</ul>
+<p>下面针对最后一点提到的<strong>空回滚</strong>操作，进一步加以说明：</p>
+<p>这个<strong>空回滚机制本质上是为了解决 TCC 流程中出现的悬挂问题</strong>，下面我们举个具体例子加以说明：</p>
+<ul>
+<li><code>TX Manager</code> 在向 <code>Component A</code> 发起 <code>Try</code> 请求时，由于出现网络拥堵，导致请求超时</li>
+<li><code>TX Manager</code> 发现存在 <code>Try</code> 请求超时，将其判定为失败，因此批量执行 <code>Component</code> 的 <code>Cancel</code> 操作</li>
+<li><code>Component A</code> 率先收到了后发先至的 <code>Cancel</code> 请求</li>
+<li>过了一会儿，之前阻塞在网络链路中的 <code>Try</code> 请求也到达了 <code>Component A</code></li>
+</ul>
+<p>从执行逻辑上，<code>Try</code> 应该先于 <code>Cancel</code> 到达和处理，然而在事实上，由于网络环境的不稳定性，请求到达的先后次序可能颠倒. 在这个场景中，<code>Component A</code> 需要保证的是，针对于同一笔事务，只要接受过对应的 <code>Cancel</code> 请求，之后到来的 Try 请求需要被忽略. 这就是 <code>TCC Component</code> 需要支持空回滚操作的原因所在.</p>
+<h2 id="3-6-TCC-优劣势分析"><a href="#3-6-TCC-优劣势分析" class="headerlink" title="3.6 TCC 优劣势分析"></a>3.6 TCC 优劣势分析</h2><p>最后我们针对 <code>TCC</code> 分布式事务实现方案的优劣势进行分析：</p>
+<h3 id="优势："><a href="#优势：" class="headerlink" title="优势："></a>优势：</h3><ul>
+<li><code>TCC</code> 可以称得上是真正意义上的分布式事务：任意一个 <code>Component</code> 的 <code>Try</code> 操作发生问题，都能支持事务的整体回滚操作</li>
+<li><code>TCC</code> 流程中，分布式事务中数据的状态一致性能够趋近于 100%，这是因为第二阶段 <code>Confirm/Cancel</code> 的成功率是很高的，原因在于如下三个方面：<ul>
+<li><code>TX Manager</code> 在此前刚和 <code>Component</code> 经历过一轮 <code>Try</code> 请求的交互并获得了成功的 <code>ACK</code>，因此短时间内，<code>Component</code> 出现网络问题或者自身节点状态问题的概率是比较小的</li>
+<li><code>TX Manager</code> 已经通过 <code>Try</code> 操作，让 <code>Component</code> 提前锁定了对应的资源，因此确保了资源是充分的，且由于执行了状态锁定，出现并发问题的概率也会比较小</li>
+<li><code>TX Manager</code> 中通过轮询重试机制，保证了在 <code>Confirm</code> 和 <code>Cancel</code> 操作执行失败时，也能够通过重试机制得到补偿</li>
+</ul>
+</li>
+</ul>
+<h3 id="劣势："><a href="#劣势：" class="headerlink" title="劣势："></a>劣势：</h3><ul>
+<li>TCC分布式事务中，涉及的状态数据变更只能<strong>趋近于最终一致性</strong>，无法做到即时一致性</li>
+<li>**事务的原子性只能做到趋近于 100%**，而无法做到真正意义上的 100%，原因就在于第二阶段的 Confirm 和 Cancel 仍然存在极小概率发生失败，即便通过重试机制也无法挽救. 这部分小概率事件，就需要通过人为介入进行兜底处理</li>
+<li><strong>TCC 架构的实现成本是很高的</strong>，需要所有子模块改造成 TCC 组件的格式，且整个事务的处理流程是相对繁重且复杂的. 因此在针对数据一致性要求不那么高的场景中，通常不会使用到这套架构.</li>
+</ul>
+<h1 id="4-总结"><a href="#4-总结" class="headerlink" title="4 总结"></a>4 总结</h1><ul>
+<li><strong>Transaction Message</strong>：能够支持狭义的分布式事务. 基于消息队列组件中半事务消息以及轮询检查机制，保证了本地事务和消息生产两个动作的原子性，但不具备事务的逆向回滚能力</li>
+<li><strong>TCC Transaction</strong>：能够支持广义的分布式事务. 架构中每个模块需要改造成实现 Try&#x2F;Confirm&#x2F;Cancel 能力的 TCC 组件，通过事务协调器进行全局 Try——Confirm&#x2F;Cancel 两阶段流程的串联，保证数据的最终一致性趋近于 100%</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1%E5%9C%BA%E6%99%AF"><span class="top-box-text">1 分布式事务场景</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-%E4%BA%8B%E5%8A%A1%E6%A0%B8%E5%BF%83%E7%89%B9%E6%80%A7"><span class="top-box-text">1.1 事务核心特性</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1%E5%9C%BA%E6%99%AF%E9%97%AE%E9%A2%98"><span class="top-box-text">1.2 分布式事务场景问题</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E4%BA%8B%E5%8A%A1%E6%B6%88%E6%81%AF%E6%96%B9%E6%A1%88"><span class="top-box-text">2 事务消息方案</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-RocketMQ-%E7%AE%80%E4%BB%8B"><span class="top-box-text">2.1 RocketMQ 简介</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-%E5%9F%BA%E4%BA%8E-MQ-%E5%AE%9E%E7%8E%B0%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1"><span class="top-box-text">2.2 基于 MQ 实现分布式事务</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E6%9C%AC%E5%9C%B0%E4%BA%8B%E5%8A%A1-%E6%B6%88%E6%81%AF%E6%8A%95%E9%80%92"><span class="top-box-text">2.3 本地事务+消息投递</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E7%BB%84%E5%90%88-I%EF%BC%9A%E5%85%88%E6%89%A7%E8%A1%8C%E6%9C%AC%E5%9C%B0%E4%BA%8B%E5%8A%A1%EF%BC%8C%E5%90%8E%E6%89%A7%E8%A1%8C%E6%B6%88%E6%81%AF%E6%8A%95%E9%80%92"><span class="top-box-text">组合 I：先执行本地事务，后执行消息投递</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E7%BB%84%E5%90%88-II%EF%BC%9A%E5%85%88%E6%89%A7%E8%A1%8C%E6%B6%88%E6%81%AF%E6%8A%95%E9%80%92%EF%BC%8C%E5%90%8E%E6%89%A7%E8%A1%8C%E6%9C%AC%E5%9C%B0%E4%BA%8B%E5%8A%A1"><span class="top-box-text">组合 II：先执行消息投递，后执行本地事务</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-4-%E4%BA%8B%E5%8A%A1%E6%B6%88%E6%81%AF%E5%8E%9F%E7%90%86"><span class="top-box-text">2.4 事务消息原理</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-5-%E4%BA%8B%E5%8A%A1%E6%B6%88%E6%81%AF%E5%B1%80%E9%99%90%E6%80%A7"><span class="top-box-text">2.5 事务消息局限性</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-TCC-%E5%AE%9E%E7%8E%B0%E6%96%B9%E6%A1%88"><span class="top-box-text">3 TCC 实现方案</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-TCC-%E6%A6%82%E5%BF%B5%E7%AE%80%E8%BF%B0"><span class="top-box-text">3.1 TCC 概念简述</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%85%B3%E4%BA%8E-TCC-%E7%9A%84%E6%A6%82%E5%BF%B5%E4%BB%8B%E7%BB%8D"><span class="top-box-text">关于 TCC 的概念介绍:</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-TCC-%E5%AE%8F%E8%A7%82%E6%9E%B6%E6%9E%84"><span class="top-box-text">3.2 TCC 宏观架构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-TCC-%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90"><span class="top-box-text">3.3 TCC 案例分析</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-4-TX-Manager-%E8%81%8C%E8%B4%A3"><span class="top-box-text">3.4 TX Manager 职责</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-5-TCC-Component-%E8%81%8C%E8%B4%A3"><span class="top-box-text">3.5 TCC Component 职责</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-6-TCC-%E4%BC%98%E5%8A%A3%E5%8A%BF%E5%88%86%E6%9E%90"><span class="top-box-text">3.6 TCC 优劣势分析</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BC%98%E5%8A%BF%EF%BC%9A"><span class="top-box-text">优势：</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%8A%A3%E5%8A%BF%EF%BC%9A"><span class="top-box-text">劣势：</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-%E6%80%BB%E7%BB%93"><span class="top-box-text">4 总结</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/02/01/Golang-%E8%AF%BB%E5%86%99JSON%E6%95%B0%E6%8D%AE/">
+          <h3 class="post-title">
+            下一篇：Golang 读写JSON数据
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
