@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang grpc-go 服务端使用介绍及源码分析</title>
+<meta name="keywords" content="Golang grpc-go 服务端使用介绍及源码分析, HeXu">
+<meta name="description" content="1 背景介绍1.1 rpcrpc，全称 remote process call（远程过程调用），是微服务架构下的一种通信模式. 这种通信模式下，一台服务器在调用远程机器的接口时，能够获得像调用本地方法一样的良好体验.
+rpc 通常对标的是 ">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang grpc-go 服务端使用介绍及源码分析">
+<meta property="og:description" content="1 背景介绍1.1 rpcrpc，全称 remote process call（远程过程调用），是微服务架构下的一种通信模式. 这种通信模式下，一台服务器在调用远程机器的接口时，能够获得像调用本地方法一样的良好体验.
+rpc 通常对标的是 ">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang grpc-go 服务端使用介绍及源码分析</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-02-02</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="1-背景介绍"><a href="#1-背景介绍" class="headerlink" title="1 背景介绍"></a>1 背景介绍</h1><h2 id="1-1-rpc"><a href="#1-1-rpc" class="headerlink" title="1.1 rpc"></a>1.1 rpc</h2><p><code>rpc</code>，全称 <code>remote process call</code>（远程过程调用），是微服务架构下的一种通信模式. 这种通信模式下，一台服务器在调用远程机器的接口时，能够获得像调用本地方法一样的良好体验.</p>
+<p><code>rpc</code> 通常对标的是 <code>restful</code> 风格的 <code>http</code> 调用方式，下面开放地聊聊个人眼中 <code>rpc</code> 相较于 <code>http</code> 的优势所在：</p>
+<ul>
+<li><code>rpc</code> 调用基于 <code>sdk</code> 方式，调用方法和出入参协议固定，<code>stub</code> 文件本身还能起到接口文档的作用，很大程度上优化了通信双方约定协议达成共识的成本.</li>
+<li><code>rpc</code> 在传输层协议 <code>tcp</code> 基础之上，可以由实现框架自定义填充应用层协议细节，理论上存在着更高的上限</li>
+</ul>
+<p>事物往往具有多面性，一些优点在转换视角后可能也会成为对应的劣势，因此从另一个角度看，**<code>rpc</code> 相较于 <code>http</code> 存在如下缺点**：</p>
+<ul>
+<li>基于 <code>sdk</code> 方式调用，灵活度低、开发成本高，更多地适合用于系统内部模块间的通信交互，不适合对外</li>
+<li>用户自定义实现应用层协议，下限水平也很不稳定</li>
+</ul>
+<h2 id="1-2-grpc-go"><a href="#1-2-grpc-go" class="headerlink" title="1.2 grpc-go"></a>1.2 grpc-go</h2><p><code>rpc</code> 领域中的一座大山是 <code>google</code> 的开源框架 <code>grpc</code>，框架本身基于 <code>C++</code> 实现，但对应于几个主流语言也有相应的实现版本.</p>
+<p><code>grpc-go</code> 是基于 <code>go</code> 语言实现的 <code>grpc</code> 框架, <code>grpc-go</code> 以 <code>HTTP2</code> 作为应用层协议，使用 <code>protobuf</code> （下文可能简称 pb）作为<code>数据序列化协议</code>以及接口定义语言。</p>
+<h1 id="2-grpc-go-使用教程"><a href="#2-grpc-go-使用教程" class="headerlink" title="2 grpc-go 使用教程"></a>2 grpc-go 使用教程</h1><p>开扒框架源码之前，首先向大家简单介绍一下 <code>grpc-go</code> 的基本使用方法.</p>
+<h2 id="2-1-前置准备"><a href="#2-1-前置准备" class="headerlink" title="2.1 前置准备"></a>2.1 前置准备</h2><p>首先需要把依赖的 <code>grpc-go</code> 插件提前安装好，分为如下几步：</p>
+<p>####（1）安装 grpc</p>
+<p><code>go get google.golang.org/grpc@latest</code></p>
+<p>####（2）安装 protocol buffer</p>
+<p>根据操作系统型号，下载安装好对应版本的 <code>protobuf</code> 应用.</p>
+<p>安装完成后，可以通过查看 <code>protobuf</code> 版本指令，校验安装是否成功</p>
+<p><code>protoc --version</code></p>
+<h4 id="（3）安装-protobuf-pb-go-插件"><a href="#（3）安装-protobuf-pb-go-插件" class="headerlink" title="（3）安装 protobuf -&gt; pb.go 插件"></a>（3）安装 protobuf -&gt; pb.go 插件</h4><p><code>go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28</code></p>
+<p>该插件的作用是，能够基于 <code>.proto</code> 文件一键生成 <code>_pb.go</code> 文件，对应内容为通信请求&#x2F;响应参数的对象模型.</p>
+<p><code>go install</code> 指令默认会将插件安装到 <code>$GOPATH/bin</code> 目录下. 需要确保 <code>$GOPATH/bin</code> 路径有被添加到环境路径 $PATH 当中.</p>
+<p>安装完成后，可以通过查看插件版本指令，校验安装是否成功</p>
+<h4 id="（4）安装-protobuf-grpc-pb-go-插件"><a href="#（4）安装-protobuf-grpc-pb-go-插件" class="headerlink" title="（4）安装 protobuf -&gt; grpc.pb.go 插件"></a>（4）安装 protobuf -&gt; grpc.pb.go 插件</h4><p><code>go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2</code></p>
+<p>该插件的作用是，能够基于 <code>.proto</code> 文件生成 <code>_grpc.pb.go</code>，对应内容为通信服务框架代码.</p>
+<p>安装完成后，可以通过查看插件版本指令，校验安装是否成功</p>
+<p><code>protoc-gen-go-grpc --version</code></p>
+<h2 id="2-2-pb-桩文件"><a href="#2-2-pb-桩文件" class="headerlink" title="2.2 pb 桩文件"></a>2.2 pb 桩文件</h2><h4 id="（1）编写-protobuf-文件"><a href="#（1）编写-protobuf-文件" class="headerlink" title="（1）编写 protobuf 文件"></a>（1）编写 protobuf 文件</h4><pre class="line-numbers language-proto" data-language="proto"><code class="language-proto">syntax &#x3D; &quot;proto3&quot;; &#x2F;&#x2F; 固定语法前缀
+
+
+option go_package &#x3D; &quot;.&quot;;  &#x2F;&#x2F; 指定生成的Go代码在你项目中的导入路径
+
+package pb; &#x2F;&#x2F; 包名
+
+&#x2F;&#x2F; 定义服务
+service HelloService &#123;
+    &#x2F;&#x2F; SayHello 方法
+    rpc SayHello (HelloReq) returns (HelloResp) &#123;&#125;
+&#125;
+
+&#x2F;&#x2F; 请求消息
+message HelloReq &#123;
+    string name &#x3D; 1;
+&#125;
+
+&#x2F;&#x2F; 响应消息
+message HelloResp &#123;
+    string reply &#x3D; 1
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>该文件以 <code>.proto</code> 作为后缀，扮演着 <code>grpc</code> 客户端与服务端通信交互的接口定义语言（<code>DDL</code>）的角色.</p>
+<p><code>protobuf</code> 的细节内容与底层原理，后续我们单开章节再作介绍，此处能理解其基本用法即可.</p>
+<p>上述内容中，抛开前置的固定语法标识外，分为三个核心部分：</p>
+<ul>
+<li>定义业务处理服务 <code>HelloService</code>，声明业务方法的名称（<code>SayHello</code>）以及出入参协议（<code>HelloReq/HelloResp</code>）</li>
+<li>遵循 <code>protobuf</code> 的风格，分别声明出入参的类型定义：<code>HelloReq</code> 和 <code>HelloResp</code>，其中分别包含了字符串类型的成员字段 <code>name</code> 和 <code>reply</code></li>
+</ul>
+<h4 id="（2）生成-pb-go-文件"><a href="#（2）生成-pb-go-文件" class="headerlink" title="（2）生成 pb.go 文件"></a>（2）生成 pb.go 文件</h4><p>通过使用插件，可以在 .proto 文件基础上，一键生成对应的 go 代码.</p>
+<p><code>protoc --go_out=. --go-grpc_out=. pb/hello.proto</code></p>
+<p><strong>–go_out</strong>：指定 pb.go 文件的生成位置</p>
+<p><strong>–go-grpc_out</strong>：指定 grpc.pb.go 文件的生成位置</p>
+<p><strong>pb&#x2F;hello.proto</strong>：这是指定了 .proto 文件的所在位置</p>
+<p>执行上述指令后，会生成 <code>pb.go</code> 和 <code>grpc.pb.go</code> 两个文件.</p>
+<h2 id="2-3-服务端"><a href="#2-3-服务端" class="headerlink" title="2.3 服务端"></a>2.3 服务端</h2><p>预声明业务处理服务 HelloService，实现好桩文件中定义的业务处理方法 SayHello</p>
+<ul>
+<li>调用 net.Listen 方法，创建 tcp 端口监听器</li>
+<li>调用 grpc.NewServer 方法，创建一个 grpc server 对象</li>
+<li>调用桩文件中预生成好的注册方法 proto.RegisterHelloServiceServer，将 HelloService</li>
+<li>注册到 grpc server 对象当中</li>
+<li>运行 server.Serve 方法，监听指定的端口，真正启动 grpc server，</li>
+</ul>
+<h2 id="2-4-客户端"><a href="#2-4-客户端" class="headerlink" title="2.4 客户端"></a>2.4 客户端</h2><p>客户端代码中完成的核心步骤包括：</p>
+<ul>
+<li>调用 grpc.Dial 方法，与指定地址的 grpc 服务端建立连接</li>
+<li>调用桩文件中的方法 proto.NewHelloServiceClient，创建 pb 文件预声明好的 grpc 客户端对象</li>
+<li>调用 client.SayHello 方法，发送 grpc 请求，并处理响应结果</li>
+</ul>
+<h1 id="3-服务端"><a href="#3-服务端" class="headerlink" title="3 服务端"></a>3 服务端</h1><h2 id="3-1-核心数据结构"><a href="#3-1-核心数据结构" class="headerlink" title="3.1 核心数据结构"></a>3.1 核心数据结构</h2><p>在 <code>grpc</code> 服务端领域，自上而下有着三个层次分明的结构：**<code>server-&gt;service-&gt;method</code>**</p>
+<ul>
+<li>最高级别是 <code>server</code>，是对整个 <code>grpc</code> 服务端的抽象</li>
+<li>一个 <code>server</code> 下可以注册挂载多个业务服务 <code>service</code></li>
+<li>一个 <code>service</code> 下存在多个业务处理方法 <code>method</code></li>
+</ul>
+<h3 id="server"><a href="#server" class="headerlink" title="server"></a>server</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Server <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 配置项</span>
+    opts serverOptions
+    <span class="token comment">// 互斥锁保证并发安全</span>
+    mu  sync<span class="token punctuation">.</span>Mutex 
+    <span class="token comment">// tcp 端口监听器池</span>
+    lis <span class="token keyword">map</span><span class="token punctuation">[</span>net<span class="token punctuation">.</span>Listener<span class="token punctuation">]</span><span class="token builtin">bool</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 连接池</span>
+    conns    <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">map</span><span class="token punctuation">[</span>transport<span class="token punctuation">.</span>ServerTransport<span class="token punctuation">]</span><span class="token builtin">bool</span>
+    serve    <span class="token builtin">bool</span>
+    cv       <span class="token operator">*</span>sync<span class="token punctuation">.</span>Cond          
+    <span class="token comment">// 业务服务映射管理  </span>
+    services <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>serviceInfo <span class="token comment">// service name -> service info</span>
+    <span class="token comment">// ...</span>
+    serveWG            sync<span class="token punctuation">.</span>WaitGroup 
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>Server</code> 类是对 <code>grpc</code> 服务端的代码实现，其中通过一个名为 <code>services</code> 的 <code>map</code>，记录了由服务名到具体业务服务模块的映射关系.</p>
+<h3 id="serviceInfo"><a href="#serviceInfo" class="headerlink" title="serviceInfo"></a>serviceInfo</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> serviceInfo <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 业务服务类</span>
+    serviceImpl <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+    <span class="token comment">// 业务方法映射管理  </span>
+    methods     <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>MethodDesc
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>serviceInfo</code> 是某一个具体的业务服务模块，其中通过一个名为 <code>methods</code> 的 <code>map</code> 记录了由方法名到具体方法的映射关系.</p>
+<h3 id="MethodDesc"><a href="#MethodDesc" class="headerlink" title="MethodDesc"></a>MethodDesc</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> MethodDesc <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    MethodName <span class="token builtin">string</span>
+    Handler    methodHandler
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>MethodDesc</code> 是对方法的封装，其中的字段 <code>Handler</code> 是真正的业务处理方法.</p>
+<h3 id="methodHandler"><a href="#methodHandler" class="headerlink" title="methodHandler"></a>methodHandler</h3><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> methodHandler <span class="token keyword">func</span><span class="token punctuation">(</span>srv <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> dec <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token builtin">error</span><span class="token punctuation">,</span> interceptor UnaryServerInterceptor<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p><code>methodsHandler</code> 是业务处理方法的类型，其中几个关键入参的含义分别是：</p>
+<p><code>srv</code>：业务处理方法从属的业务服务模块<br><code>dec</code>：进行入参 req 反序列化的闭包函数<br><code>interceptor</code>：业务处理方法外部包裹的拦截器方法</p>
+<h2 id="3-2-创建-server"><a href="#3-2-创建-server" class="headerlink" title="3.2 创建 server"></a>3.2 创建 server</h2><p>3.2 创建 server</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">NewServer</span><span class="token punctuation">(</span>opt <span class="token operator">...</span>ServerOption<span class="token punctuation">)</span> <span class="token operator">*</span>Server <span class="token punctuation">&#123;</span>
+    opts <span class="token operator">:=</span> defaultServerOptions
+    <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> o <span class="token operator">:=</span> <span class="token keyword">range</span> extraServerOptions <span class="token punctuation">&#123;</span>
+        o<span class="token punctuation">.</span><span class="token function">apply</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>opts<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> o <span class="token operator">:=</span> <span class="token keyword">range</span> opt <span class="token punctuation">&#123;</span>
+        o<span class="token punctuation">.</span><span class="token function">apply</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>opts<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    s <span class="token operator">:=</span> <span class="token operator">&amp;</span>Server<span class="token punctuation">&#123;</span>
+        lis<span class="token punctuation">:</span>      <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span>net<span class="token punctuation">.</span>Listener<span class="token punctuation">]</span><span class="token builtin">bool</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        opts<span class="token punctuation">:</span>     opts<span class="token punctuation">,</span>
+        conns<span class="token punctuation">:</span>    <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token keyword">map</span><span class="token punctuation">[</span>transport<span class="token punctuation">.</span>ServerTransport<span class="token punctuation">]</span><span class="token builtin">bool</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        services<span class="token punctuation">:</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>serviceInfo<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        quit<span class="token punctuation">:</span>     grpcsync<span class="token punctuation">.</span><span class="token function">NewEvent</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        done<span class="token punctuation">:</span>     grpcsync<span class="token punctuation">.</span><span class="token function">NewEvent</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        czData<span class="token punctuation">:</span>   <span class="token function">new</span><span class="token punctuation">(</span>channelzData<span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token function">chainUnaryServerInterceptors</span><span class="token punctuation">(</span>s<span class="token punctuation">)</span>
+    <span class="token comment">//...</span>
+    s<span class="token punctuation">.</span>cv <span class="token operator">=</span> sync<span class="token punctuation">.</span><span class="token function">NewCond</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>s<span class="token punctuation">.</span>mu<span class="token punctuation">)</span>
+    <span class="token comment">// ...   </span>
+    <span class="token keyword">return</span> s
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>grpc.NewServer</code> 方法中会创建 <code>server</code> 实例，并调用 <code>chainUnaryServerInterceptors</code> 方法，将一系列拦截器 <code>interceptor</code> 成链，并注入到 <code>ServerOption</code> 当中. 有关拦截器的内容，放在本文第 4 章再作展开.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">chainUnaryServerInterceptors</span><span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    interceptors <span class="token operator">:=</span> s<span class="token punctuation">.</span>opts<span class="token punctuation">.</span>chainUnaryInts
+    <span class="token keyword">if</span> s<span class="token punctuation">.</span>opts<span class="token punctuation">.</span>unaryInt <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        interceptors <span class="token operator">=</span> <span class="token function">append</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span>UnaryServerInterceptor<span class="token punctuation">&#123;</span>s<span class="token punctuation">.</span>opts<span class="token punctuation">.</span>unaryInt<span class="token punctuation">&#125;</span><span class="token punctuation">,</span> s<span class="token punctuation">.</span>opts<span class="token punctuation">.</span>chainUnaryInts<span class="token operator">...</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">var</span> chainedInt UnaryServerInterceptor
+    <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>interceptors<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token punctuation">&#123;</span>
+        chainedInt <span class="token operator">=</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>interceptors<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">1</span> <span class="token punctuation">&#123;</span>
+        chainedInt <span class="token operator">=</span> interceptors<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        chainedInt <span class="token operator">=</span> <span class="token function">chainUnaryInterceptors</span><span class="token punctuation">(</span>interceptors<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    
+    s<span class="token punctuation">.</span>opts<span class="token punctuation">.</span>unaryInt <span class="token operator">=</span> chainedInt
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<h2 id="3-3-注册-service"><a href="#3-3-注册-service" class="headerlink" title="3.3 注册 service"></a>3.3 注册 service</h2><p>创建好 <code>grpc server</code> 后，接下来通过使用桩代码中预生成好的 <code>RegisterXXXServer</code> 方法，业务处理服务 <code>service</code> 模块注入到 <code>server</code> 当中.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">RegisterHelloServiceServer</span><span class="token punctuation">(</span>s grpc<span class="token punctuation">.</span>ServiceRegistrar<span class="token punctuation">,</span> srv HelloServiceServer<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    s<span class="token punctuation">.</span><span class="token function">RegisterService</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>HelloService_ServiceDesc<span class="token punctuation">,</span> srv<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">RegisterService</span><span class="token punctuation">(</span>sd <span class="token operator">*</span>ServiceDesc<span class="token punctuation">,</span> ss <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    s<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span>sd<span class="token punctuation">,</span> ss<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">register</span><span class="token punctuation">(</span>sd <span class="token operator">*</span>ServiceDesc<span class="token punctuation">,</span> ss <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    s<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">defer</span> s<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    info <span class="token operator">:=</span> <span class="token operator">&amp;</span>serviceInfo<span class="token punctuation">&#123;</span>
+        serviceImpl<span class="token punctuation">:</span> ss<span class="token punctuation">,</span>
+        methods<span class="token punctuation">:</span>     <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>MethodDesc<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        streams<span class="token punctuation">:</span>     <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>StreamDesc<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        mdata<span class="token punctuation">:</span>       sd<span class="token punctuation">.</span>Metadata<span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">for</span> i <span class="token operator">:=</span> <span class="token keyword">range</span> sd<span class="token punctuation">.</span>Methods <span class="token punctuation">&#123;</span>
+        d <span class="token operator">:=</span> <span class="token operator">&amp;</span>sd<span class="token punctuation">.</span>Methods<span class="token punctuation">[</span>i<span class="token punctuation">]</span>
+        info<span class="token punctuation">.</span>methods<span class="token punctuation">[</span>d<span class="token punctuation">.</span>MethodName<span class="token punctuation">]</span> <span class="token operator">=</span> d
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+    s<span class="token punctuation">.</span>services<span class="token punctuation">[</span>sd<span class="token punctuation">.</span>ServiceName<span class="token punctuation">]</span> <span class="token operator">=</span> info
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>注册过程会经历 <strong><code>RegisterHelloServiceServer-&gt;Server.RegisterService -&gt; Server.register</code></strong> 的调用链路，把 <code>service</code> 的所有方法注册到 <code>serviceInfo</code> 的 <code>methods map</code> 当中，然后将 <code>service</code> 封装到 <code>serviceInfo</code> 实例中，注册到 <code>server</code> 的 <code>services map</code> 当中</p>
+<h2 id="运行-server"><a href="#运行-server" class="headerlink" title="运行 server"></a>运行 server</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">Serve</span><span class="token punctuation">(</span>lis net<span class="token punctuation">.</span>Listener<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+
+    <span class="token keyword">var</span> tempDelay time<span class="token punctuation">.</span>Duration <span class="token comment">// how long to sleep on accept failure</span>
+    <span class="token keyword">for</span> <span class="token punctuation">&#123;</span>
+        rawConn<span class="token punctuation">,</span> err <span class="token operator">:=</span> lis<span class="token punctuation">.</span><span class="token function">Accept</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// ...</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// ...</span>
+        s<span class="token punctuation">.</span>serveWG<span class="token punctuation">.</span><span class="token function">Add</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+        <span class="token keyword">go</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            s<span class="token punctuation">.</span><span class="token function">handleRawConn</span><span class="token punctuation">(</span>lis<span class="token punctuation">.</span><span class="token function">Addr</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">String</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> rawConn<span class="token punctuation">)</span>
+            s<span class="token punctuation">.</span>serveWG<span class="token punctuation">.</span><span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>grpc server</code> 运行的流程，核心是基于 <code>for</code> 循环实现的主动轮询模型，每轮会通过调用 <code>net.Listener.Accept</code> 方法，基于 IO 多路复用 <code>epoll</code> 方式，阻塞等待 <code>grpc</code> 请求的到达.</p>
+<p>每当有新的连接到达后，服务端会开启一个 <code>goroutine</code>，调用对应的 <code>Server.handleRawConn</code> 方法对请求进行处理.</p>
+<h2 id="3-5-处理请求"><a href="#3-5-处理请求" class="headerlink" title="3.5 处理请求"></a>3.5 处理请求</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">handleRawConn</span><span class="token punctuation">(</span>lisAddr <span class="token builtin">string</span><span class="token punctuation">,</span> rawConn net<span class="token punctuation">.</span>Conn<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    st <span class="token operator">:=</span> s<span class="token punctuation">.</span><span class="token function">newHTTP2Transport</span><span class="token punctuation">(</span>rawConn<span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">go</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        s<span class="token punctuation">.</span><span class="token function">serveStreams</span><span class="token punctuation">(</span>st<span class="token punctuation">)</span>
+        s<span class="token punctuation">.</span><span class="token function">removeConn</span><span class="token punctuation">(</span>lisAddr<span class="token punctuation">,</span> st<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>Server.handleRawConn 方法中</code>，会基于原始的 <code>net.Conn</code> 封装生成一个 <code>HTTP2Transport</code>，然后开启 <code>goroutine</code> 调用 <code>Server.serveStream</code> 方法处理请求.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">serveStreams</span><span class="token punctuation">(</span>st transport<span class="token punctuation">.</span>ServerTransport<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> wg sync<span class="token punctuation">.</span>WaitGroup
+
+
+    <span class="token keyword">var</span> roundRobinCounter <span class="token builtin">uint32</span>
+    st<span class="token punctuation">.</span><span class="token function">HandleStreams</span><span class="token punctuation">(</span><span class="token keyword">func</span><span class="token punctuation">(</span>stream <span class="token operator">*</span>transport<span class="token punctuation">.</span>Stream<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">go</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">defer</span> wg<span class="token punctuation">.</span><span class="token function">Done</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            s<span class="token punctuation">.</span><span class="token function">handleStream</span><span class="token punctuation">(</span>st<span class="token punctuation">,</span> stream<span class="token punctuation">,</span> s<span class="token punctuation">.</span><span class="token function">traceInfo</span><span class="token punctuation">(</span>st<span class="token punctuation">,</span> stream<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token keyword">func</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> method <span class="token builtin">string</span><span class="token punctuation">)</span> context<span class="token punctuation">.</span>Context <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+    wg<span class="token punctuation">.</span><span class="token function">Wait</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">handleStream</span><span class="token punctuation">(</span>t transport<span class="token punctuation">.</span>ServerTransport<span class="token punctuation">,</span> stream <span class="token operator">*</span>transport<span class="token punctuation">.</span>Stream<span class="token punctuation">,</span> trInfo <span class="token operator">*</span>traceInfo<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    sm <span class="token operator">:=</span> stream<span class="token punctuation">.</span><span class="token function">Method</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    pos <span class="token operator">:=</span> strings<span class="token punctuation">.</span><span class="token function">LastIndex</span><span class="token punctuation">(</span>sm<span class="token punctuation">,</span> <span class="token string">"/"</span><span class="token punctuation">)</span>
+    
+    <span class="token comment">// 通过"/" 前段得到 service 名称，通过 "/" 后端得到 method 名称，并分别映射到对应的业务服务和业务方法</span>
+    service <span class="token operator">:=</span> sm<span class="token punctuation">[</span><span class="token punctuation">:</span>pos<span class="token punctuation">]</span>
+    method <span class="token operator">:=</span> sm<span class="token punctuation">[</span>pos<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">:</span><span class="token punctuation">]</span>
+
+    srv<span class="token punctuation">,</span> knownService <span class="token operator">:=</span> s<span class="token punctuation">.</span>services<span class="token punctuation">[</span>service<span class="token punctuation">]</span>
+    <span class="token keyword">if</span> knownService <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> md<span class="token punctuation">,</span> ok <span class="token operator">:=</span> srv<span class="token punctuation">.</span>methods<span class="token punctuation">[</span>method<span class="token punctuation">]</span><span class="token punctuation">;</span> ok <span class="token punctuation">&#123;</span>
+            s<span class="token punctuation">.</span><span class="token function">processUnaryRPC</span><span class="token punctuation">(</span>t<span class="token punctuation">,</span> stream<span class="token punctuation">,</span> srv<span class="token punctuation">,</span> md<span class="token punctuation">,</span> trInfo<span class="token punctuation">)</span>
+            <span class="token keyword">return</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token keyword">if</span> sd<span class="token punctuation">,</span> ok <span class="token operator">:=</span> srv<span class="token punctuation">.</span>streams<span class="token punctuation">[</span>method<span class="token punctuation">]</span><span class="token punctuation">;</span> ok <span class="token punctuation">&#123;</span>
+            s<span class="token punctuation">.</span><span class="token function">processStreamingRPC</span><span class="token punctuation">(</span>t<span class="token punctuation">,</span> stream<span class="token punctuation">,</span> srv<span class="token punctuation">,</span> sd<span class="token punctuation">,</span> trInfo<span class="token punctuation">)</span>
+            <span class="token keyword">return</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">processUnaryRPC</span><span class="token punctuation">(</span>t transport<span class="token punctuation">.</span>ServerTransport<span class="token punctuation">,</span> stream <span class="token operator">*</span>transport<span class="token punctuation">.</span>Stream<span class="token punctuation">,</span> info <span class="token operator">*</span>serviceInfo<span class="token punctuation">,</span> md <span class="token operator">*</span>MethodDesc<span class="token punctuation">,</span> trInfo <span class="token operator">*</span>traceInfo<span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 会通过 recvAndDecompress 读取到请求内容字节流</span>
+    d<span class="token punctuation">,</span> err <span class="token operator">:=</span> <span class="token function">recvAndDecompress</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>parser<span class="token punctuation">&#123;</span>r<span class="token punctuation">:</span> stream<span class="token punctuation">&#125;</span><span class="token punctuation">,</span> stream<span class="token punctuation">,</span> dc<span class="token punctuation">,</span> s<span class="token punctuation">.</span>opts<span class="token punctuation">.</span>maxReceiveMessageSize<span class="token punctuation">,</span> payInfo<span class="token punctuation">,</span> decomp<span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 通过闭包函数 df 封装好反序列请求参数的逻辑</span>
+    df <span class="token operator">:=</span> <span class="token keyword">func</span><span class="token punctuation">(</span>v <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> s<span class="token punctuation">.</span><span class="token function">getCodec</span><span class="token punctuation">(</span>stream<span class="token punctuation">.</span><span class="token function">ContentSubtype</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Unmarshal</span><span class="token punctuation">(</span>d<span class="token punctuation">,</span> v<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+           <span class="token comment">// ...</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+    ctx <span class="token operator">:=</span> <span class="token function">NewContextWithServerTransportStream</span><span class="token punctuation">(</span>stream<span class="token punctuation">.</span><span class="token function">Context</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> stream<span class="token punctuation">)</span>
+    <span class="token comment">// 调用 md.Handler 方法处理请求</span>
+    reply<span class="token punctuation">,</span> appErr <span class="token operator">:=</span> md<span class="token punctuation">.</span><span class="token function">Handler</span><span class="token punctuation">(</span>info<span class="token punctuation">.</span>serviceImpl<span class="token punctuation">,</span> ctx<span class="token punctuation">,</span> df<span class="token punctuation">,</span> s<span class="token punctuation">.</span>opts<span class="token punctuation">.</span>unaryInt<span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+
+    <span class="token comment">//最终通过 Server.sendResponse 方法将响应结果进行返回</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> s<span class="token punctuation">.</span><span class="token function">sendResponse</span><span class="token punctuation">(</span>t<span class="token punctuation">,</span> stream<span class="token punctuation">,</span> reply<span class="token punctuation">,</span> cp<span class="token punctuation">,</span> opts<span class="token punctuation">,</span> comp<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>接下来一连建立了 <strong><code>Server.serveStreams -&gt; http2Server.HandleStreams -&gt; http2Server.operateHeaders -&gt; http2Server.handleStream -&gt; Server.processUnaryRPC</code></strong> 的方法调用链：</p>
+<ul>
+<li>在 <code>Server.handleStream</code> 方法中，会拆解来自客户端的请求路径 <code>$&#123;service&#125;/$&#123;method&#125;</code>，通过 “&#x2F;“ 前段得到 <code>service</code> 名称，通过 “&#x2F;“ 后端得到 method 名称，并分别映射到对应的业务服务和业务方法</li>
+<li>在 <code>Server.processUnaryRPC</code> 方法中，会通过 <code>recvAndDecompress</code> 读取到请求内容字节流，然后通过闭包函数 df 封装好反序列请求参数的逻辑，继而调用 <code>md.Handler</code> 方法处理请求，最终通过 <code>Server.sendResponse</code> 方法将响应结果进行返回</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">_HelloService_SayHello_Handler</span><span class="token punctuation">(</span>srv <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> dec <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token builtin">error</span><span class="token punctuation">,</span> interceptor grpc<span class="token punctuation">.</span>UnaryServerInterceptor<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    in <span class="token operator">:=</span> <span class="token function">new</span><span class="token punctuation">(</span>HelloReq<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> <span class="token function">dec</span><span class="token punctuation">(</span>in<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> err
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">if</span> interceptor <span class="token operator">==</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> srv<span class="token punctuation">.</span><span class="token punctuation">(</span>HelloServiceServer<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">SayHello</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> in<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    info <span class="token operator">:=</span> <span class="token operator">&amp;</span>grpc<span class="token punctuation">.</span>UnaryServerInfo<span class="token punctuation">&#123;</span>
+        Server<span class="token punctuation">:</span>     srv<span class="token punctuation">,</span>
+        FullMethod<span class="token punctuation">:</span> <span class="token string">"/pb.HelloService/SayHello"</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+    handler <span class="token operator">:=</span> <span class="token keyword">func</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> req <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> srv<span class="token punctuation">.</span><span class="token punctuation">(</span>HelloServiceServer<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">SayHello</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> req<span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token operator">*</span>HelloReq<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> <span class="token function">interceptor</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> in<span class="token punctuation">,</span> info<span class="token punctuation">,</span> handler<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>以本文介绍的 <code>helloService</code> 为例，客户端调用 <code>SayHello</code> 方法后，服务端对应的 <code>md.Handler</code> 正是 <code>.proto</code> 文件生成的位于 <code>.grpc.pb.go</code> 文件中的桩方法 _HelloService_SayHello_Handler.</p>
+<p>在该桩方法内部中，包含的执行步骤如下：</p>
+<ul>
+<li>调用闭包函数 <code>dec</code>，将请求内容反序列化到请求入参 <code>in</code> 当中</li>
+<li>将业务处理方法 <code>HelloServiceServer.SayHello</code> 闭包封装到一个 <code>UnaryHandler</code> 当中</li>
+<li>调用 <code>intercetor</code> 方法，分别执行拦截器和 <code>handler</code> 的处理逻辑</li>
+</ul>
+<h1 id="4-拦截器"><a href="#4-拦截器" class="headerlink" title="4 拦截器"></a>4 拦截器</h1><p>有关 <code>grpc</code> 中拦截器 <code>interceptor</code> 部分的内容理解起来比较费脑，我们单开一章来展开聊聊.</p>
+<p>4.1 原理介绍</p>
+<p>拦截器的作用，<strong>是在执行核心业务方法的前后，创造出一个统一的切片，来执行所有业务方法锁共有的通用逻辑</strong>. 此外，<strong>我们还能够通过这部分通用逻辑的执行结果，来判断是否需要熔断当前的执行链路，以起到所谓的”拦截“效果</strong>.</p>
+<p>下面看看 grpc 中对于一个拦截器函数的具体定义：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> UnaryServerInterceptor <span class="token keyword">func</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> req <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> info <span class="token operator">*</span>UnaryServerInfo<span class="token punctuation">,</span> handler UnaryHandler<span class="token punctuation">)</span> <span class="token punctuation">(</span>resp <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+<p>其中几个入参的含义分别为：</p>
+<ul>
+<li><code>req</code> ：业务处理方法的请求参数</li>
+<li><code>info</code> ：当前所属的业务服务 service</li>
+<li><code>handler</code> ：真正的业务处理方法</li>
+</ul>
+<p>因此一个拦截器函数的使用模式应该是:</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> myInterceptor1 <span class="token operator">=</span> <span class="token keyword">func</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> req <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> info <span class="token operator">*</span>grpc<span class="token punctuation">.</span>UnaryServerInfo<span class="token punctuation">,</span> handler grpc<span class="token punctuation">.</span>UnaryHandler<span class="token punctuation">)</span> <span class="token punctuation">(</span>resp <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 前处理校验</span>
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> <span class="token function">preLogicCheck</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>err <span class="token operator">!=</span> <span class="token boolean">nil</span><span class="token punctuation">&#123;</span>
+       <span class="token comment">// 前处理校验不通过，则拦截，不调用业务方法直接返回</span>
+       <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span>err 
+    <span class="token punctuation">&#125;</span>
+    
+     <span class="token comment">// 前处理校验通过，正常调用业务方法</span>
+     resp<span class="token punctuation">,</span> err <span class="token operator">=</span> <span class="token function">handle</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span>req<span class="token punctuation">)</span>
+     <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span><span class="token punctuation">&#123;</span>
+         <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span>err 
+     <span class="token punctuation">&#125;</span>
+     
+      <span class="token comment">// 后置处理校验</span>
+      <span class="token keyword">if</span> err <span class="token operator">:=</span> <span class="token function">postLogicCheck</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>err <span class="token operator">!=</span> <span class="token boolean">nil</span><span class="token punctuation">&#123;</span>
+         <span class="token comment">// 后置处理校验不通过，则拦截结果，包装错误返回</span>
+         <span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span>err 
+      <span class="token punctuation">&#125;</span>
+      
+      <span class="token comment">// 正常返回结果</span>
+      <span class="token keyword">return</span> resp<span class="token punctuation">,</span><span class="token boolean">nil</span> 
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="4-2-拦截器链"><a href="#4-2-拦截器链" class="headerlink" title="4.2 拦截器链"></a>4.2 拦截器链</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">chainUnaryInterceptors</span><span class="token punctuation">(</span>interceptors <span class="token punctuation">[</span><span class="token punctuation">]</span>UnaryServerInterceptor<span class="token punctuation">)</span> UnaryServerInterceptor <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> req <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> info <span class="token operator">*</span>UnaryServerInfo<span class="token punctuation">,</span> handler UnaryHandler<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> interceptors<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> req<span class="token punctuation">,</span> info<span class="token punctuation">,</span> <span class="token function">getChainUnaryHandler</span><span class="token punctuation">(</span>interceptors<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> info<span class="token punctuation">,</span> handler<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token function">getChainUnaryHandler</span><span class="token punctuation">(</span>interceptors <span class="token punctuation">[</span><span class="token punctuation">]</span>UnaryServerInterceptor<span class="token punctuation">,</span> curr <span class="token builtin">int</span><span class="token punctuation">,</span> info <span class="token operator">*</span>UnaryServerInfo<span class="token punctuation">,</span> finalHandler UnaryHandler<span class="token punctuation">)</span> UnaryHandler <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> curr <span class="token operator">==</span> <span class="token function">len</span><span class="token punctuation">(</span>interceptors<span class="token punctuation">)</span><span class="token operator">-</span><span class="token number">1</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> finalHandler
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> req <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> interceptors<span class="token punctuation">[</span>curr<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> req<span class="token punctuation">,</span> info<span class="token punctuation">,</span> <span class="token function">getChainUnaryHandler</span><span class="token punctuation">(</span>interceptors<span class="token punctuation">,</span> curr<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">,</span> info<span class="token punctuation">,</span> finalHandler<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>首先，<code>chainUnaryInterceptors</code> 方法会将一系列拦截器 <code>interceptor</code> 成链，并返回首枚<code>interceptor</code> 供 <code>ServerOption</code> 接收设置.</p>
+<p>其中，拦截器成链的关键在于 <code>getChainUnaryHandler</code> 方法中，其中会闭包调用拦截器数组的首枚拦截器函数，接下来依次用下一枚拦截器对业务方法 <code>handler</code> 进行包裹，封装成一个新的 ”handler“ 供当前拦截器使用.</p>
+<h2 id="4-3-操作实践"><a href="#4-3-操作实践" class="headerlink" title="4.3 操作实践"></a>4.3 操作实践</h2><p>下面展示一下 <code>grpc</code> 拦截器链的实操例子.</p>
+<p>依次声明拦截器1 <code>myInterceptor1</code> 和 拦截器2 <code>myInterceptor2</code>，会在调用业务方法 <code>handler</code> 前后分别打印一行内容<br>在创建 <code>grpc server</code> 时，将两个拦截器基于 option 注入<br>通过客户端请求服务端，通过输出日志观察拦截器运行效果</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> myInterceptor1 <span class="token operator">=</span> <span class="token keyword">func</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> req <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> info <span class="token operator">*</span>grpc<span class="token punctuation">.</span>UnaryServerInfo<span class="token punctuation">,</span> handler grpc<span class="token punctuation">.</span>UnaryHandler<span class="token punctuation">)</span> <span class="token punctuation">(</span>resp <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    fmt<span class="token punctuation">.</span><span class="token function">Printf</span><span class="token punctuation">(</span><span class="token string">"interceptor1 preprocess, req: %+v\n"</span><span class="token punctuation">,</span> req<span class="token punctuation">)</span>
+    resp<span class="token punctuation">,</span> err <span class="token operator">=</span> <span class="token function">handler</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> req<span class="token punctuation">)</span>
+    fmt<span class="token punctuation">.</span><span class="token function">Printf</span><span class="token punctuation">(</span><span class="token string">"interceptor1 postprocess, req: %+v\n"</span><span class="token punctuation">,</span> resp<span class="token punctuation">)</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">var</span> myInterceptor2 <span class="token operator">=</span> <span class="token keyword">func</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> req <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> info <span class="token operator">*</span>grpc<span class="token punctuation">.</span>UnaryServerInfo<span class="token punctuation">,</span> handler grpc<span class="token punctuation">.</span>UnaryHandler<span class="token punctuation">)</span> <span class="token punctuation">(</span>resp <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    fmt<span class="token punctuation">.</span><span class="token function">Printf</span><span class="token punctuation">(</span><span class="token string">"interceptor2 preprocess, req: %+v\n"</span><span class="token punctuation">,</span> req<span class="token punctuation">)</span>
+    resp<span class="token punctuation">,</span> err <span class="token operator">=</span> <span class="token function">handler</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> req<span class="token punctuation">)</span>
+    fmt<span class="token punctuation">.</span><span class="token function">Printf</span><span class="token punctuation">(</span><span class="token string">"interceptor2 postprocess, resp: %+v\n"</span><span class="token punctuation">,</span> resp<span class="token punctuation">)</span>
+    <span class="token keyword">return</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token function">SayHello</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> req <span class="token operator">*</span>proto<span class="token punctuation">.</span>HelloReq<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>proto<span class="token punctuation">.</span>HelloResp<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"core handle logic......"</span><span class="token punctuation">)</span>
+    <span class="token keyword">return</span> <span class="token operator">&amp;</span>proto<span class="token punctuation">.</span>HelloResp<span class="token punctuation">&#123;</span>
+        Reply<span class="token punctuation">:</span> fmt<span class="token punctuation">.</span><span class="token function">Sprintf</span><span class="token punctuation">(</span><span class="token string">"hello name: %s"</span><span class="token punctuation">,</span> req<span class="token punctuation">.</span>Name<span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    listener<span class="token punctuation">,</span> err <span class="token operator">:=</span> net<span class="token punctuation">.</span><span class="token function">Listen</span><span class="token punctuation">(</span><span class="token string">"tcp"</span><span class="token punctuation">,</span> <span class="token string">":8093"</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">panic</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+
+
+    server <span class="token operator">:=</span> grpc<span class="token punctuation">.</span><span class="token function">NewServer</span><span class="token punctuation">(</span>grpc<span class="token punctuation">.</span><span class="token function">ChainUnaryInterceptor</span><span class="token punctuation">(</span>myInterceptor1<span class="token punctuation">,</span> myInterceptor2<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    proto<span class="token punctuation">.</span><span class="token function">RegisterHelloServiceServer</span><span class="token punctuation">(</span>server<span class="token punctuation">,</span> <span class="token operator">&amp;</span>Server<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+
+
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> server<span class="token punctuation">.</span><span class="token function">Serve</span><span class="token punctuation">(</span>listener<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">panic</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E8%83%8C%E6%99%AF%E4%BB%8B%E7%BB%8D"><span class="top-box-text">1 背景介绍</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-rpc"><span class="top-box-text">1.1 rpc</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-grpc-go"><span class="top-box-text">1.2 grpc-go</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-grpc-go-%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B"><span class="top-box-text">2 grpc-go 使用教程</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-%E5%89%8D%E7%BD%AE%E5%87%86%E5%A4%87"><span class="top-box-text">2.1 前置准备</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-pb-%E6%A1%A9%E6%96%87%E4%BB%B6"><span class="top-box-text">2.2 pb 桩文件</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E6%9C%8D%E5%8A%A1%E7%AB%AF"><span class="top-box-text">2.3 服务端</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-4-%E5%AE%A2%E6%88%B7%E7%AB%AF"><span class="top-box-text">2.4 客户端</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-%E6%9C%8D%E5%8A%A1%E7%AB%AF"><span class="top-box-text">3 服务端</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">3.1 核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#server"><span class="top-box-text">server</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#serviceInfo"><span class="top-box-text">serviceInfo</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#MethodDesc"><span class="top-box-text">MethodDesc</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#methodHandler"><span class="top-box-text">methodHandler</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E5%88%9B%E5%BB%BA-server"><span class="top-box-text">3.2 创建 server</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-%E6%B3%A8%E5%86%8C-service"><span class="top-box-text">3.3 注册 service</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%BF%90%E8%A1%8C-server"><span class="top-box-text">运行 server</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-5-%E5%A4%84%E7%90%86%E8%AF%B7%E6%B1%82"><span class="top-box-text">3.5 处理请求</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-%E6%8B%A6%E6%88%AA%E5%99%A8"><span class="top-box-text">4 拦截器</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-2-%E6%8B%A6%E6%88%AA%E5%99%A8%E9%93%BE"><span class="top-box-text">4.2 拦截器链</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-3-%E6%93%8D%E4%BD%9C%E5%AE%9E%E8%B7%B5"><span class="top-box-text">4.3 操作实践</span></a></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/02/02/%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/">
+          <h3 class="post-title">
+            下一篇：一致性哈希算法原理解析
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
