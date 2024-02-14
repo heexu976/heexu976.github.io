@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang 的选项模式（Option 模式）</title>
+<meta name="keywords" content="Golang 的选项模式（Option 模式）, HeXu">
+<meta name="description" content="1 选项配置问题在我们编程中，我们会经常性的需要对一个对象（或是业务实体）进行相关的配置。比如下面这个业务实体（注意，这仅只是一个示例）：
+type Server struct &#123;
+    Addr     string
+    ">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang 的选项模式（Option 模式）">
+<meta property="og:description" content="1 选项配置问题在我们编程中，我们会经常性的需要对一个对象（或是业务实体）进行相关的配置。比如下面这个业务实体（注意，这仅只是一个示例）：
+type Server struct &#123;
+    Addr     string
+    ">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang 的选项模式（Option 模式）</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-02-14</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="1-选项配置问题"><a href="#1-选项配置问题" class="headerlink" title="1 选项配置问题"></a>1 选项配置问题</h1><p>在我们编程中，我们会经常性的需要对一个对象（或是业务实体）进行相关的配置。比如下面这个业务实体（注意，这仅只是一个示例）：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Server <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Addr     <span class="token builtin">string</span>
+    Port     <span class="token builtin">int</span>
+    Protocol <span class="token builtin">string</span>
+    Timeout  time<span class="token punctuation">.</span>Duration
+    MaxConns <span class="token builtin">int</span>
+    TLS      <span class="token operator">*</span>tls<span class="token punctuation">.</span>Config
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在这个 <code>Server</code> 对象中，我们可以看到：</p>
+<p>要有侦听的IP地址 <code>Addr</code> 和端口号 <code>Port</code> ，这两个配置选项是必填的（当然，IP地址和端口号都可以有默认值，当这里我们用于举例认为是没有默认值，而且不能为空，需要必填的）。</p>
+<p>然后，还有协议 <code>Protocol</code> 、 <code>Timeout</code> 和 <code>MaxConns</code> 字段，这几个字段是不能为空的，但是有默认值的，比如：协议是tcp, 超时30秒 和 最大链接数1024个。</p>
+<p>还有一个 <code>TLS</code> 这个是安全链接，需要配置相关的证书和私钥。这个是可以为空的。</p>
+<p>所以，针对于上述这样的配置，我们需要有多种不同的创建不同配置 <code>Server</code> 的函数签名，如下所示（代码比较宽，需要左右滚动浏览）：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">NewDefaultServer</span><span class="token punctuation">(</span>addr <span class="token builtin">string</span><span class="token punctuation">,</span> port <span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>Server<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+  <span class="token keyword">return</span> <span class="token operator">&amp;</span>Server<span class="token punctuation">&#123;</span>addr<span class="token punctuation">,</span> port<span class="token punctuation">,</span> <span class="token string">"tcp"</span><span class="token punctuation">,</span> <span class="token number">30</span> <span class="token operator">*</span> time<span class="token punctuation">.</span>Second<span class="token punctuation">,</span> <span class="token number">100</span><span class="token punctuation">,</span> <span class="token boolean">nil</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token function">NewTLSServer</span><span class="token punctuation">(</span>addr <span class="token builtin">string</span><span class="token punctuation">,</span> port <span class="token builtin">int</span><span class="token punctuation">,</span> tls <span class="token operator">*</span>tls<span class="token punctuation">.</span>Config<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>Server<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+  <span class="token keyword">return</span> <span class="token operator">&amp;</span>Server<span class="token punctuation">&#123;</span>addr<span class="token punctuation">,</span> port<span class="token punctuation">,</span> <span class="token string">"tcp"</span><span class="token punctuation">,</span> <span class="token number">30</span> <span class="token operator">*</span> time<span class="token punctuation">.</span>Second<span class="token punctuation">,</span> <span class="token number">100</span><span class="token punctuation">,</span> tls<span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token function">NewServerWithTimeout</span><span class="token punctuation">(</span>addr <span class="token builtin">string</span><span class="token punctuation">,</span> port <span class="token builtin">int</span><span class="token punctuation">,</span> timeout time<span class="token punctuation">.</span>Duration<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>Server<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+  <span class="token keyword">return</span> <span class="token operator">&amp;</span>Server<span class="token punctuation">&#123;</span>addr<span class="token punctuation">,</span> port<span class="token punctuation">,</span> <span class="token string">"tcp"</span><span class="token punctuation">,</span> timeout<span class="token punctuation">,</span> <span class="token number">100</span><span class="token punctuation">,</span> <span class="token boolean">nil</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token function">NewTLSServerWithMaxConnAndTimeout</span><span class="token punctuation">(</span>addr <span class="token builtin">string</span><span class="token punctuation">,</span> port <span class="token builtin">int</span><span class="token punctuation">,</span> maxconns <span class="token builtin">int</span><span class="token punctuation">,</span> timeout time<span class="token punctuation">.</span>Duration<span class="token punctuation">,</span> tls <span class="token operator">*</span>tls<span class="token punctuation">.</span>Config<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>Server<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+  <span class="token keyword">return</span> <span class="token operator">&amp;</span>Server<span class="token punctuation">&#123;</span>addr<span class="token punctuation">,</span> port<span class="token punctuation">,</span> <span class="token string">"tcp"</span><span class="token punctuation">,</span> <span class="token number">30</span> <span class="token operator">*</span> time<span class="token punctuation">.</span>Second<span class="token punctuation">,</span> maxconns<span class="token punctuation">,</span> tls<span class="token punctuation">&#125;</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>因为<strong>Go语言不支持重载函数</strong>，所以，你得用不同的函数名来应对不同的配置选项。</p>
+<h1 id="2-配置对象方案"><a href="#2-配置对象方案" class="headerlink" title="2 配置对象方案"></a>2 配置对象方案</h1><p>要解决这个问题，最常见的方式是使用一个配置对象，如下所示：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Config <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Protocol <span class="token builtin">string</span>
+    Timeout  time<span class="token punctuation">.</span>Duration
+    Maxconns <span class="token builtin">int</span>
+    TLS      <span class="token operator">*</span>tls<span class="token punctuation">.</span>Config
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>我们把那些非必输的选项都移到一个结构体里，于是 Server 对象变成了：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Server <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Addr <span class="token builtin">string</span>
+    Port <span class="token builtin">int</span>
+    Conf <span class="token operator">*</span>Config
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>于是，我们只需要一个 <code>NewServer()</code> 的函数了，在使用前需要构造 <code>Config</code> 对象。</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">NewServer</span><span class="token punctuation">(</span>addr <span class="token builtin">string</span><span class="token punctuation">,</span> port <span class="token builtin">int</span><span class="token punctuation">,</span> conf <span class="token operator">*</span>Config<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>Server<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">//...</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">//Using the default configuratrion</span>
+srv1<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">:=</span> <span class="token function">NewServer</span><span class="token punctuation">(</span><span class="token string">"localhost"</span><span class="token punctuation">,</span> <span class="token number">9000</span><span class="token punctuation">,</span> <span class="token boolean">nil</span><span class="token punctuation">)</span> 
+conf <span class="token operator">:=</span> ServerConfig<span class="token punctuation">&#123;</span>Protocol<span class="token punctuation">:</span><span class="token string">"tcp"</span><span class="token punctuation">,</span> Timeout<span class="token punctuation">:</span> <span class="token number">60</span><span class="token operator">*</span>time<span class="token punctuation">.</span>Duration<span class="token punctuation">&#125;</span>
+srv2<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">:=</span> <span class="token function">NewServer</span><span class="token punctuation">(</span><span class="token string">"locahost"</span><span class="token punctuation">,</span> <span class="token number">9000</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>conf<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>这段代码算是不错了，大多数情况下，我们可能就止步于此了。但是，对于有洁癖的有追求的程序员来说，他们能看到其中有一点不好的是，<code>Config</code> 并不是必需的，所以，你需要判断是否是 <code>nil</code> 或是 <code>Empty – Config&#123;&#125;</code>这让我们的代码感觉还是有点不是很干净。</p>
+<h1 id="3-Builder"><a href="#3-Builder" class="headerlink" title="3.Builder"></a>3.Builder</h1><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">//使用一个builder类来做包装</span>
+<span class="token keyword">type</span> ServerBuilder <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+  Server
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>sb <span class="token operator">*</span>ServerBuilder<span class="token punctuation">)</span> <span class="token function">Create</span><span class="token punctuation">(</span>addr <span class="token builtin">string</span><span class="token punctuation">,</span> port <span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token operator">*</span>ServerBuilder <span class="token punctuation">&#123;</span>
+  sb<span class="token punctuation">.</span>Server<span class="token punctuation">.</span>Addr <span class="token operator">=</span> addr
+  sb<span class="token punctuation">.</span>Server<span class="token punctuation">.</span>Port <span class="token operator">=</span> port
+  <span class="token comment">//其它代码设置其它成员的默认值</span>
+  <span class="token keyword">return</span> sb
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>sb <span class="token operator">*</span>ServerBuilder<span class="token punctuation">)</span> <span class="token function">WithProtocol</span><span class="token punctuation">(</span>protocol <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token operator">*</span>ServerBuilder <span class="token punctuation">&#123;</span>
+  sb<span class="token punctuation">.</span>Server<span class="token punctuation">.</span>Protocol <span class="token operator">=</span> protocol 
+  <span class="token keyword">return</span> sb
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>sb <span class="token operator">*</span>ServerBuilder<span class="token punctuation">)</span> <span class="token function">WithMaxConn</span><span class="token punctuation">(</span> maxconn <span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token operator">*</span>ServerBuilder <span class="token punctuation">&#123;</span>
+  sb<span class="token punctuation">.</span>Server<span class="token punctuation">.</span>MaxConns <span class="token operator">=</span> maxconn
+  <span class="token keyword">return</span> sb
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>sb <span class="token operator">*</span>ServerBuilder<span class="token punctuation">)</span> <span class="token function">WithTimeOut</span><span class="token punctuation">(</span> timeout time<span class="token punctuation">.</span>Duration<span class="token punctuation">)</span> <span class="token operator">*</span>ServerBuilder <span class="token punctuation">&#123;</span>
+  sb<span class="token punctuation">.</span>Server<span class="token punctuation">.</span>Timeout <span class="token operator">=</span> timeout
+  <span class="token keyword">return</span> sb
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>sb <span class="token operator">*</span>ServerBuilder<span class="token punctuation">)</span> <span class="token function">WithTLS</span><span class="token punctuation">(</span> tls <span class="token operator">*</span>tls<span class="token punctuation">.</span>Config<span class="token punctuation">)</span> <span class="token operator">*</span>ServerBuilder <span class="token punctuation">&#123;</span>
+  sb<span class="token punctuation">.</span>Server<span class="token punctuation">.</span>TLS <span class="token operator">=</span> tls
+  <span class="token keyword">return</span> sb
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>sb <span class="token operator">*</span>ServerBuilder<span class="token punctuation">)</span> <span class="token function">Build</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>Server<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+  <span class="token keyword">return</span>  sb<span class="token punctuation">.</span>Server
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<p>于是就可以以如下的方式来使用了</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">sb <span class="token operator">:=</span> ServerBuilder<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+server<span class="token punctuation">,</span> err <span class="token operator">:=</span> sb<span class="token punctuation">.</span><span class="token function">Create</span><span class="token punctuation">(</span><span class="token string">"127.0.0.1"</span><span class="token punctuation">,</span> <span class="token number">8080</span><span class="token punctuation">)</span><span class="token punctuation">.</span>
+  <span class="token function">WithProtocol</span><span class="token punctuation">(</span><span class="token string">"udp"</span><span class="token punctuation">)</span><span class="token punctuation">.</span>
+  <span class="token function">WithMaxConn</span><span class="token punctuation">(</span><span class="token number">1024</span><span class="token punctuation">)</span><span class="token punctuation">.</span>
+  <span class="token function">WithTimeOut</span><span class="token punctuation">(</span><span class="token number">30</span><span class="token operator">*</span>time<span class="token punctuation">.</span>Second<span class="token punctuation">)</span><span class="token punctuation">.</span>
+  <span class="token function">Build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>上面这样的方式也很清楚，不需要额外的 <code>Config</code> 类，使用链式的函数调用的方式来构造一个对象，只需要多加一个Builder类，这个Builder类似乎有点多余，我们似乎可以直接在 <code>Server</code> 上进行这样的 <code>Builder</code> 构造，的确是这样的。但是在处理错误的时候可能就有点麻烦（需要为 <code>Server</code> 结构增加一个 <code>error</code> 成员，破坏了 <code>Server</code> 结构体的“纯洁”），不如一个包装类更好一些。</p>
+<p>如果我们想省掉这个包装的结构体，那么就轮到我们的 <strong><code>Functional Options</code></strong> 上场了，函数式编程。</p>
+<h1 id="4-Functional-Options"><a href="#4-Functional-Options" class="headerlink" title="4 Functional Options"></a>4 Functional Options</h1><p>首先，我们先定义一个函数类型：</p>
+<p><code>type Option func(*Server)</code></p>
+<p>然后，我们可以使用函数式的方式定义一组如下的函数：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">Protocol</span><span class="token punctuation">(</span>p <span class="token builtin">string</span><span class="token punctuation">)</span> Option <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        s<span class="token punctuation">.</span>Protocol <span class="token operator">=</span> p
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token function">Timeout</span><span class="token punctuation">(</span>timeout time<span class="token punctuation">.</span>Duration<span class="token punctuation">)</span> Option <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        s<span class="token punctuation">.</span>Timeout <span class="token operator">=</span> timeout
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token function">MaxConns</span><span class="token punctuation">(</span>maxconns <span class="token builtin">int</span><span class="token punctuation">)</span> Option <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        s<span class="token punctuation">.</span>MaxConns <span class="token operator">=</span> maxconns
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token function">TLS</span><span class="token punctuation">(</span>tls <span class="token operator">*</span>tls<span class="token punctuation">.</span>Config<span class="token punctuation">)</span> Option <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token keyword">func</span><span class="token punctuation">(</span>s <span class="token operator">*</span>Server<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        s<span class="token punctuation">.</span>TLS <span class="token operator">=</span> tls
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>上面这组代码传入一个参数，然后返回一个函数，返回的这个函数会设置自己的 Server 参数。例如：</p>
+<ul>
+<li>当我们调用其中的一个函数用 <code>MaxConns(30)</code> 时</li>
+<li>其返回值是一个 <code>func(s* Server) &#123; s.MaxConns = 30 &#125;</code> 的函数。</li>
+</ul>
+<p>这个叫高阶函数。在数学上，就好像这样的数学定义，计算长方形面积的公式为： <code>rect(width, height) = width * height</code>; 这个函数需要两个参数，我们包装一下，就可以变成计算正方形面积的公式：<code>square(width) = rect(width, width)</code> 也就是说，<code>squre(width)</code> 返回了另外一个函数，这个函数就是 <code>rect(w,h)</code> 只不过他的两个参数是一样的。即：<code>f(x)  = g(x, x)</code></p>
+<p>好了，现在我们再定一个 <code>NewServer()</code> 的函数，其中，有一个可变参数 <code>options</code> 其可以传出多个上面上的函数，然后使用一个 <code>for-loop</code> 来设置我们的 <code>Server</code> 对象。</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">NewServer</span><span class="token punctuation">(</span>addr <span class="token builtin">string</span><span class="token punctuation">,</span> port <span class="token builtin">int</span><span class="token punctuation">,</span> options <span class="token operator">...</span><span class="token keyword">func</span><span class="token punctuation">(</span><span class="token operator">*</span>Server<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>Server<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+  srv <span class="token operator">:=</span> Server<span class="token punctuation">&#123;</span>
+    Addr<span class="token punctuation">:</span>     addr<span class="token punctuation">,</span>
+    Port<span class="token punctuation">:</span>     port<span class="token punctuation">,</span>
+    Protocol<span class="token punctuation">:</span> <span class="token string">"tcp"</span><span class="token punctuation">,</span>
+    Timeout<span class="token punctuation">:</span>  <span class="token number">30</span> <span class="token operator">*</span> time<span class="token punctuation">.</span>Second<span class="token punctuation">,</span>
+    MaxConns<span class="token punctuation">:</span> <span class="token number">1000</span><span class="token punctuation">,</span>
+    TLS<span class="token punctuation">:</span>      <span class="token boolean">nil</span><span class="token punctuation">,</span>
+  <span class="token punctuation">&#125;</span>
+  <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> option <span class="token operator">:=</span> <span class="token keyword">range</span> options <span class="token punctuation">&#123;</span>
+    <span class="token function">option</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>srv<span class="token punctuation">)</span>
+  <span class="token punctuation">&#125;</span>
+  <span class="token comment">//...</span>
+  <span class="token keyword">return</span> <span class="token operator">&amp;</span>srv<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>于是，我们在创建 Server 对象的时候，我们就可以这样来了。</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">s1<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">:=</span> <span class="token function">NewServer</span><span class="token punctuation">(</span><span class="token string">"localhost"</span><span class="token punctuation">,</span> <span class="token number">1024</span><span class="token punctuation">)</span>
+s2<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">:=</span> <span class="token function">NewServer</span><span class="token punctuation">(</span><span class="token string">"localhost"</span><span class="token punctuation">,</span> <span class="token number">2048</span><span class="token punctuation">,</span> <span class="token function">Protocol</span><span class="token punctuation">(</span><span class="token string">"udp"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+s3<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">:=</span> <span class="token function">NewServer</span><span class="token punctuation">(</span><span class="token string">"0.0.0.0"</span><span class="token punctuation">,</span> <span class="token number">8080</span><span class="token punctuation">,</span> <span class="token function">Timeout</span><span class="token punctuation">(</span><span class="token number">300</span><span class="token operator">*</span>time<span class="token punctuation">.</span>Second<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token function">MaxConns</span><span class="token punctuation">(</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<p>怎么样，是不是高度的整洁和优雅？不但解决了使用 Config 对象方式 的需要有一个config参数，但在不需要的时候，是放 nil 还是放 Config{}的选择困难，也不需要引用一个Builder的控制对象，直接使用函数式编程的试，在代码阅读上也很优雅。</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E9%80%89%E9%A1%B9%E9%85%8D%E7%BD%AE%E9%97%AE%E9%A2%98"><span class="top-box-text">1 选项配置问题</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E9%85%8D%E7%BD%AE%E5%AF%B9%E8%B1%A1%E6%96%B9%E6%A1%88"><span class="top-box-text">2 配置对象方案</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-Builder"><span class="top-box-text">3.Builder</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-Functional-Options"><span class="top-box-text">4 Functional Options</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/02/02/Golang-grpc-go-%E6%9C%8D%E5%8A%A1%E7%AB%AF%E4%BD%BF%E7%94%A8%E4%BB%8B%E7%BB%8D%E5%8F%8A%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/">
+          <h3 class="post-title">
+            下一篇：Golang grpc-go 服务端使用介绍及源码分析
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
