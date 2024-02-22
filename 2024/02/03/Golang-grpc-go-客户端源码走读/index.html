@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang grpc-go 客户端源码走读</title>
+<meta name="keywords" content="Golang grpc-go 客户端源码走读, HeXu">
+<meta name="description" content="1 客户端的使用首先给出 grpc-go 启动客户端的代码示例，核心内容分三块：
+
+调用 grpc.Dial 方法，指定服务端 target，创建 grpc 连接代理对象 ClientConn
+调用 proto.NewHelloServic">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang grpc-go 客户端源码走读">
+<meta property="og:description" content="1 客户端的使用首先给出 grpc-go 启动客户端的代码示例，核心内容分三块：
+
+调用 grpc.Dial 方法，指定服务端 target，创建 grpc 连接代理对象 ClientConn
+调用 proto.NewHelloServic">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang grpc-go 客户端源码走读</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-02-03</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="1-客户端的使用"><a href="#1-客户端的使用" class="headerlink" title="1 客户端的使用"></a>1 客户端的使用</h1><p>首先给出 <code>grpc-go</code> 启动客户端的代码示例，核心内容分三块：</p>
+<ol>
+<li>调用 <code>grpc.Dial</code> 方法，指定服务端 <code>target</code>，创建 <code>grpc</code> 连接代理对象 <code>ClientConn</code></li>
+<li>调用 <code>proto.NewHelloServiceClient</code> 方法，基于 <code>pb</code> 桩代码构造客户端实例</li>
+<li>调用 <code>client.SayHello</code> 方法，真正发起 <code>grpc</code> 请求</li>
+</ol>
+<h1 id="2-核心数据结构"><a href="#2-核心数据结构" class="headerlink" title="2 核心数据结构"></a>2 核心数据结构</h1><p>下面对 <code>grpc-go</code> 客户端涉及到的几个核心数据结构以及其间的关联做个介绍.</p>
+<h2 id="2-1-ClientConn"><a href="#2-1-ClientConn" class="headerlink" title="2.1 ClientConn"></a>2.1 ClientConn</h2><p><code>ClientConn</code> 是广义上的 <code>grpc</code> 连接代理对象，和 <code>grpc</code> 客户端是一对一的关系，内部包含了<strong>一个连接池</strong>，根据配置可能同时管理多笔连接. 其中几个核心字段包括：</p>
+<ul>
+<li><code>target/parsedTarget</code>：对服务端地址信息的封装</li>
+<li><code>balancerWrapper</code>：负载均衡器. 初始化时会启动一个守护协程，动态地对 <code>ClientConn</code> 及 <code>Subconn</code> 的状态进行刷新</li>
+<li><code>blockingpicker</code>：连接选择器. 在发送请求时，由其最终挑选出使用的 Subconn</li>
+<li><code>resolverWrapper</code>：解析器. 负责根据不同的 schema，通过 target 解析出服务端的实际地址</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> ClientConn <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 连接上下文</span>
+    ctx    context<span class="token punctuation">.</span>Context   
+    <span class="token comment">// 上下文终止控制器</span>
+    cancel context<span class="token punctuation">.</span>CancelFunc 
+
+    <span class="token comment">// 连接的目标地址</span>
+    target          <span class="token builtin">string</span>               
+    <span class="token comment">// 对连接目标地址的封装</span>
+    parsedTarget    resolver<span class="token punctuation">.</span>Target    
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 连接配置项</span>
+    dopts           dialOptions          
+    <span class="token comment">// 负载均衡器，底层基于 gracefulswitch.balancer</span>
+    balancerWrapper <span class="token operator">*</span>ccBalancerWrapper  
+
+    <span class="token comment">// 连接状态管理器</span>
+    csMgr              <span class="token operator">*</span>connectivityStateManager
+    <span class="token comment">// 连接选择器</span>
+    blockingpicker     <span class="token operator">*</span>pickerWrapper
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 读写互斥锁</span>
+    mu              sync<span class="token punctuation">.</span>RWMutex
+    <span class="token comment">// 解析器</span>
+    resolverWrapper <span class="token operator">*</span>ccResolverWrapper         
+    <span class="token comment">// 连接池</span>
+    conns           <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token operator">*</span>addrConn<span class="token punctuation">]</span><span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>     <span class="token comment">// Set to nil on close.</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-2-ccBalancerWrapper"><a href="#2-2-ccBalancerWrapper" class="headerlink" title="2.2 ccBalancerWrapper"></a>2.2 ccBalancerWrapper</h2><p><code>ccBalancerWrapper</code> 是在负载均衡器 <code>Balancer</code> 的基础上做的封装. 在<code>ccBalancerWrapper</code> 被初始化时，会开启一个守护协程，通过监听  <code>updateCh</code> 中到达的事件，对 <code>ClientConn</code> 和 <code>Subconn</code> 的状态进行刷新.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> ccBalancerWrapper <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 指向所属的 clientConn</span>
+    cc <span class="token operator">*</span>ClientConn
+
+
+    <span class="token comment">// 负载均衡器</span>
+    balancer        <span class="token operator">*</span>gracefulswitch<span class="token punctuation">.</span>Balancer
+    curBalancerName <span class="token builtin">string</span>
+  
+    <span class="token comment">// 接收更新事件的 chan</span>
+    updateCh <span class="token operator">*</span>buffer<span class="token punctuation">.</span>Unbounded 
+    <span class="token comment">// 接收处理结果的 chan</span>
+    resultCh <span class="token operator">*</span>buffer<span class="token punctuation">.</span>Unbounded 
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>ccBalancerWrapper</code> 的核心是一个负载均衡器 <code>Balancer</code> 接口,其中包含了几个核心方法:</p>
+<ul>
+<li><code>UpdateClientConnState</code>：更新 ClientConn 的连接状态</li>
+<li><code>ResolverError</code>：错误后处理</li>
+<li><code>UpdateSubConnState</code>：更新子连接 Subconn 状态</li>
+<li><code>Close</code>：关闭负载均衡器</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Balancer <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token function">UpdateClientConnState</span><span class="token punctuation">(</span>ClientConnState<span class="token punctuation">)</span> <span class="token builtin">error</span>
+    <span class="token function">ResolverError</span><span class="token punctuation">(</span><span class="token builtin">error</span><span class="token punctuation">)</span>
+    <span class="token function">UpdateSubConnState</span><span class="token punctuation">(</span>SubConn<span class="token punctuation">,</span> SubConnState<span class="token punctuation">)</span>
+    <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在默认情况下，<code>grpc </code>客户端框架会为我们提供一个默认的负载均衡器 <code>pickfirstBalancer</code>：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> pickfirstBalancer <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    state   connectivity<span class="token punctuation">.</span>State
+    cc      balancer<span class="token punctuation">.</span>ClientConn
+    subConn balancer<span class="token punctuation">.</span>SubConn
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>与 pickfirstBalancer 具体的交互流程我们在第3章再作展开.</p>
+<h2 id="2-3-ccResolverWrapper"><a href="#2-3-ccResolverWrapper" class="headerlink" title="2.3 ccResolverWrapper"></a>2.3 ccResolverWrapper</h2><p>ccResolverWrapper的核心是内置的解析器 resolver.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> ccResolverWrapper <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 指向所属的 clientConn</span>
+    cc         <span class="token operator">*</span>ClientConn
+    resolverMu sync<span class="token punctuation">.</span>Mutex
+    <span class="token comment">// 核心成员：内置的解析器</span>
+    resolver   resolver<span class="token punctuation">.</span>Resolver
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>resolver</code> 通过 <code>Builder</code> 构造，对应的 <code>Buidler</code> 是一个 <code>i nterface</code> ,用户也可以提供自己的实现版本:</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Builder <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 构造解析器 resolver</span>
+    <span class="token function">Build</span><span class="token punctuation">(</span>target Target<span class="token punctuation">,</span> cc ClientConn<span class="token punctuation">,</span> opts BuildOptions<span class="token punctuation">)</span> <span class="token punctuation">(</span>Resolver<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+    <span class="token comment">// Scheme returns the scheme supported by this resolver.</span>
+    <span class="token comment">// Scheme is defined at https://github.com/grpc/grpc/blob/master/doc/naming.md.</span>
+    <span class="token function">Scheme</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">string</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>resolver</code> 本身是一个接口，核心的方法是 <strong>ResolveNow：通过 target 解析出实际的客户端地址.</strong></p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Resolver <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 解析 target</span>
+    <span class="token function">ResolveNow</span><span class="token punctuation">(</span>ResolveNowOptions<span class="token punctuation">)</span>
+    <span class="token comment">// 关闭 resolver</span>
+    <span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>grpc客户端为我们提供了一个默认的resolver：passthroughResolver：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> passthroughResolver <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    target resolver<span class="token punctuation">.</span>Target
+    cc     resolver<span class="token punctuation">.</span>ClientConn
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>passthroughResolver 在解析 target 时的策略是直接透传不作处理. 具体交互流程见第3章.</p>
+<h2 id="2-4-ClientStream"><a href="#2-4-ClientStream" class="headerlink" title="2.4 ClientStream"></a>2.4 ClientStream</h2><p>在 <code>grpc</code> 客户端客户端发起请求时，会首先创建出一个 <code>ClientStream</code>，并依赖其核心方法 <code>SendMsg</code> 和 <code>RecvMsg</code> 进行请求的发送和响应的接受.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> ClientStream <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 获取元数据</span>
+    <span class="token function">Header</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>metadata<span class="token punctuation">.</span>MD<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+    <span class="token comment">// 获取上下文</span>
+    <span class="token function">Context</span><span class="token punctuation">(</span><span class="token punctuation">)</span> context<span class="token punctuation">.</span>Context
+    <span class="token comment">// 发送消息</span>
+    <span class="token function">SendMsg</span><span class="token punctuation">(</span>m <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+    <span class="token comment">// 接收消息</span>
+    <span class="token function">RecvMsg</span><span class="token punctuation">(</span>m <span class="token keyword">interface</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>ClientStream</code> 是一个 <code>interface</code> ，其默认的实现是 <code>clientStream</code>：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> clientStream <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ...</span>
+    cc       <span class="token operator">*</span>ClientConn
+    desc     <span class="token operator">*</span>StreamDesc
+
+
+    <span class="token comment">// 编码模块</span>
+    codec baseCodec
+    <span class="token comment">// 压缩模块</span>
+    cp    Compressor
+    comp  encoding<span class="token punctuation">.</span>Compressor
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 上下文</span>
+    ctx context<span class="token punctuation">.</span>Context 
+    <span class="token comment">// 请求尝试</span>
+    attempt <span class="token operator">*</span>csAttempt
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-5-csAttempt"><a href="#2-5-csAttempt" class="headerlink" title="2.5 csAttempt"></a>2.5 csAttempt</h2><p><code>csAttemp</code> 代表了一次 <code>grpc</code> 请求尝试，本身是具有生命周期的.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> csAttempt <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    ctx        context<span class="token punctuation">.</span>Context
+    cs         <span class="token operator">*</span>clientStream
+    t          transport<span class="token punctuation">.</span>ClientTransport
+    s          <span class="token operator">*</span>transport<span class="token punctuation">.</span>Stream
+    p          <span class="token operator">*</span>parser
+    pickResult balancer<span class="token punctuation">.</span>PickResult
+
+
+    <span class="token comment">// 解压模块</span>
+    dc        Decompressor
+    decomp    encoding<span class="token punctuation">.</span>Compressor
+    decompSet <span class="token builtin">bool</span>
+
+
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-1-grpc-Dial"><a href="#3-1-grpc-Dial" class="headerlink" title="3.1 grpc.Dial"></a>3.1 grpc.Dial</h2><pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">Dial</span><span class="token punctuation">(</span>target <span class="token builtin">string</span><span class="token punctuation">,</span> opts <span class="token operator">...</span>DialOption<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>ClientConn<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> <span class="token function">DialContext</span><span class="token punctuation">(</span>context<span class="token punctuation">.</span><span class="token function">Background</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> target<span class="token punctuation">,</span> opts<span class="token operator">...</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token function">DialContext</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> target <span class="token builtin">string</span><span class="token punctuation">,</span> opts <span class="token operator">...</span>DialOption<span class="token punctuation">)</span> <span class="token punctuation">(</span>conn <span class="token operator">*</span>ClientConn<span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    cc <span class="token operator">:=</span> <span class="token operator">&amp;</span>ClientConn<span class="token punctuation">&#123;</span>
+        target<span class="token punctuation">:</span>            target<span class="token punctuation">,</span>
+        csMgr<span class="token punctuation">:</span>             <span class="token operator">&amp;</span>connectivityStateManager<span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+        conns<span class="token punctuation">:</span>             <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token operator">*</span>addrConn<span class="token punctuation">]</span><span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        dopts<span class="token punctuation">:</span>             <span class="token function">defaultDialOptions</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        blockingpicker<span class="token punctuation">:</span>    <span class="token function">newPickerWrapper</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        czData<span class="token punctuation">:</span>            <span class="token function">new</span><span class="token punctuation">(</span>channelzData<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        firstResolveEvent<span class="token punctuation">:</span> grpcsync<span class="token punctuation">.</span><span class="token function">NewEvent</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+    <span class="token comment">// Determine the resolver to use.</span>
+    resolverBuilder<span class="token punctuation">,</span> err <span class="token operator">:=</span> cc<span class="token punctuation">.</span><span class="token function">parseTargetAndFindResolver</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    cc<span class="token punctuation">.</span>balancerWrapper <span class="token operator">=</span> <span class="token function">newCCBalancerWrapper</span><span class="token punctuation">(</span>cc<span class="token punctuation">,</span> balancer<span class="token punctuation">.</span>BuildOptions<span class="token punctuation">&#123;</span>
+        DialCreds<span class="token punctuation">:</span>        credsClone<span class="token punctuation">,</span>
+        CredsBundle<span class="token punctuation">:</span>      cc<span class="token punctuation">.</span>dopts<span class="token punctuation">.</span>copts<span class="token punctuation">.</span>CredsBundle<span class="token punctuation">,</span>
+        Dialer<span class="token punctuation">:</span>           cc<span class="token punctuation">.</span>dopts<span class="token punctuation">.</span>copts<span class="token punctuation">.</span>Dialer<span class="token punctuation">,</span>
+        Authority<span class="token punctuation">:</span>        cc<span class="token punctuation">.</span>authority<span class="token punctuation">,</span>
+        CustomUserAgent<span class="token punctuation">:</span>  cc<span class="token punctuation">.</span>dopts<span class="token punctuation">.</span>copts<span class="token punctuation">.</span>UserAgent<span class="token punctuation">,</span>
+        ChannelzParentID<span class="token punctuation">:</span> cc<span class="token punctuation">.</span>channelzID<span class="token punctuation">,</span>
+        Target<span class="token punctuation">:</span>           cc<span class="token punctuation">.</span>parsedTarget<span class="token punctuation">,</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    rWrapper<span class="token punctuation">,</span> err <span class="token operator">:=</span> <span class="token function">newCCResolverWrapper</span><span class="token punctuation">(</span>cc<span class="token punctuation">,</span> resolverBuilder<span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    cc<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    cc<span class="token punctuation">.</span>resolverWrapper <span class="token operator">=</span> rWrapper
+    cc<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> cc<span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>在通过 <code>DialContext</code> 创建 <code>grpc</code> 连接代理 <code>ClientConn</code> 时，核心步骤包括：</p>
+<ul>
+<li>创建 <code>ClientConn</code> 实例</li>
+<li>调用 <code>ClientConn.parseTargetAndFindResolver</code> 方法，通过 <code>target</code> 中的 <code>schema</code> 获取到对应的解析器构造器 <code>resolverBuilder</code></li>
+<li>调用 <code>newCCBalancerWrapper</code> 方法构造出负载均衡器封装对象 <code>ccBalancerWrapper</code>，在内部会开启守护协程感知和处理 <code>ClientConn</code> 和 <code>Subconn</code> 状态变更的事件</li>
+<li>调用 <code>newCCResolverWrapper</code> 方法，内部会调用 <code>resolverBuilder</code> 构造并启动 <code>resolver</code> 实例，同时会通过 <code>ccBalancerWrapper</code> 方法对 <code>ClientConn</code> 的状态进行更新</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E5%AE%A2%E6%88%B7%E7%AB%AF%E7%9A%84%E4%BD%BF%E7%94%A8"><span class="top-box-text">1 客户端的使用</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">2 核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-ClientConn"><span class="top-box-text">2.1 ClientConn</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-ccBalancerWrapper"><span class="top-box-text">2.2 ccBalancerWrapper</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-ccResolverWrapper"><span class="top-box-text">2.3 ccResolverWrapper</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-4-ClientStream"><span class="top-box-text">2.4 ClientStream</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-5-csAttempt"><span class="top-box-text">2.5 csAttempt</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-grpc-Dial"><span class="top-box-text">3.1 grpc.Dial</span></a></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/02/02/Golang-grpc-go-%E6%9C%8D%E5%8A%A1%E7%AB%AF%E4%BD%BF%E7%94%A8%E4%BB%8B%E7%BB%8D%E5%8F%8A%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/">
+          <h3 class="post-title">
+            下一篇：Golang grpc-go 服务端使用介绍及源码分析
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
