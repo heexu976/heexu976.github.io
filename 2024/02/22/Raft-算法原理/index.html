@@ -304,11 +304,378 @@
 </ol>
 <p>通过 {term , index} 二元组可以组成一个全局唯一键，定位到一则日志，并且能够保证位于不同节点中日志，只要其 term 和 index 均相同，其内容一定完全一致. 这一项证明可见本文 7.2 小节.</p>
 <p>至此，raft 算法的核心概念初步介绍完毕，第 2 节只是做了主流程的阐述，一些细节还留待后续内容进行补充完善. 下面第 3 节将以 raft 算法下节点的三种角色以及其切换流程作为主线，进一步展开 raft 选举机制的原理介绍.</p>
-<h1 id="3-raft-算法下节点的角色流转"><a href="#3-raft-算法下节点的角色流转" class="headerlink" title="3 raft 算法下节点的角色流转"></a>3 raft 算法下节点的角色流转</h1>
+<h1 id="3-raft"><a href="#3-raft" class="headerlink" title="3 raft"></a>3 raft</h1><h2 id="3-1-角色定义及切换"><a href="#3-1-角色定义及切换" class="headerlink" title="3.1 角色定义及切换"></a>3.1 角色定义及切换</h2><p>raft 算法中，集群节点的角色类型分为：领导者 leader、跟随者 follower、候选人 candidate 三种角色. 各角色的具体职责将在后续 3.2-3.4 小节中详细介绍，下面先对各角色间的切换机制进行一个总览性的描述.</p>
+<h3 id="leader-follower"><a href="#leader-follower" class="headerlink" title="leader -&gt; follower"></a>leader -&gt; follower</h3><p>倘若 leader 发现当前系统中出现了更大的任期，则会进行“禅让”，主动退位成 follower.</p>
+<p>这里 leader 发现更大任期的方式包括：I 向 follower 提交日志同步请求时,从 follower 的响应参数中获得; II 收到了来自新任 leader 的心跳或者同步日志请求；III 收到了任期更大的 candidate 的拉票请求.</p>
+<h3 id="follower-candidate"><a href="#follower-candidate" class="headerlink" title="follower -&gt; candidate"></a>follower -&gt; candidate</h3><p>leader 需要定期向 follower 发送心跳，告知自己仍健在的消息.</p>
+<p>倘若 follower 超过一定时长没收到 leader 心跳时，会将状态切换为 candidate ，在当前任期的基础上加 1 作为竞选任期，发起竞选尝试补位.</p>
+<h3 id="candidate-follower"><a href="#candidate-follower" class="headerlink" title="candidate -&gt; follower"></a>candidate -&gt; follower</h3><p>candidate 参与竞选过程中，出现以下两种情形时会退回 follower：</p>
+<ol>
+<li>多数派投了反对票；</li>
+<li>竞选期间，收到了任期大于等于自身竞选任期的 leader 传来的请求.</li>
+</ol>
+<h3 id="candidate-leader"><a href="#candidate-leader" class="headerlink" title="candidate -&gt; leader"></a>candidate -&gt; leader</h3><p>candidate 竞选时，倘若多数派投了赞同票，则切换为 leader.</p>
+<h3 id="candidate-candidate"><a href="#candidate-candidate" class="headerlink" title="candidate -&gt; candidate"></a>candidate -&gt; candidate</h3><p>candidate 的竞选流程有一个时间阈值. 倘若超时仍未形成有效结论（多数派赞同或拒绝），则会维持 candidate 身份，将竞选任期加1，发起新一轮竞选.</p>
+<h2 id="3-2-领导者"><a href="#3-2-领导者" class="headerlink" title="3.2 领导者"></a>3.2 领导者</h2><p>领导者是写请求的统一入口，在接收到来自客户端的写请求时，会开启“两阶段提交”的流程：</p>
+<ol>
+<li>广播 proposal，向所有节点同步这一请求；</li>
+<li>当请求得到多数派的赞同后，才会提交这一请求.</li>
+</ol>
+<p>leader 还需要周期性地向集群中所有节点发送自己的心跳，告知自己的健康状况，用途包括：</p>
+<ol>
+<li>让 follower 重置心跳检测定时器，避免其切换成 candidate 发起竞选；</li>
+<li>在心跳请求中携带上 leader 最新已提交日志的标识 id（term + index），推动 follower 更新日志提交进度.</li>
+</ol>
+<p>同时需要注意，心跳请求是单向传输，而非双向通信. 因此，follower 无需对 leader 的心跳请求进行回复.</p>
+<h2 id="3-3-跟随者"><a href="#3-3-跟随者" class="headerlink" title="3.3 跟随者"></a>3.3 跟随者</h2><p>follower 的职责包括如下几项：</p>
+<ol>
+<li>负责同步 leader 传来的写请求，此时也有一个参与民主反馈的过程，倘若同步成功，会给予 leader 正向反馈，当 leader 的同步请求收到半数以上的认可时，会提交日志；</li>
+<li>通过接收 leader 心跳的方式，获取到携带的 commitIndex 信息，及时完成已被多数派认可的预写日志的提交，以推进其写入状态机的进度. 这一项相当于做到了数据的备份，也被读请求最终一致性提供了保证;</li>
+<li>负责为参与竞选 candidate 的投票，决定赞同与否的判断机制见 5.3 小节；</li>
+<li>通过心跳检测定时器时时关注 leader 的健康状态，当超时未收到心跳时，会切换为 candidate 发起竞选.</li>
+</ol>
+<h2 id="3-4-候选人"><a href="#3-4-候选人" class="headerlink" title="3.4 候选人"></a>3.4 候选人</h2><p>candidate 是一个临时态，成为 candidate 意味着此时正处于成与败的分叉路口，candidate 有关的核心流程如下：</p>
+<ol>
+<li>倘若 follower 切为 candidate，会将当前任期加1，作为竞选任期；</li>
+<li>会将自身的一票投给自己；</li>
+<li>广播向所有节点拉票；</li>
+<li>倘若拉票请求超时前，得到多数派认可，则上位为 leader；</li>
+<li>倘若拉票请求超时前，遭到多数派拒绝，则老实退回 follower；</li>
+<li>倘若拉票请求超时前，收到了任期大于等于自身竞选任期的 leader 的请求，则老实退回 follower；</li>
+<li>倘若拉票请求超时，则竞选任期加 1，发起新一轮竞选拉票请求.</li>
+</ol>
+<h1 id="4-raft-算法下的外部请求链路梳理"><a href="#4-raft-算法下的外部请求链路梳理" class="headerlink" title="4 raft 算法下的外部请求链路梳理"></a>4 raft 算法下的外部请求链路梳理</h1><p>本节会站在更宏观的视角，观察客户端与服务端（ 一 leader + 多 follower）之间的交互流程，分为写和读两个流程.</p>
+<h2 id="4-1-写"><a href="#4-1-写" class="headerlink" title="4.1 写"></a>4.1 写</h2><ol>
+<li>写操作需要由 leader 统一收口. 倘若 follower 接收到了写请求，则会告知客户端 leader 的所在位置（节点 id），让客户端重新将写请求发送给 leader 处理；</li>
+<li>leader 接收到写请求后，会先将请求抽象成一笔预写日志，追加到预写日志数组的末尾；</li>
+<li>leader 会广播向集群中所有节点发送同步这笔日志的请求，称之为第一阶段的“提议”；</li>
+<li>follower 将日志同步到本机的预写日志数组后，会给 leader 回复一个“同步成功”的ack；</li>
+<li>leader 发现这笔请求对应的预写日志已经被集群中的多数派（包括自身）完成同步时，会”提交“该日志，并向客户端回复“写请求成功”的 ack.</li>
+</ol>
+<p>上面描述了一个最理想化的写流程链路，其中还存在几个场景需要进行补充：</p>
+<h4 id="case-1：leader-任期滞后-（主动退位）"><a href="#case-1：leader-任期滞后-（主动退位）" class="headerlink" title="case 1：leader 任期滞后.（主动退位）"></a>case 1：leader 任期滞后.（主动退位）</h4><p>在第（4）步中，倘若 follower 发现当前 leader 的 term 小于自己记录的最新任期，本着”前朝的剑不斩本朝官“的原则，follower 会拒绝 leader 的这次同步请求，并在响应中告知 leader 当前最新的 term；leader 感知到新 term 的存在后，也会识相地主动完成退位.</p>
+<h4 id="case-2：follower-日志滞后-（补齐日志）"><a href="#case-2：follower-日志滞后-（补齐日志）" class="headerlink" title="case 2：follower 日志滞后.（补齐日志）"></a>case 2：follower 日志滞后.（补齐日志）</h4><p>同样在第（4）步中，此时虽然 leader 的 term 是最新的，但是在这笔最新同步日志之前， follower 的预写日志数据还存在缺失的数据，此时 follower 会拒绝 leader 的同步请求；leader 发现 follower 响应的任期与自身相同却又拒绝同步，会递归尝试向 follower 同步预写日志数组中的前一笔日志，直到补齐 follower 缺失的全部日志后，流程则会回归到正常的轨道.</p>
+<h4 id="case-3：follower-日志”超前“-（丢弃日志）"><a href="#case-3：follower-日志”超前“-（丢弃日志）" class="headerlink" title="case 3：follower 日志”超前“.（丢弃日志）"></a>case 3：follower 日志”超前“.（丢弃日志）</h4><p>同样在第（4）步中，leader 的 term 是最新的，但是 follower 在 leader 最新同步日志的索引及其之后已存在日志，且日志内容还与当前 leader 不一致. 此时 follower 需要移除这部分”超前“的日志，然后同步 leader 传送的日志，向当前在任 leader 看齐.</p>
+<p><strong>case 2 和 case 3 的处理方式共同保证了，在 raft 算法下，各节点间预写日志数组的已提交部分无论在内容还是顺序上都是完全一致的.</strong></p>
+<h4 id="case-4：如何将最终一致性升级到即时一致性？"><a href="#case-4：如何将最终一致性升级到即时一致性？" class="headerlink" title="case 4：如何将最终一致性升级到即时一致性？"></a>case 4：如何将最终一致性升级到即时一致性？</h4><p>标准的 raft 算法模型中，在 C 方面只能做到”最终一致性“的语义. 倘若想要升级为”即时一致性“，就需要在写流程和读流程中都做些额外的处理.</p>
+<p>在写流程第（5）步中，leader 不仅需要提交这笔写请求对应的预写日志，还需要确保将这笔日志应用到状态机中，才能给予客户端”请求成功“的 ack，以此保证读 leader 状态机时，能读取到最新的数据.</p>
+<h2 id="4-2-读"><a href="#4-2-读" class="headerlink" title="4.2 读"></a>4.2 读</h2><p>raft 标准模型中，客户端的读请求可以被集群中的任意节点处理，最终会取状态机中的数据进行响应. 由于预写日志 + 二阶段提交 + 多数派原则的机制保证了被提交的日志具有”最终一致性“的语义，而只有被提交的日志才有资格被应用到状态机，因此状态机的数据也必然具有最终一致性，而<strong>无法保证即时一次性</strong>（follower 和 leader 之间的数据状态）</p>
+<p>如果要求读流程满足即时一次性的要求，则要做一些额外的处理：</p>
+<h3 id="appliedIndex-校验"><a href="#appliedIndex-校验" class="headerlink" title="appliedIndex 校验"></a>appliedIndex 校验</h3><p>每次 leader 处理写请求后，会把最晚一笔应用到状态机的日志索引 appliedIndex 反馈给客户端. 后续客户端和 follower 交互时，会携带 appliedIndex. 倘若 follower 发现自身的 appliedIndex 落后于客户端的 appliedIndex，说明本机存在数据滞后，则拒绝这笔请求，由客户端发送到其他节点进行处理.</p>
+<h3 id="强制读主"><a href="#强制读主" class="headerlink" title="强制读主"></a>强制读主</h3><p>follower 收到读请求时，也统一转发给 leader 处理. 只要 leader 处理写请求时，保证先写状态机，后给客户端响应，那么状态机的数据可以保证即时一致性. 但是这样的弊端就是 leader 的压力过大，其他 follower 节点只沦为备份数据副本的配角.</p>
+<p>同时，这种强制读主的方案还存在一个问题，就是领导者在处理读请求时，需要额外对自己做一次合法性身份证明. 这是因为倘若当前网络出现分区情况，外界早已更换朝代，而 leader 仍坐落于小分区中不知大清已亡，固执地认为自己是正统，那么此时提供的读服务就无法保证即时一致性，会退化为最终一致性.</p>
+<p>解决这个问题的方案是，leader 提供读服务时，需要额外向集群所有节点发起一轮广播，当得到多数派的认可，证明自己身份仍然合法时，才会对读请求进行响应.</p>
+<p>这个 leader 身份合法校验的问题只存在于读请求中而不影响写请求，这是因为 leader 处理写流程时，在提议阶段就必须与外界通信，获取多数派的反馈.这个反馈的过程实际上就已经完成了对 leader 身份合法性的校验.</p>
+<h1 id="5-raft-算法下的内部请求链路梳理"><a href="#5-raft-算法下的内部请求链路梳理" class="headerlink" title="5. raft 算法下的内部请求链路梳理"></a>5. raft 算法下的内部请求链路梳理</h1><p>第 4 节聊完了客户端与服务端交互的过程. 本节侧重于讨论服务端内部不同角色的节点之间的交互流程，主要按照请求类型分类展开.</p>
+<h2 id="5-1-日志同步请求"><a href="#5-1-日志同步请求" class="headerlink" title="5.1 日志同步请求"></a>5.1 日志同步请求</h2><ol>
+<li><p>请求起点：领导者</p>
+</li>
+<li><p>请求意图：领导者向其他节点同步预写日志(proposal).</p>
+</li>
+<li><p>请求参数：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>term</td>
+<td>领导者的任期</td>
+</tr>
+<tr>
+<td>leaderID</td>
+<td>leader 的节点 id，方便后续 follower 转发写请求</td>
+</tr>
+<tr>
+<td>leaderCommit</td>
+<td>leader 最新提交的日志 index，方便 follower 更新数据进度</td>
+</tr>
+<tr>
+<td>prevLogIndex</td>
+<td>当前同步日志的前一条日志的 index.</td>
+</tr>
+<tr>
+<td>prevLogTerm</td>
+<td>当前同步日志的前一条日志的 term.</td>
+</tr>
+<tr>
+<td>log[]</td>
+<td>同步的日志，可能为多笔，因为 follower 可能滞后了多笔日志，可见 4.1 小节说明.</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>请求终点：</p>
+<ol>
+<li>leader<ol>
+<li>倘若该任期小于自身，拒绝，并回复自己的最新任期；</li>
+<li>倘若该任期大于自身，退位为 follower,按照 follower 的模式处理该请求.</li>
+</ol>
+</li>
+<li>follower<ol>
+<li>倘若 leader 任期落后于自己，拒绝请求，并回复自己所在的任期；</li>
+<li>倘若 follower 存在不一致的日志，则删除多余的日志，同步 leader 日志与之保持一致；</li>
+<li>倘若 follower 存在日志滞后，则拒绝请求，让 leader 重发更早的日志，直到补齐所有缺失.</li>
+</ol>
+</li>
+<li>candidate<ol>
+<li>倘若 leader 任期大于等于自己，退回 follower，按照 follower 模式处理请求；</li>
+<li>如果 leader 任期小于自己，拒绝，并回复自己的最新任期.</li>
+</ol>
+</li>
+</ol>
+</li>
+<li><p>响应参数：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>term</td>
+<td>节点当前的任期</td>
+</tr>
+<tr>
+<td>success</td>
+<td>同步日志的请求是否成功</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>leader 后处理<br> 倘若多数派都完成了日志同步，leader 会提交这笔日志；</p>
+<p> 倘若某个节点拒绝了同步请求，并回复了一个更新的任期，leader 会退位回 follower，并更新任期；</p>
+<p> 倘若某个节点拒绝了同步请求，但回复了相同的任期，leader 会递归发送前一条日志给该节点，直到其接受同步请求为止；</p>
+<p> 倘若一个节点超时未给 leader 回复，leader 会重发这笔同步日志的请求.</p>
+</li>
+</ol>
+<h2 id="5-2-心跳-提交同步请求"><a href="#5-2-心跳-提交同步请求" class="headerlink" title="5.2 心跳&amp;提交同步请求"></a>5.2 心跳&amp;提交同步请求</h2><ol>
+<li><p>请求起点：领导者</p>
+</li>
+<li><p>请求意图：周期性发送心跳证明自己还健在；同时日志提交的进度.</p>
+</li>
+<li><p>请求参数：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>term</td>
+<td>领导者的任期</td>
+</tr>
+<tr>
+<td>leaderID</td>
+<td>leader 的节点 id，方便后续 follower 转发写请求</td>
+</tr>
+<tr>
+<td>leaderCommit</td>
+<td>leader 最新提交的日志 index，方便 follower 更新数据进度</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>请求终点：</p>
+<ol>
+<li>leader<ol>
+<li>倘若该任期小于自身，直接无视；</li>
+<li>倘若该任期大于自身，退位为 follower,按照 follower 的模式处理该请求.</li>
+</ol>
+</li>
+<li>follower<ol>
+<li>倘若任期小于自身，直接无视</li>
+<li>重置 leader 心跳检测计时器. 查看 leaderCommit, 看是否有预写日志可以被提交.</li>
+</ol>
+</li>
+<li>候选人<ol>
+<li>倘若任期小于自身，直接无视</li>
+<li>如果任期大于等于自己，退回 follower，按照 follower 模式处理请求.</li>
+</ol>
+</li>
+</ol>
+</li>
+</ol>
+<p><strong>注意，心跳请求是单向非阻塞的，leader 发送心跳后无需等待其他节点的回复.</strong></p>
+<h2 id="5-3-竞选拉票请求"><a href="#5-3-竞选拉票请求" class="headerlink" title="5.3 竞选拉票请求"></a>5.3 竞选拉票请求</h2><ol>
+<li><p>请求起点：候选人</p>
+</li>
+<li><p>请求意图：拉票，希望得到多数派认同，上位成为 leader</p>
+</li>
+<li><p>请求参数：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>term</td>
+<td>candidate 的竞选任期，如果上位了，就采用此任期</td>
+</tr>
+<tr>
+<td>candidateID</td>
+<td>candidate 的节点 id，方便 follower 标记自己将票投给了谁</td>
+</tr>
+<tr>
+<td>lastLogIndex</td>
+<td>candidate 最晚一笔预写日志的 index</td>
+</tr>
+<tr>
+<td>lastLogTerm</td>
+<td>candidate 最晚一笔预写日志的 term</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>请求终点</p>
+<ol>
+<li>终点1：leader<ol>
+<li>倘若 candidate 的竞选任期小于自身，拒绝，并回复自己的最新任期；</li>
+<li>倘若 candidate 的竞选任期大于自身，退位为 follower,按照 follower 的模式处理该请求.</li>
+</ol>
+</li>
+<li>终点2：follower<ol>
+<li>倘若 candidate 的竞选任期小于自身，拒绝，并回复自己的最新任期；</li>
+<li>倘若自己已经将票投给了其他 candidate，拒绝；</li>
+<li>倘若自己已经将票投给了这个 candidate，接受；（candidate 侧会幂等去重）</li>
+<li>倘若 candidate 的 lastLogTerm 大于自己最后一笔预写日志的 term，接受；</li>
+<li>倘若 candidate 的 lastLogTerm 小于自己最后一笔预写日志的 term，拒绝；</li>
+<li>倘若 candidate 的 lastLogTerm 等于自己最后一笔预写日志的 term，且 candidate 的 lastLogIndex 大于等于自己最后一笔预写日志的 index，接受；</li>
+<li>倘若 candidate 的 lastLogTerm 等于自己最后一笔预写日志的 term，且 candidate 的 lastLogIndex 小于自己最后一笔预写日志的 index，拒绝.</li>
+</ol>
+</li>
+<li>终点3：candidate<ol>
+<li>倘若 candidate 的竞选任期小于等于自己的竞选任期，拒绝；</li>
+<li>倘若 candidate 的竞选任期大于自己的竞选任期，退回 follower，按照 follower 的模式处理.</li>
+</ol>
+</li>
+</ol>
+</li>
+<li><p>响应参数：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>term</td>
+<td>节点当前的任期</td>
+</tr>
+<tr>
+<td>granted</td>
+<td>是否投了赞同票</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>candidate 后处理</p>
+<ol>
+<li>倘若多数派投了赞同票（包括自己），晋升为 leader，竞选任期则为新的国号；</li>
+<li>倘若多数派投了反对票，则退回 follower；</li>
+<li>倘若反对票中，出现了比自己更高的任期，退回 follower，更新任期；</li>
+<li>倘若形成多数派决议前，收到了任期大于等于自己的 leader 的请求，退回 follower，更新任期；</li>
+<li>倘若拉票请求超时，则自增竞选任期，发起新一轮竞选.</li>
+</ol>
+</li>
+<li><p>小结<br>  在第（4）部分，通过 follower 决定投票的判断机制，可以看出，follower 只愿意将票投给数据状态不滞后于自己的 candidate. 又由于 candidate 要获取多数派的赞同票才能上位成为 leader，换言之，只有数据一致性状态在多数派中处于领先地位的 candidate 才有资格成为 leader. 这一项机制非常重要，正是由它保证了”两阶段提交，提交即可响应“这一流程的合理性.</p>
+<p>  更具体的问题和证明见本文 7.5 小节.</p>
+</li>
+</ol>
+<h1 id="6-raft-算法下的集群变更"><a href="#6-raft-算法下的集群变更" class="headerlink" title="6 raft 算法下的集群变更"></a>6 raft 算法下的集群变更</h1><p>第 6 节实际上属于 raft 算法工程化落地的内容. 因为在 raft 算法的标准定义中，会把背景定义得更加理想化，不涉及到主动执行集群节点数量变更的情况.</p>
+<p>但在工程实践中，我们不可避免地需要对集群进行动态调整,因此,我们需要保证,当有节点加入或者退出集群时，整个集群要保证能够正常运作，避免出现脑裂的情况.</p>
+<h2 id="6-1-集群变更流程"><a href="#6-1-集群变更流程" class="headerlink" title="6.1 集群变更流程"></a>6.1 集群变更流程</h2><p>配置变更的过程和 leader 同步日志的过程是一致的. 配置变更的请求会被包装成一条写请求，走进两阶段提交的流程当中，有所区别的是，此时由于涉及集群节点数量的变更，因此配置变更期间的多数派仍以变更前的节点名单为准，即多数派要求的节点数量为变更前集群的节点数量，多数派的组成节点要求为变更前已存在于集群的老节点.</p>
+<p>下面以集群新增节点的过程加以说明：</p>
+<ol>
+<li>配置变更请求需要由 leader 统一收口处理；</li>
+<li>leader 发起提议（proposal），将”配置变更“的日志广播给集群中的所有节点. 配置变更的明细参数形如 ${变更前集群的节点名单}_${新加入的集群节点名单}，需要能明确标识出哪些节点是原有的老节点，哪些节点是新加入的节点；</li>
+<li>当配置变更的提议要被老节点中的多数派认可时，leader 才会提交（commit）配置变更动作，在配置参数中将新老两部分节点的名单合并到一起；</li>
+<li>在配置变更期间，leader 选举时，需要获得老节点中多数派的赞同票，才能当选；</li>
+<li>配置变更期间，处理写请求时，需要在提议阶段获得老节点中多数派的认可，才能进行提交.</li>
+</ol>
+<p>注意，在第（3）-（5）点中，无论处理配置变更提议、写请求提议还是领导选举提议，此时集群的多数派都定义为老节点范围内的多数派. 那么我们不妨利用逆向思维，思考一下，倘若不这样加以约束，而是采用变更后全节点范围的多数派来组织流程，会出现哪些问题呢？</p>
+<h2 id="6-2-bad-case-案例梳理"><a href="#6-2-bad-case-案例梳理" class="headerlink" title="6.2 bad case 案例梳理"></a>6.2 bad case 案例梳理</h2><p>背景：集群原本有 3 个节点：a、b、c，c 为 leader. 在 moment1 时刻，d、e 需要加入集群.</p>
+<p>倘若以集群变更后的节点数量来决定多数派，那么只需要 a、b、c、d、e 中有 3 个节点达成共识，就形成了多数派. 下面我们来论证在这种模式下，会存在什么问题.</p>
+<h3 id="反例1：配置变更期间选举的-bad-case"><a href="#反例1：配置变更期间选举的-bad-case" class="headerlink" title="反例1：配置变更期间选举的 bad case"></a>反例1：配置变更期间选举的 bad case</h3><ol>
+<li>moment1：客户端向 leader c 提交配置变更请求{abc-de}；</li>
+<li>moment2：leader c 广播发起提议{abc-de}，由于 c、d、e 3 个节点都对配置变更达成认可，形成多数派，于是 leader 提交配置变更请求；（此时 a、b 由于网络原因，还未同步配置变更，仍持有老的节点配置信息：a、b、c）</li>
+<li>moment3：leader c 宕机</li>
+<li>moment4：a、b 心跳检测超时，a 率先发起竞选，并且获得 a、b 两个节点的选票. 由于 a 和 b 此时持有老的节点信息，因此认为 2 个节点即为多数派，因此 a 成功上任；同时，节点 d 也发起竞选，获得了 d、e 以及刚从宕机中恢复的节点 c 的选票，获得了 5 个节点下的多数派票数：3票，也成功当选；</li>
+<li>moment5：集群中出现两个 leader：a 和 d，发生脑裂.</li>
+</ol>
+<p>上述问题的解法就是，在配置变更期间，需要<strong>将多数派定义为旧节点范围内的多数派.</strong> 添加这一设定之后：</p>
+<ol>
+<li>倘若第 II 步中，leader c 仍在配置变更请求{abc-de}被同步到 c、d、e 后宕机. 那么在新一轮选举中，d、e就无法当选，因为无法获得旧节点{abc}中的多数派认可（a、b此时由于未同步配置，因此压根不认可d、e的身份），因此只有 a、b 可能当选，配置变更的请求会被作废. 但由于 leader c 同步配置变更的提议也未被{abc}中的多数派认可，因此无法提交，也不能给客户端响应. 最终形成的局面就是，本轮配置变更请求作废，客户端在超时未得到 ack 后，会重新发起一次 d、e 加入集群的配置变更请求；</li>
+<li>倘若第 II 步中，leader c 的配置变更请求{abc-de}已经得到 b 的认可，那么 bc 会形成旧节点{abc}中的多数派；leader c 可以直接提交该笔请求. 接下来，即便 leader c 宕机了，在{ab}中，b 会由于预写日志数据更新而胜出成为下一任 leader，那么后续请求{abc-de}会有 b 代替完成. 因此配置变更请求{abc-de}在{abc}中形成多数派认可的那一刻，就已经成功了.</li>
+</ol>
+<h3 id="反例2：配置变更期间写的-bad-case"><a href="#反例2：配置变更期间写的-bad-case" class="headerlink" title="反例2：配置变更期间写的 bad case"></a>反例2：配置变更期间写的 bad case</h3><p>与第（1）例类似，在配置变更期间，也需要将处理写请求时的多数派定义为旧节点中的多数派，否则会出现如下问题：</p>
+<p>（1）配置变更期间，一笔写请求到达 c，并被 c、d、e 认可，c 认为形成多数派，即提交并响应该请求；</p>
+<p>（2）随后 c 宕机，由于选举需要遵循旧节点多数派原则，最终 a 胜出，且 a 始终同步这笔写请求. 在下一笔请求到达后，a 的同步日志提议会将前一笔写请求覆盖，最终，一笔已经提交过的写请求被意外丢弃了.</p>
+<h1 id="7-Q-A"><a href="#7-Q-A" class="headerlink" title="7 Q&amp;A"></a>7 Q&amp;A</h1><p>下面通过对几个经典问题的解答，实现对 raft 算法原理的补充.</p>
+<h2 id="7-1-为什么能保证一个任期内至多只有一个领导者？（term，超半数投票）"><a href="#7-1-为什么能保证一个任期内至多只有一个领导者？（term，超半数投票）" class="headerlink" title="7.1 为什么能保证一个任期内至多只有一个领导者？（term，超半数投票）"></a>7.1 为什么能保证一个任期内至多只有一个领导者？（term，超半数投票）</h2><p>可以，通过选举的机制可以保证.</p>
+<p>首先，candidate 竞选前会自增 term，因此 term 在总体上为单调递增趋势；</p>
+<p>其次，在选举机制上，一个 term 内，一个 follower 只有一票，因此只能投票给一个 candidate；</p>
+<p>最后，基于多数派原则，一个 candidate 只有拿到半数以上的赞同票才能当选 leader.</p>
+<p>因此，同一个 term 内，不可能出现有两个 candidate 同时获得半数以上的赞同票，因此一个 term 至多只有一个 leader.</p>
+<h2 id="7-2-为什么能保证通过任期和索引相同的日志内容一定相同？"><a href="#7-2-为什么能保证通过任期和索引相同的日志内容一定相同？" class="headerlink" title="7.2 为什么能保证通过任期和索引相同的日志内容一定相同？"></a>7.2 为什么能保证通过任期和索引相同的日志内容一定相同？</h2><p>首先，预写日志具有 append-only 的性质，只作追加，不存在更新和删除操作；</p>
+<p>其次，基于 7.1 可得知，同一个 term 只有一个 leader；</p>
+<p>因此，在 term 相同的情况下，所有节点在同一个 index 上的日志都会与 term 内 leader 对应 index 位置的日志保持一致；</p>
+<p>综上，term 和 index 共同组成了一个全局唯一标识键. 只要term 和 index 均相同，日志内容一定相同。</p>
+<h2 id="7-3-如果两个节点中分别存在一笔任期和索引均相同的日志，那么在这两笔日志之前的日志是否也保证在顺序和内容上都完全一致？"><a href="#7-3-如果两个节点中分别存在一笔任期和索引均相同的日志，那么在这两笔日志之前的日志是否也保证在顺序和内容上都完全一致？" class="headerlink" title="7.3 如果两个节点中分别存在一笔任期和索引均相同的日志，那么在这两笔日志之前的日志是否也保证在顺序和内容上都完全一致？"></a>7.3 如果两个节点中分别存在一笔任期和索引均相同的日志，那么在这两笔日志之前的日志是否也保证在顺序和内容上都完全一致？</h2><p>可以.</p>
+<p>（1）如 4.2 小节中 case2 和 case3 所述，对于节点 a，一笔 term &#x3D; x、index &#x3D; y 的预写日志允许被写入的前提是，其上一笔预写日志的任期和索引一定和 term 为 x 的leader 的上一笔日志相同；</p>
+<p>（2）又由 7.2 小节证明，只要日志的索引和任期相同，其内容一定相同；</p>
+<p>（3）进一步采用数学归纳法，可以推导得到，节点 a 从这笔写入日志开始向前追溯的所有日志均与任期为 x 的 leader 完全一致；</p>
+<p>（4）倘若节点 b 也存在一笔 term &#x3D; x、index &#x3D; y 的日志，那么这笔日志一定也是由 term 为 x 的同一 leader 同步写入；</p>
+<p>（5）与（2）（3）同理，节点 b 自此向前的所有日志都会与 leader 完全相同；</p>
+<p>（6）于是可得，节点 a、b 自此向前的日志都完全相同.</p>
+<h2 id="7-4-关于选举机制方面，如何解决选票瓜分引发的问题？"><a href="#7-4-关于选举机制方面，如何解决选票瓜分引发的问题？" class="headerlink" title="7.4 关于选举机制方面，如何解决选票瓜分引发的问题？"></a>7.4 关于选举机制方面，如何解决选票瓜分引发的问题？</h2><p>试想一个场景，集群中有 a、b、c 3 个节点，三者网络环境以及硬件配置都非常相近.</p>
+<p>其中，c 为leader，集齐两个节点形成共识即可视为多数派，接下来发生了如下事件：</p>
+<p>（1）leader c 某时刻宕机；</p>
+<p>（2）节点 a、b 心跳检测计时器同时超时，因此同时发起竞选；</p>
+<p>（3）发起竞选时，a、b 都对任期加1，并且都会先把手中的一票投给自己，然后向对方拉票；</p>
+<p>（4）由于 a、b 手中的票都已投给自己，因此会分别拒绝对方的拉票请求；</p>
+<p>（5）a、b 都无法获得多数派的选票，竞选在同一时刻超时，并且同时发起下一轮竞选；</p>
+<p>（6）接下来不断重复（3）-（5）步，a、b 陷入僵持局面，始终无人胜出，导致集群不可用.</p>
+<p>解决方案：</p>
+<p>每个节点在心跳超时阈值和竞选超时阈值上添加一个随机扰动值，通过这一扰动，避免多个节点在进入完全相同的竞选节奏. 于是进入 candidate 状态的节点有了先后之分，胜负自然就可见分晓.</p>
+<h2 id="7-5-为什么新任-leader-一定拥有旧-leader-已提交的日志？"><a href="#7-5-为什么新任-leader-一定拥有旧-leader-已提交的日志？" class="headerlink" title="7.5 为什么新任 leader 一定拥有旧 leader 已提交的日志？"></a>7.5 为什么新任 leader 一定拥有旧 leader 已提交的日志？</h2><p>这是由两阶段提交和选举流程中的多数派原则保证的：</p>
+<p>（1）只有被集群多数派完成同步的日志才会被 leader 提交；</p>
+<p>（2）在选举流程中，节点只会把票投给日志进度不滞后于自身的 candidate；</p>
+<p>（3）在竞选流程，candidate 需要获取多数派的赞同票才能胜任，成为新任 leader.</p>
+<p>基于第（3）点可知，新任 leader 的日志进度一定能在竞选流程的多数派中出于不滞后的地位.</p>
+<p>而在集群节点个数固定的情况下，本轮竞选流程的多数派和认可前任 leader 同步日志请求的多数派至少存在一个重复的节点，否则就违背了多数派的语义（集群半数以上），因此可以得知，新任 leader 一定拥有前任 leader 那笔被多数派认可的日志，即旧 leader 提交的日志.</p>
+<h2 id="7-6-是否一项提议只需要被多数派通过就可以提交？"><a href="#7-6-是否一项提议只需要被多数派通过就可以提交？" class="headerlink" title="7.6 是否一项提议只需要被多数派通过就可以提交？"></a>7.6 是否一项提议只需要被多数派通过就可以提交？</h2><p>基于 7.5 小节可知，当一笔日志被多数派完成同步后，则后续所有新任的 leader 一定会拥有这笔日志，因此这笔日志已经被集群采纳，可以保证其安全性.</p>
+<p>上面的论述看起来天衣无缝，然而，本小节所谈及问题的答案其实是否定的.</p>
+<p>下面谈及一个极端的 case，并通过一个机制的补充，来让本节所关心的问题被彻底解决.</p>
+<p>【极端 case】</p>
+<p>背景：集群中存在 s1-s5 5 个节点，只需要 3 个节点达成共识，即可形成多数派.</p>
+<p>（1）moment1：此时 leader 为 s1，term 为 1，s1 接受了一笔写请求，刚将其同步到 s1、s2，还未形成多数派时，s1 就宕机了；</p>
+<p>（2）moment2：s5 收获了 s3、s4、s5 的选票，当选 leader，接受了一笔写请求，只在本机完成预写日志的落盘就宕机了；</p>
+<p>（3）moment3：s1 收获了 s1、s2、s3、s4 的选票，重新当选 leader，继续推进 term &#x3D; 1 时那笔遗留写请求的提交，成功将其同步到了 s1、s2、s3，获得多数派的认同，于是提交这笔写请求. 提交之后，s1 又宕机了.</p>
+<p>（4）moment4：s2 由于遗留了一笔 term 为 2 的日志 term，领先集群所有节点，因此可以收获集群所有节点的选票. 于是 s5 再度当选 leader，继续推进 term 为 2 时遗留的写请求，由于这笔日志的 index 与第（3）步中 s1 同步日志的 index 相同，又因为其 term 值更大，最终会覆盖 s1、s2、s3 中的老日志，这就导致一笔已经被 s1 提交的日志最终被 s5 回滚了.</p>
+<p>注意，在 raft 算法的设定中，已提交的日志就认为是写入成功了，是绝对不允许被回滚的，这种极端 case 就会 raft 算法的公信力造成破坏.</p>
+<p>于是为解决这一问题，raft 算法中新增了一项限制，新上任的 leader 需要至少完成一笔本任期内的写请求，才能够执行提交动作.</p>
+<p><strong>事实上，在工程实践上，通常每个 leader 上任之后，都会向集群广播同步一笔内容为空的日志，称之为 no-op. 只要这个请求被提交了，多数派也就写入了一遍当前任期的日志，于是本小节所谈及的异常问题就不可能再发生了.</strong></p>
+<h2 id="7-7-leader-向-follower-同步日志时，如何保证不出现乱序、丢失、重复的问题？"><a href="#7-7-leader-向-follower-同步日志时，如何保证不出现乱序、丢失、重复的问题？" class="headerlink" title="7.7 leader 向 follower 同步日志时，如何保证不出现乱序、丢失、重复的问题？"></a>7.7 leader 向 follower 同步日志时，如何保证不出现乱序、丢失、重复的问题？</h2><p>不乱序、不重复：follower 同步日志前，会校验上一笔日志是否和 leader 的上一笔完全一致，只有这样才会执行同步动作.</p>
+<p>不丢失：基于 ack 机制保证. 倘若 leader 超时未收到 follower 同步日志的 ack，会重发同步日志请求.</p>
+<h2 id="7-8-如何保证各节点已提交的预写日志顺序和内容都完全一致？"><a href="#7-8-如何保证各节点已提交的预写日志顺序和内容都完全一致？" class="headerlink" title="7.8 如何保证各节点已提交的预写日志顺序和内容都完全一致？"></a>7.8 如何保证各节点已提交的预写日志顺序和内容都完全一致？</h2><p>假设节点 a 最后一笔已提交的预写日志的 term &#x3D; x、index &#x3D; y，这说明集群中有多数派认同了 term 为 x 的 leader 同步该笔日志的请求.</p>
+<p>首先证明：倘若其他节点在 index &#x3D; y 位置的日志已提交了，则这笔日志的 term 一定也为 x.</p>
+<p>证明思路：倘若节点 b 在 index &#x3D; y 处的日志已提交，且任期为 z，那么就说明集群中有多数派认可了任期为 z 的 leader 同步的 term &#x3D; z、index &#x3D; y 的日志的请求. 由于集群不可能存在两个对立的多数派，因此唯一的可能性就是 z &#x3D; x，原题得证.</p>
+<p>接下来基于 7.2 小节的证明结论，我们可以得知各节点在 term &#x3D; x、index &#x3D; y 前面部分的日志也都完全一致，即各节点已提交的预写日志顺序和内容都完全一致.</p>
+<h2 id="7-9-如何保证状态机数据的最终一致性？"><a href="#7-9-如何保证状态机数据的最终一致性？" class="headerlink" title="7.9 如何保证状态机数据的最终一致性？"></a>7.9 如何保证状态机数据的最终一致性？</h2><p>基于 7.8 得知，被提交的预写日志顺序和内容都必然是完全一致的.</p>
+<p>又由于只有被提交的预写日志才能被应用到状态机，因此状态机的数据必然会按照正确的顺序和请求内容被依次更新，最终一致性得以保证.</p>
+<h2 id="7-10-如何解决网络分区引发的无意义选举问题？（提前试探）"><a href="#7-10-如何解决网络分区引发的无意义选举问题？（提前试探）" class="headerlink" title="7.10 如何解决网络分区引发的无意义选举问题？（提前试探）"></a>7.10 如何解决网络分区引发的无意义选举问题？（提前试探）</h2><p>倘若集群产生网络分区，部分处于小分区的节点由于无法接收到 leader 的心跳，导致进入选举流程. 又因为网络分区问题，导致选举始终无法获得多数派的响应，最终 candidate 会无限自增 term. 直到网络恢复的那一刻，由于 candidate 异常的高 term，导致 leader 退位，集群进入新一轮的选举流程.</p>
+<p>尽管小分区中的节点由于数据的滞后不可能在选举中胜出，最后必然是大分区中的节点胜任，节点数据的一致性依然可以得到保证. 但是这个无意义的选举过程同样会导致集群陷入暂不可用的阶段. 因此，我们可以通过这样的措施来避免这类无意义的选举：</p>
+<p>每个 candidate 发起真实选举之前，会有一个提前试探的过程，试探机制是向集群所有节点发送请求，只有得到多数派的响应，证明自己不存在网络环境问题时，才会将竞选任期自增，并且发起真实的选举流程.</p>
+<h2 id="7-11-如果保证客户端提交写请求不丢失、不重复？"><a href="#7-11-如果保证客户端提交写请求不丢失、不重复？" class="headerlink" title="7.11 如果保证客户端提交写请求不丢失、不重复？"></a>7.11 如果保证客户端提交写请求不丢失、不重复？</h2><p>不丢失：通过 ack 机制保证. 客户端超时未收到服务端的 ack，则会重发请求.</p>
+<p>不重复：客户端记录写请求的序列号，与服务端交互时透传这个序列号. 最终由服务端的 leader 实现对相同序列号写请求的幂等去重.</p>
+
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#0-%E5%89%8D%E8%A8%80"><span class="top-box-text">0.  前言</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E5%88%86%E5%B8%83%E5%BC%8F%E5%85%B1%E8%AF%86%E7%AE%97%E6%B3%95"><span class="top-box-text">1. 分布式共识算法</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-%E5%A6%82%E4%BD%95%E6%8F%90%E9%AB%98%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E7%9A%84%E8%AF%BB%E5%86%99%E6%80%A7%E8%83%BD%EF%BC%9F"><span class="top-box-text">1.1 如何提高大规模数据的读写性能？</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%9B%B4%E5%A5%BD%E7%9A%84%E6%9C%BA%E5%99%A8"><span class="top-box-text">更好的机器</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%9B%B4%E5%A4%9A%E7%9A%84%E6%9C%BA%E5%99%A8"><span class="top-box-text">更多的机器</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E5%88%86%E5%B8%83%E5%BC%8F%E7%9A%84%E4%BC%98%E5%8A%BF%E5%92%8C%E9%97%AE%E9%A2%98%EF%BC%9F"><span class="top-box-text">1.2 分布式的优势和问题？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-3-CAP-%E7%90%86%E8%AE%BA"><span class="top-box-text">1.3 CAP 理论</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#C%EF%BC%9AConsitency%EF%BC%8C%E4%B8%80%E8%87%B4%E6%80%A7"><span class="top-box-text">C：Consitency，一致性</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#A%EF%BC%9AAvailability%EF%BC%8C%E5%8F%AF%E7%94%A8%E6%80%A7"><span class="top-box-text">A：Availability，可用性</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#P%EF%BC%9APartition-tolerance%EF%BC%8C%E5%88%86%E5%8C%BA%E5%AE%B9%E9%94%99%E6%80%A7"><span class="top-box-text">P：Partition tolerance，分区容错性</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-4-C-%E7%9A%84%E9%97%AE%E9%A2%98"><span class="top-box-text">1.4 C 的问题</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%8D%B3%E6%97%B6%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98"><span class="top-box-text">即时一致性问题</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%A1%BA%E5%BA%8F%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98"><span class="top-box-text">顺序一致性问题</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-5-A-%E7%9A%84%E9%97%AE%E9%A2%98"><span class="top-box-text">1.5 A 的问题</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-6-%E5%9F%BA%E4%BA%8E%E6%9C%A8%E6%A1%B6%E6%95%88%E5%BA%94%E9%9D%A2%E5%AF%B9-CAP"><span class="top-box-text">1.6 基于木桶效应面对 CAP</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-7-%E5%88%86%E5%B8%83%E5%BC%8F%E4%B8%80%E8%87%B4%E6%80%A7%E5%85%B1%E8%AF%86%E7%AE%97%E6%B3%95"><span class="top-box-text">1.7 分布式一致性共识算法</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-raft-%E7%AE%97%E6%B3%95%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5"><span class="top-box-text">2. raft 算法核心概念</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-%E6%9C%AF%E8%AF%AD%E8%A1%A8"><span class="top-box-text">2.1 术语表</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-%E5%A4%9A%E6%95%B0%E6%B4%BE%E5%8E%9F%E5%88%99"><span class="top-box-text">2.2 多数派原则</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E4%B8%80%E4%B8%BB%E5%A4%9A%E4%BB%8E%E3%80%81%E8%AF%BB%E5%86%99%E5%88%86%E7%A6%BB"><span class="top-box-text">2.3 一主多从、读写分离</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%80%E4%B8%BB%E5%A4%9A%E4%BB%8E"><span class="top-box-text">一主多从</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%BB%E5%86%99%E5%88%86%E7%A6%BB"><span class="top-box-text">读写分离</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-4-%E7%8A%B6%E6%80%81%E6%9C%BA%E4%B8%8E%E9%A2%84%E5%86%99%E6%97%A5%E5%BF%97"><span class="top-box-text">2.4 状态机与预写日志</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%B8%A4%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4"><span class="top-box-text">两阶段提交</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-6-%E9%A2%86%E5%AF%BC%E8%80%85%E9%80%89%E4%B8%BE"><span class="top-box-text">2.6 领导者选举</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-7-%E4%BB%BB%E6%9C%9F%E4%B8%8E%E6%97%A5%E5%BF%97%E7%B4%A2%E5%BC%95"><span class="top-box-text">2.7 任期与日志索引</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-raft-%E7%AE%97%E6%B3%95%E4%B8%8B%E8%8A%82%E7%82%B9%E7%9A%84%E8%A7%92%E8%89%B2%E6%B5%81%E8%BD%AC"><span class="top-box-text">3 raft 算法下节点的角色流转</span></a></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#0-%E5%89%8D%E8%A8%80"><span class="top-box-text">0.  前言</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E5%88%86%E5%B8%83%E5%BC%8F%E5%85%B1%E8%AF%86%E7%AE%97%E6%B3%95"><span class="top-box-text">1. 分布式共识算法</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-1-%E5%A6%82%E4%BD%95%E6%8F%90%E9%AB%98%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E7%9A%84%E8%AF%BB%E5%86%99%E6%80%A7%E8%83%BD%EF%BC%9F"><span class="top-box-text">1.1 如何提高大规模数据的读写性能？</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%9B%B4%E5%A5%BD%E7%9A%84%E6%9C%BA%E5%99%A8"><span class="top-box-text">更好的机器</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%9B%B4%E5%A4%9A%E7%9A%84%E6%9C%BA%E5%99%A8"><span class="top-box-text">更多的机器</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-2-%E5%88%86%E5%B8%83%E5%BC%8F%E7%9A%84%E4%BC%98%E5%8A%BF%E5%92%8C%E9%97%AE%E9%A2%98%EF%BC%9F"><span class="top-box-text">1.2 分布式的优势和问题？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-3-CAP-%E7%90%86%E8%AE%BA"><span class="top-box-text">1.3 CAP 理论</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#C%EF%BC%9AConsitency%EF%BC%8C%E4%B8%80%E8%87%B4%E6%80%A7"><span class="top-box-text">C：Consitency，一致性</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#A%EF%BC%9AAvailability%EF%BC%8C%E5%8F%AF%E7%94%A8%E6%80%A7"><span class="top-box-text">A：Availability，可用性</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#P%EF%BC%9APartition-tolerance%EF%BC%8C%E5%88%86%E5%8C%BA%E5%AE%B9%E9%94%99%E6%80%A7"><span class="top-box-text">P：Partition tolerance，分区容错性</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-4-C-%E7%9A%84%E9%97%AE%E9%A2%98"><span class="top-box-text">1.4 C 的问题</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%8D%B3%E6%97%B6%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98"><span class="top-box-text">即时一致性问题</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%A1%BA%E5%BA%8F%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98"><span class="top-box-text">顺序一致性问题</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-5-A-%E7%9A%84%E9%97%AE%E9%A2%98"><span class="top-box-text">1.5 A 的问题</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-6-%E5%9F%BA%E4%BA%8E%E6%9C%A8%E6%A1%B6%E6%95%88%E5%BA%94%E9%9D%A2%E5%AF%B9-CAP"><span class="top-box-text">1.6 基于木桶效应面对 CAP</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#1-7-%E5%88%86%E5%B8%83%E5%BC%8F%E4%B8%80%E8%87%B4%E6%80%A7%E5%85%B1%E8%AF%86%E7%AE%97%E6%B3%95"><span class="top-box-text">1.7 分布式一致性共识算法</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-raft-%E7%AE%97%E6%B3%95%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5"><span class="top-box-text">2. raft 算法核心概念</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-1-%E6%9C%AF%E8%AF%AD%E8%A1%A8"><span class="top-box-text">2.1 术语表</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-2-%E5%A4%9A%E6%95%B0%E6%B4%BE%E5%8E%9F%E5%88%99"><span class="top-box-text">2.2 多数派原则</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-3-%E4%B8%80%E4%B8%BB%E5%A4%9A%E4%BB%8E%E3%80%81%E8%AF%BB%E5%86%99%E5%88%86%E7%A6%BB"><span class="top-box-text">2.3 一主多从、读写分离</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%80%E4%B8%BB%E5%A4%9A%E4%BB%8E"><span class="top-box-text">一主多从</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%BB%E5%86%99%E5%88%86%E7%A6%BB"><span class="top-box-text">读写分离</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-4-%E7%8A%B6%E6%80%81%E6%9C%BA%E4%B8%8E%E9%A2%84%E5%86%99%E6%97%A5%E5%BF%97"><span class="top-box-text">2.4 状态机与预写日志</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%B8%A4%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4"><span class="top-box-text">两阶段提交</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-6-%E9%A2%86%E5%AF%BC%E8%80%85%E9%80%89%E4%B8%BE"><span class="top-box-text">2.6 领导者选举</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#2-7-%E4%BB%BB%E6%9C%9F%E4%B8%8E%E6%97%A5%E5%BF%97%E7%B4%A2%E5%BC%95"><span class="top-box-text">2.7 任期与日志索引</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#3-raft"><span class="top-box-text">3 raft</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E8%A7%92%E8%89%B2%E5%AE%9A%E4%B9%89%E5%8F%8A%E5%88%87%E6%8D%A2"><span class="top-box-text">3.1 角色定义及切换</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#leader-follower"><span class="top-box-text">leader -&gt; follower</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#follower-candidate"><span class="top-box-text">follower -&gt; candidate</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#candidate-follower"><span class="top-box-text">candidate -&gt; follower</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#candidate-leader"><span class="top-box-text">candidate -&gt; leader</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#candidate-candidate"><span class="top-box-text">candidate -&gt; candidate</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E9%A2%86%E5%AF%BC%E8%80%85"><span class="top-box-text">3.2 领导者</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-%E8%B7%9F%E9%9A%8F%E8%80%85"><span class="top-box-text">3.3 跟随者</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-4-%E5%80%99%E9%80%89%E4%BA%BA"><span class="top-box-text">3.4 候选人</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-raft-%E7%AE%97%E6%B3%95%E4%B8%8B%E7%9A%84%E5%A4%96%E9%83%A8%E8%AF%B7%E6%B1%82%E9%93%BE%E8%B7%AF%E6%A2%B3%E7%90%86"><span class="top-box-text">4 raft 算法下的外部请求链路梳理</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-1-%E5%86%99"><span class="top-box-text">4.1 写</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-2-%E8%AF%BB"><span class="top-box-text">4.2 读</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#appliedIndex-%E6%A0%A1%E9%AA%8C"><span class="top-box-text">appliedIndex 校验</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%BC%BA%E5%88%B6%E8%AF%BB%E4%B8%BB"><span class="top-box-text">强制读主</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#5-raft-%E7%AE%97%E6%B3%95%E4%B8%8B%E7%9A%84%E5%86%85%E9%83%A8%E8%AF%B7%E6%B1%82%E9%93%BE%E8%B7%AF%E6%A2%B3%E7%90%86"><span class="top-box-text">5. raft 算法下的内部请求链路梳理</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-1-%E6%97%A5%E5%BF%97%E5%90%8C%E6%AD%A5%E8%AF%B7%E6%B1%82"><span class="top-box-text">5.1 日志同步请求</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-2-%E5%BF%83%E8%B7%B3-%E6%8F%90%E4%BA%A4%E5%90%8C%E6%AD%A5%E8%AF%B7%E6%B1%82"><span class="top-box-text">5.2 心跳&amp;提交同步请求</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-3-%E7%AB%9E%E9%80%89%E6%8B%89%E7%A5%A8%E8%AF%B7%E6%B1%82"><span class="top-box-text">5.3 竞选拉票请求</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#6-raft-%E7%AE%97%E6%B3%95%E4%B8%8B%E7%9A%84%E9%9B%86%E7%BE%A4%E5%8F%98%E6%9B%B4"><span class="top-box-text">6 raft 算法下的集群变更</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#6-1-%E9%9B%86%E7%BE%A4%E5%8F%98%E6%9B%B4%E6%B5%81%E7%A8%8B"><span class="top-box-text">6.1 集群变更流程</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#6-2-bad-case-%E6%A1%88%E4%BE%8B%E6%A2%B3%E7%90%86"><span class="top-box-text">6.2 bad case 案例梳理</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%8F%8D%E4%BE%8B1%EF%BC%9A%E9%85%8D%E7%BD%AE%E5%8F%98%E6%9B%B4%E6%9C%9F%E9%97%B4%E9%80%89%E4%B8%BE%E7%9A%84-bad-case"><span class="top-box-text">反例1：配置变更期间选举的 bad case</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%8F%8D%E4%BE%8B2%EF%BC%9A%E9%85%8D%E7%BD%AE%E5%8F%98%E6%9B%B4%E6%9C%9F%E9%97%B4%E5%86%99%E7%9A%84-bad-case"><span class="top-box-text">反例2：配置变更期间写的 bad case</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#7-Q-A"><span class="top-box-text">7 Q&amp;A</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-1-%E4%B8%BA%E4%BB%80%E4%B9%88%E8%83%BD%E4%BF%9D%E8%AF%81%E4%B8%80%E4%B8%AA%E4%BB%BB%E6%9C%9F%E5%86%85%E8%87%B3%E5%A4%9A%E5%8F%AA%E6%9C%89%E4%B8%80%E4%B8%AA%E9%A2%86%E5%AF%BC%E8%80%85%EF%BC%9F%EF%BC%88term%EF%BC%8C%E8%B6%85%E5%8D%8A%E6%95%B0%E6%8A%95%E7%A5%A8%EF%BC%89"><span class="top-box-text">7.1 为什么能保证一个任期内至多只有一个领导者？（term，超半数投票）</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-2-%E4%B8%BA%E4%BB%80%E4%B9%88%E8%83%BD%E4%BF%9D%E8%AF%81%E9%80%9A%E8%BF%87%E4%BB%BB%E6%9C%9F%E5%92%8C%E7%B4%A2%E5%BC%95%E7%9B%B8%E5%90%8C%E7%9A%84%E6%97%A5%E5%BF%97%E5%86%85%E5%AE%B9%E4%B8%80%E5%AE%9A%E7%9B%B8%E5%90%8C%EF%BC%9F"><span class="top-box-text">7.2 为什么能保证通过任期和索引相同的日志内容一定相同？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-3-%E5%A6%82%E6%9E%9C%E4%B8%A4%E4%B8%AA%E8%8A%82%E7%82%B9%E4%B8%AD%E5%88%86%E5%88%AB%E5%AD%98%E5%9C%A8%E4%B8%80%E7%AC%94%E4%BB%BB%E6%9C%9F%E5%92%8C%E7%B4%A2%E5%BC%95%E5%9D%87%E7%9B%B8%E5%90%8C%E7%9A%84%E6%97%A5%E5%BF%97%EF%BC%8C%E9%82%A3%E4%B9%88%E5%9C%A8%E8%BF%99%E4%B8%A4%E7%AC%94%E6%97%A5%E5%BF%97%E4%B9%8B%E5%89%8D%E7%9A%84%E6%97%A5%E5%BF%97%E6%98%AF%E5%90%A6%E4%B9%9F%E4%BF%9D%E8%AF%81%E5%9C%A8%E9%A1%BA%E5%BA%8F%E5%92%8C%E5%86%85%E5%AE%B9%E4%B8%8A%E9%83%BD%E5%AE%8C%E5%85%A8%E4%B8%80%E8%87%B4%EF%BC%9F"><span class="top-box-text">7.3 如果两个节点中分别存在一笔任期和索引均相同的日志，那么在这两笔日志之前的日志是否也保证在顺序和内容上都完全一致？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-4-%E5%85%B3%E4%BA%8E%E9%80%89%E4%B8%BE%E6%9C%BA%E5%88%B6%E6%96%B9%E9%9D%A2%EF%BC%8C%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3%E9%80%89%E7%A5%A8%E7%93%9C%E5%88%86%E5%BC%95%E5%8F%91%E7%9A%84%E9%97%AE%E9%A2%98%EF%BC%9F"><span class="top-box-text">7.4 关于选举机制方面，如何解决选票瓜分引发的问题？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-5-%E4%B8%BA%E4%BB%80%E4%B9%88%E6%96%B0%E4%BB%BB-leader-%E4%B8%80%E5%AE%9A%E6%8B%A5%E6%9C%89%E6%97%A7-leader-%E5%B7%B2%E6%8F%90%E4%BA%A4%E7%9A%84%E6%97%A5%E5%BF%97%EF%BC%9F"><span class="top-box-text">7.5 为什么新任 leader 一定拥有旧 leader 已提交的日志？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-6-%E6%98%AF%E5%90%A6%E4%B8%80%E9%A1%B9%E6%8F%90%E8%AE%AE%E5%8F%AA%E9%9C%80%E8%A6%81%E8%A2%AB%E5%A4%9A%E6%95%B0%E6%B4%BE%E9%80%9A%E8%BF%87%E5%B0%B1%E5%8F%AF%E4%BB%A5%E6%8F%90%E4%BA%A4%EF%BC%9F"><span class="top-box-text">7.6 是否一项提议只需要被多数派通过就可以提交？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-7-leader-%E5%90%91-follower-%E5%90%8C%E6%AD%A5%E6%97%A5%E5%BF%97%E6%97%B6%EF%BC%8C%E5%A6%82%E4%BD%95%E4%BF%9D%E8%AF%81%E4%B8%8D%E5%87%BA%E7%8E%B0%E4%B9%B1%E5%BA%8F%E3%80%81%E4%B8%A2%E5%A4%B1%E3%80%81%E9%87%8D%E5%A4%8D%E7%9A%84%E9%97%AE%E9%A2%98%EF%BC%9F"><span class="top-box-text">7.7 leader 向 follower 同步日志时，如何保证不出现乱序、丢失、重复的问题？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-8-%E5%A6%82%E4%BD%95%E4%BF%9D%E8%AF%81%E5%90%84%E8%8A%82%E7%82%B9%E5%B7%B2%E6%8F%90%E4%BA%A4%E7%9A%84%E9%A2%84%E5%86%99%E6%97%A5%E5%BF%97%E9%A1%BA%E5%BA%8F%E5%92%8C%E5%86%85%E5%AE%B9%E9%83%BD%E5%AE%8C%E5%85%A8%E4%B8%80%E8%87%B4%EF%BC%9F"><span class="top-box-text">7.8 如何保证各节点已提交的预写日志顺序和内容都完全一致？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-9-%E5%A6%82%E4%BD%95%E4%BF%9D%E8%AF%81%E7%8A%B6%E6%80%81%E6%9C%BA%E6%95%B0%E6%8D%AE%E7%9A%84%E6%9C%80%E7%BB%88%E4%B8%80%E8%87%B4%E6%80%A7%EF%BC%9F"><span class="top-box-text">7.9 如何保证状态机数据的最终一致性？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-10-%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3%E7%BD%91%E7%BB%9C%E5%88%86%E5%8C%BA%E5%BC%95%E5%8F%91%E7%9A%84%E6%97%A0%E6%84%8F%E4%B9%89%E9%80%89%E4%B8%BE%E9%97%AE%E9%A2%98%EF%BC%9F%EF%BC%88%E6%8F%90%E5%89%8D%E8%AF%95%E6%8E%A2%EF%BC%89"><span class="top-box-text">7.10 如何解决网络分区引发的无意义选举问题？（提前试探）</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#7-11-%E5%A6%82%E6%9E%9C%E4%BF%9D%E8%AF%81%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8F%90%E4%BA%A4%E5%86%99%E8%AF%B7%E6%B1%82%E4%B8%8D%E4%B8%A2%E5%A4%B1%E3%80%81%E4%B8%8D%E9%87%8D%E5%A4%8D%EF%BC%9F"><span class="top-box-text">7.11 如果保证客户端提交写请求不丢失、不重复？</span></a></li></ol></li></ol>
         </div>
           
       </div>
