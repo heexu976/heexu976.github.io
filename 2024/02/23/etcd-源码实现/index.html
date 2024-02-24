@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>etcd 源码实现</title>
+<meta name="keywords" content="etcd 源码实现, HeXu">
+<meta name="description" content="1 etcd 与 raftetcd 是一个具有强一致性的分布式键值对存储系统，底层基于 raft 协议保证分布式系统数据的一致性和可用性.
+etcd 基于 golang 编写，github 开源地址：https://github.com/e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="etcd 源码实现">
+<meta property="og:description" content="1 etcd 与 raftetcd 是一个具有强一致性的分布式键值对存储系统，底层基于 raft 协议保证分布式系统数据的一致性和可用性.
+etcd 基于 golang 编写，github 开源地址：https://github.com/e">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">etcd 源码实现</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-02-23</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E9%9D%A2%E8%AF%95/">
+              面试
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="1-etcd-与-raft"><a href="#1-etcd-与-raft" class="headerlink" title="1 etcd 与 raft"></a>1 etcd 与 raft</h1><p>etcd 是一个具有强一致性的分布式键值对存储系统，底层基于 raft 协议保证分布式系统数据的一致性和可用性.</p>
+<p>etcd 基于 golang 编写，github 开源地址：<a target="_blank" rel="noopener" href="https://github.com/etcd-io/etcd">https://github.com/etcd-io/etcd</a> . 本文走读的源码版本为 tag: v3.1.10.<br><a target="_blank" rel="noopener" href="https://github.com/etcd-io/etcd/tree/v3.1.0/raft">https://github.com/etcd-io/etcd/tree/v3.1.0/raft</a></p>
+<p>etcd 中关于 raft 算法的实现具有很高的还原性，项目中与 raft 有关的代码主要位于：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>目录</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>raft 算法层</td>
+<td>.&#x2F;raft&#x2F;*</td>
+</tr>
+<tr>
+<td>raft 应用层示例</td>
+<td>.&#x2F;contrib&#x2F;raftexample&#x2F;*</td>
+</tr>
+<tr>
+<td>raft 数据结构定义</td>
+<td>.&#x2F;raft&#x2F;raftpb</td>
+</tr>
+</tbody></table>
+<h1 id="2-术语表"><a href="#2-术语表" class="headerlink" title="2 术语表"></a>2 术语表</h1><table>
+<thead>
+<tr>
+<th>中文名</th>
+<th>英文名</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>算法层</td>
+<td>algorithm module</td>
+<td>内聚了 raft 共识机制的核心模块.代码层面以 sdk 的形式被应用层引入，启动时以独立 goroutine 的形式存在，与应用层通过 channel 通信.</td>
+</tr>
+<tr>
+<td>应用层</td>
+<td>application module</td>
+<td>聚合了 etcd 存储、通信能力的模块.启动时是 raft 节点的主 goroutine，既要负责与客户端通信，又要负责和算法层交互，承上启下.</td>
+</tr>
+<tr>
+<td>算法层节点</td>
+<td>Node&#x2F;node</td>
+<td>是 raft 节点在算法层中的抽象，也是应用层与算法层交互的唯一入口.</td>
+</tr>
+<tr>
+<td>应用层节点</td>
+<td>raftNode</td>
+<td>是 raft 节点在应用层中的抽象，内部持有算法层节点 Node 的引用，同时提供处理客户端请求以及与集群内其他节点通信的能力.</td>
+</tr>
+<tr>
+<td>通信模块</td>
+<td>transport</td>
+<td>etcd 中的网络通信模块，为 raft 节点间通信提供服务.</td>
+</tr>
+<tr>
+<td>提议</td>
+<td>proposal</td>
+<td>两阶段提交中的第一阶段：提议.</td>
+</tr>
+<tr>
+<td>提交</td>
+<td>commit</td>
+<td>两阶段提交中的第二阶段：提交.</td>
+</tr>
+<tr>
+<td>应用</td>
+<td>apply</td>
+<td>将已提交的日志应用到数据状态机，使得写请求真正生效.</td>
+</tr>
+<tr>
+<td>数据状态机</td>
+<td>data state machine</td>
+<td>raft 节点用于存储数据的介质. 为避免与 raft 节点状态机产生歧义，统一命名为数据状态机.</td>
+</tr>
+<tr>
+<td>节点状态机</td>
+<td>node state machine</td>
+<td>etcd 实现中， raft 节点本质是个大的状态机. 任何操作如选举、提交数据等，最后都会封装成一则消息输入节点状态机中，驱动节点状态发生变化.</td>
+</tr>
+</tbody></table>
+<h2 id="3-1-算法层"><a href="#3-1-算法层" class="headerlink" title="3.1 算法层"></a>3.1 算法层</h2><p>算法层是 raft 算法的核心实现模块，负责根据共识机制进行请求内容的正确性校验，预写日志状态的维护和管理，可提交日志的进度推进.</p>
+<p>简单来看，算法层本质上类似于一台“拼图机器”. 我们把输入的日志比喻成一块块“拼图碎片”，提交拼图碎片的应用层则像个捣蛋的小孩，他将拼图顺序打乱并在其中掺入一些错误的碎片，然后依次将“碎片”提交给拼图机器（算法层）.</p>
+<p>拼图机器（算法层）则依照对图案轮廓的把握和碎片纹理的观察（raft 共识机制），依次纠正碎片的顺序和内容之后进行归还.</p>
+<h2 id="3-2-应用层"><a href="#3-2-应用层" class="headerlink" title="3.2 应用层"></a>3.2 应用层</h2><p>在 etcd 的实现中，算法层只聚焦于 raft 共识机制部分的内容，其中涉及网络通信、预写日志持久化、数据状态机管理的工作均在应用层进行实现；</p>
+<p>应用层是 raft 节点中承上启下的主干模块，既扮演了与外部客户端通信的服务端角色，也是下层算法库的使用者，还要负责与各模块交互，串联 raft 节点运行的整体流程.</p>
+<p>由于本文探讨的重点集中 raft 共识机制部分，因此应用层不是我们所研究的重点，更多的笔墨会集中在算法层的内容中.</p>
+<h2 id="3-3-宏观架构"><a href="#3-3-宏观架构" class="headerlink" title="3.3 宏观架构"></a>3.3 宏观架构</h2><p>etcd 在实现 raft 时,将内容依据职责边界拆分为<strong>应用层</strong>和<strong>算法层</strong>两个模块，在引用关系上，算法层是一个被应用层引用的静态库，但在节点启动时，最终应用层和算法层的内容会内聚于两个独立的 goroutine 当中，依据几个 channel 进行模块间的异步通信。</p>
+<h1 id="4-算法层核心数据结构"><a href="#4-算法层核心数据结构" class="headerlink" title="4 算法层核心数据结构"></a>4 算法层核心数据结构</h1><p>本节对算法层核心数据结构进行介绍，读者在后续流程梳理的章节中，遇到不明确的数据结构内容，可回头进行追溯.</p>
+<h2 id="4-1-Entry"><a href="#4-1-Entry" class="headerlink" title="4.1 Entry"></a>4.1 Entry</h2><p>代码位于 .&#x2F;raft&#x2F;raftpb&#x2F;raft.pb.go 文件中.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> EntryType <span class="token builtin">int32</span>
+
+<span class="token keyword">const</span> <span class="token punctuation">(</span>
+    EntryNormal     EntryType <span class="token operator">=</span> <span class="token number">0</span>
+    <span class="token comment">// 配置变更类的日志</span>
+    EntryConfChange EntryType <span class="token operator">=</span> <span class="token number">1</span>
+<span class="token punctuation">)</span>
+
+<span class="token keyword">type</span> Entry <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Term             <span class="token builtin">uint64</span>    <span class="token string">`protobuf:"varint,2,opt,name=Term" json:"Term"`</span>
+    Index            <span class="token builtin">uint64</span>    <span class="token string">`protobuf:"varint,3,opt,name=Index" json:"Index"`</span>
+    Type             EntryType <span class="token string">`protobuf:"varint,1,opt,name=Type,enum=raftpb.EntryType" json:"Type"`</span>
+    Data             <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span>    <span class="token string">`protobuf:"bytes,4,opt,name=Data" json:"Data,omitempty"`</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>一条 Entry 就是一笔预写日志，包含了<strong>普通类型（写请求）</strong>和<strong>配置变更</strong>两种类型.</p>
+<p>Entry 中包含了任期 Term、索引 Index、内容 Data 三个字段，其中 term 和 index 共同构成了 entry 的全局唯一索引.</p>
+<h2 id="4-2-Message"><a href="#4-2-Message" class="headerlink" title="4.2 Message"></a>4.2 Message</h2><p>代码位于 .&#x2F;raft&#x2F;raftpb&#x2F;raft.pb.go 文件中.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Message <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Type             MessageType <span class="token string">`protobuf:"varint,1,opt,name=type,enum=raftpb.MessageType" json:"type"`</span>
+    To               <span class="token builtin">uint64</span>      <span class="token string">`protobuf:"varint,2,opt,name=to" json:"to"`</span>
+    From             <span class="token builtin">uint64</span>      <span class="token string">`protobuf:"varint,3,opt,name=from" json:"from"`</span>
+    Term             <span class="token builtin">uint64</span>      <span class="token string">`protobuf:"varint,4,opt,name=term" json:"term"`</span>
+    LogTerm          <span class="token builtin">uint64</span>      <span class="token string">`protobuf:"varint,5,opt,name=logTerm" json:"logTerm"`</span>
+    Index            <span class="token builtin">uint64</span>      <span class="token string">`protobuf:"varint,6,opt,name=index" json:"index"`</span>
+    Entries          <span class="token punctuation">[</span><span class="token punctuation">]</span>Entry     <span class="token string">`protobuf:"bytes,7,rep,name=entries" json:"entries"`</span>
+    Commit           <span class="token builtin">uint64</span>      <span class="token string">`protobuf:"varint,8,opt,name=commit" json:"commit"`</span>
+    <span class="token comment">// ...</span>
+    Reject           <span class="token builtin">bool</span>        <span class="token string">`protobuf:"varint,10,opt,name=reject" json:"reject"`</span>
+    RejectHint       <span class="token builtin">uint64</span>      <span class="token string">`protobuf:"varint,11,opt,name=rejectHint" json:"rejectHint"`</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>3.2 小节有提及，算法层中，raft 节点本质上是一个状态机，由输入的消息体驱动其状态变更. 这里提到的所谓”消息体“ 指的就是这个 Message 类.</p>
+<p>在这种消息驱动状态机的设计模式下，一系列状态驱动函数的入参都采用 Message 的类型，这样做简化了协议，但是也不可避免地破坏了 Message 类的职责单一原则.</p>
+<p>Message 作为一个大而全的通用结构体，同时耦合了日志同步请求&#x2F;响应、leader 选举请求&#x2F;响应、心跳请求&#x2F;响应等内容，而在每次使用上根据当前流程往往只涉及到其中的少量字段. 综合优劣，个人觉得是一种颇有争议的实现方式.</p>
+<p>下面对 Message 中几个核心字段的含义进行说明：</p>
+<ol>
+<li>Type：消息类型，宏观上分为请求和响应两大类（结尾带 Resp）；根据流程主线又可以分为日志同步、leader 选举、心跳广播、读请求四类；</li>
+</ol>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> MessageType <span class="token builtin">int32</span>
+
+
+<span class="token keyword">const</span> <span class="token punctuation">(</span>
+    <span class="token comment">// 本节点要进行选举</span>
+    MsgHup            MessageType <span class="token operator">=</span> <span class="token number">0</span>
+    <span class="token comment">// MsgBeat不用于节点之间通信，仅用于leader内部HB时间到了让leader发送HB消息</span>
+    MsgBeat           MessageType <span class="token operator">=</span> <span class="token number">1</span>
+    <span class="token comment">// 用户向raft提交数据</span>
+    MsgProp           MessageType <span class="token operator">=</span> <span class="token number">2</span>
+    <span class="token comment">// leader向集群中其他节点同步数据</span>
+    MsgApp            MessageType <span class="token operator">=</span> <span class="token number">3</span>
+    <span class="token comment">// append消息的应答</span>
+    MsgAppResp        MessageType <span class="token operator">=</span> <span class="token number">4</span>
+    <span class="token comment">// 投票消息</span>
+    MsgVote           MessageType <span class="token operator">=</span> <span class="token number">5</span>
+    MsgVoteResp       MessageType <span class="token operator">=</span> <span class="token number">6</span>
+    <span class="token comment">// ...</span>
+    MsgHeartbeat      MessageType <span class="token operator">=</span> <span class="token number">8</span>
+    MsgHeartbeatResp  MessageType <span class="token operator">=</span> <span class="token number">9</span>
+    <span class="token comment">// ...</span>
+    MsgReadIndex      MessageType <span class="token operator">=</span> <span class="token number">15</span>
+    MsgReadIndexResp  MessageType <span class="token operator">=</span> <span class="token number">16</span>
+    MsgPreVote        MessageType <span class="token operator">=</span> <span class="token number">17</span>
+    MsgPreVoteResp    MessageType <span class="token operator">=</span> <span class="token number">18</span>
+<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>（2）To&#x2F;From：消息的发送方和接收方，都以节点 id 进行标识；</p>
+<p>（3）Term：消息发送方当前的任期；</p>
+<p>（4）LogTerm、Index：待同步日志的上一笔日志的任期和索引. leader 同步日志时用到这两个字段；</p>
+<p>（5）Entries：待完成同步的预写日志；</p>
+<p>（6）Commit：leader 已提交的日志索引；</p>
+<p>（7）Reject：标识响应结果为拒绝或赞同. 节点响应竞选投票或者响应日志同步时会使用到此字段；</p>
+<p>（8）RejectHint：节点上一条预写日志的索引. 节点响应日志同步时使用到此字段.</p>
+<h1 id="4-3-raftLog"><a href="#4-3-raftLog" class="headerlink" title="4.3 raftLog"></a>4.3 raftLog</h1><p>raftLog 代码位于 .&#x2F;raft&#x2F;log.go 文件中. </p>
+<p>unstable 代码位于 .&#x2F;raft&#x2F;log_unstable.go 文件中.</p>
+<p>storage 代码位于 .&#x2F;raft&#x2F;storage.go 文件中.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> raftLog <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+	<span class="token comment">// storage contains all stable entries since the last snapshot.</span>
+	storage Storage
+
+	<span class="token comment">// unstable contains all unstable entries and snapshot.</span>
+	<span class="token comment">// they will be saved into storage.</span>
+	unstable unstable
+
+	<span class="token comment">// committed is the highest log position that is known to be in</span>
+	<span class="token comment">// stable storage on a quorum of nodes.</span>
+	committed <span class="token builtin">uint64</span>
+	<span class="token comment">// applied is the highest log position that the application has</span>
+	<span class="token comment">// been instructed to apply to its state machine.</span>
+	<span class="token comment">// Invariant: applied &lt;= committed</span>
+	applied <span class="token builtin">uint64</span>
+
+	logger Logger
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>raftLog 是算法层中管理<strong>预写日志</strong>的模块，包含未持久化预写日志读写模块 unstable 和持久化日志查询模块 storage.</p>
+<p>实际上，为了优化日志的存储损耗，在 unstable 模块还采用了<strong>一套快照机制对预写日志内容进行压缩</strong>，但属于主干流程之外的可选优化项，为降低流程复杂度，本文会删去关于这部分内容的介绍.</p>
+<p>预写日志产生时，需要经历一个未持久化（内存）-&gt; 已持久化（磁盘）的过程，前者在算法层内由 raftLog.unstable 完成，后者在应用层内完成，并通过 raftLog.storage 为算法层提供已持久化预写日志的查询能力.</p>
+<p><strong>storage</strong>：持久化日志存储接口，提供了日志的查询能力. storage 是一个抽象接口，可由用户自定义实现，核心 api 如上；</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Storage <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+	<span class="token comment">// InitialState returns the saved HardState and ConfState information.</span>
+	<span class="token function">InitialState</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>pb<span class="token punctuation">.</span>HardState<span class="token punctuation">,</span> pb<span class="token punctuation">.</span>ConfState<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+	<span class="token comment">// Entries returns a slice of log entries in the range [lo,hi).</span>
+	<span class="token comment">// MaxSize limits the total size of the log entries returned, but</span>
+	<span class="token comment">// Entries returns at least one entry if any.</span>
+	<span class="token function">Entries</span><span class="token punctuation">(</span>lo<span class="token punctuation">,</span> hi<span class="token punctuation">,</span> maxSize <span class="token builtin">uint64</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Entry<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+	<span class="token comment">// Term returns the term of entry i, which must be in the range</span>
+	<span class="token comment">// [FirstIndex()-1, LastIndex()]. The term of the entry before</span>
+	<span class="token comment">// FirstIndex is retained for matching purposes even though the</span>
+	<span class="token comment">// rest of that entry may not be available.</span>
+	<span class="token function">Term</span><span class="token punctuation">(</span>i <span class="token builtin">uint64</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token builtin">uint64</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+	<span class="token comment">// LastIndex returns the index of the last entry in the log.</span>
+	<span class="token function">LastIndex</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token builtin">uint64</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+	<span class="token comment">// FirstIndex returns the index of the first log entry that is</span>
+	<span class="token comment">// possibly available via Entries (older entries have been incorporated</span>
+	<span class="token comment">// into the latest Snapshot; if storage only contains the dummy entry the</span>
+	<span class="token comment">// first log entry is not available).</span>
+	<span class="token function">FirstIndex</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token builtin">uint64</span><span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+	<span class="token comment">// Snapshot returns the most recent snapshot.</span>
+	<span class="token comment">// If snapshot is temporarily unavailable, it should return ErrSnapshotTemporarilyUnavailable,</span>
+	<span class="token comment">// so raft state machine could know that Storage needs some time to prepare</span>
+	<span class="token comment">// snapshot and call Snapshot later.</span>
+	<span class="token function">Snapshot</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>pb<span class="token punctuation">.</span>Snapshot<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>unstable</strong>：提供了未持久化预写日志代理能力，可读可写；entries 是还未持久化的预写日志列表；offset 是首笔未持久化预写日志在全局预写日志中的索引偏移量.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// unstable.entries[i] has raft log position i+unstable.offset.</span>
+<span class="token comment">// Note that unstable.offset may be less than the highest log</span>
+<span class="token comment">// position in storage; this means that the next write to storage</span>
+<span class="token comment">// might need to truncate the log before persisting unstable.entries.</span>
+<span class="token keyword">type</span> unstable <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+	<span class="token comment">// the incoming unstable snapshot, if any.</span>
+	snapshot <span class="token operator">*</span>pb<span class="token punctuation">.</span>Snapshot
+	<span class="token comment">// all entries that have not yet been written to storage.</span>
+	entries <span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Entry
+	offset  <span class="token builtin">uint64</span>
+
+	logger Logger
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>committed</strong>：已提交日志的索引；</p>
+<p><strong>applied</strong>：已应用日志的索引.</p>
+<h2 id="4-4-Ready"><a href="#4-4-Ready" class="headerlink" title="4.4 Ready"></a>4.4 Ready</h2><p>代码位于.&#x2F;raft&#x2F;node.go 文件中.</p>
+<p>Ready 是算法层与应用层交互的数据格式. 每当算法层执行完一轮处理逻辑后,会往一个 channel 中（readyc） 传入一个 Ready 结构体，其中封装了算法层处理好的结果.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">
+<span class="token keyword">type</span> Ready <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 软状态是异变的，包括：当前集群leader、当前节点状态</span>
+    <span class="token operator">*</span>SoftState
+
+
+    <span class="token comment">// 硬状态需要被保存，包括：节点当前Term、Vote、Commit</span>
+    <span class="token comment">// 如果当前这部分没有更新，则等于空状态</span>
+    pb<span class="token punctuation">.</span>HardState
+
+
+    <span class="token comment">// 需要在消息发送之前被写入到持久化存储中的entries数据数组</span>
+    Entries <span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Entry
+    <span class="token comment">// ...</span>
+    <span class="token comment">// 需要输入到状态机中的数据数组，这些数据之前已经被保存到持久化存储中了</span>
+    CommittedEntries <span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Entry
+    <span class="token comment">// 在entries被写入持久化存储中以后，需要发送出去的数据</span>
+    Messages <span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Message
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>SoftState</strong>：raft 节点的软状态，包含了节点的 leader 和角色状态两部分信息，由于都是容易发生改变且通过通信可重新恢复的信息，因此无需进行持久化存储</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> SoftState <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Lead      <span class="token builtin">uint64</span> <span class="token comment">// must use atomic operations to access; keep 64-bit aligned.</span>
+    RaftState StateType
+<span class="token punctuation">&#125;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>其中，节点的角色状态包含跟随者 Follower、候选人 Candidate 和领导者 Leader 三大类. 而 candidate 由根据竞选 vote 和预竞选 preVote，进一步拆分为 candidate 和 preCandidate 两个状态；</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> StateType <span class="token builtin">uint64</span>
+
+<span class="token keyword">const</span> <span class="token punctuation">(</span>
+    StateFollower StateType <span class="token operator">=</span> <span class="token boolean">iota</span>
+    StateCandidate
+    StateLeader
+    StatePreCandidate
+<span class="token punctuation">)</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>HardState</strong>：raft 节点的当前任期、投票归属和已提交日志索引，这些信息都需要持久化存储，节点宕机后重启亦可恢复如初；</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> HardState <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Term             <span class="token builtin">uint64</span> <span class="token string">`protobuf:"varint,1,opt,name=term" json:"term"`</span>
+    Vote             <span class="token builtin">uint64</span> <span class="token string">`protobuf:"varint,2,opt,name=vote" json:"vote"`</span>
+    Commit           <span class="token builtin">uint64</span> <span class="token string">`protobuf:"varint,3,opt,name=commit" json:"commit"`</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>Entries：</strong></p>
+<p>本轮算法层产生的预写日志，此时还未持久化，需要传输到应用层，由应用层完成持久化.</p>
+<p><code>Entries []pb.Entry</code></p>
+<p><strong>CommittedEntries</strong></p>
+<p>本轮算法层已提交的预写日志，需要传输到应用层，由应用层将其应用到状态机.</p>
+<p><code>CommittedEntries []pb.Entry</code></p>
+<p><strong>Messages</strong></p>
+<p>本轮算法层需要发出的消息，由应用层调用网络通信模块发出.</p>
+<p><code>Messages []pb.Message</code></p>
+<h2 id="4-5-Node-接口"><a href="#4-5-Node-接口" class="headerlink" title="4.5 Node 接口"></a>4.5 Node 接口</h2><p>代码位于.&#x2F;raft&#x2F;node.go 文件中.</p>
+<p>Node 是算法层中 raft 节点的抽象，也是应用层与算法层交互的唯一入口，应用层持有Node 作为算法层 raft 节点的引用，通过调用 Node 接口的几个 api，完成与算法层的 channel 通信.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Node <span class="token keyword">interface</span> <span class="token punctuation">&#123;</span>
+    <span class="token function">Tick</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token function">Propose</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> data <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+    <span class="token function">ProposeConfChange</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> cc pb<span class="token punctuation">.</span>ConfChange<span class="token punctuation">)</span> <span class="token builtin">error</span>
+    <span class="token function">ApplyConfChange</span><span class="token punctuation">(</span>cc pb<span class="token punctuation">.</span>ConfChange<span class="token punctuation">)</span> <span class="token operator">*</span>pb<span class="token punctuation">.</span>ConfState
+    <span class="token function">ReadIndex</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> rctx <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+    <span class="token function">Step</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> msg pb<span class="token punctuation">.</span>Message<span class="token punctuation">)</span> <span class="token builtin">error</span>
+    <span class="token function">Ready</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;-</span><span class="token keyword">chan</span> Ready
+    <span class="token function">Advance</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>Node 接口的核心 api 包括：</p>
+<p><strong>Tick</strong>：传送定时驱动信号，每次调用 Tick 方法的时间间隔是固定的，称为一个 tick，是 raft 节点的最小计时单位，后续 leader 节点的心跳计时和 leader&#x2F;candidate 的选举计时也都是以 tick 作为时间单位；</p>
+<p>下面查看 node 实现类中，该方法的内容：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">Tick</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">select</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">case</span> n<span class="token punctuation">.</span>tickc <span class="token operator">&lt;-</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">:</span>
+    <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>实际上，该方法为应用层向 <code>node.tickc channel </code>中传入一个信号，而算法层的 goroutine 是处于时刻监听该 channel 状态的，获取到信号后就会驱动 raft 节点进行定时函数处理；</p>
+<p><strong>Propose：</strong></p>
+<p>应用层调用 Node.Propose 方法，向算法层发起一笔写数据的请求.</p>
+<p>实现类中该方法的内容：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">Propose</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> data <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> n<span class="token punctuation">.</span><span class="token function">step</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> pb<span class="token punctuation">.</span>Message<span class="token punctuation">&#123;</span>Type<span class="token punctuation">:</span> pb<span class="token punctuation">.</span>MsgProp<span class="token punctuation">,</span> Entries<span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Entry<span class="token punctuation">&#123;</span><span class="token punctuation">&#123;</span>Data<span class="token punctuation">:</span> data<span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">step</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> m pb<span class="token punctuation">.</span>Message<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    ch <span class="token operator">:=</span> n<span class="token punctuation">.</span>recvc
+    <span class="token keyword">if</span> m<span class="token punctuation">.</span>Type <span class="token operator">==</span> pb<span class="token punctuation">.</span>MsgProp <span class="token punctuation">&#123;</span>
+        ch <span class="token operator">=</span> n<span class="token punctuation">.</span>propc
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">select</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">case</span> ch <span class="token operator">&lt;-</span> m<span class="token punctuation">:</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span>
+    <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>应用层调用 Propose 方法，最终会往 node.propc channel 中传入一条类型为 MsgProp 的消息. 算法层 goroutine 通过读 channel 获取到消息后，会驱动 raft 节点进入写请求提议流程.</p>
+<p><strong>ProposeConfChange</strong>:<br>应用层调用该方法，通过 node.propchannel 向算法层发送一则消息类型为 MsgProp、日志类型为 EntryConfChange 的消息，推动 raft 节点进入配置变更流程.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">ProposeConfChange</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> cc pb<span class="token punctuation">.</span>ConfChange<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    data<span class="token punctuation">,</span> err <span class="token operator">:=</span> cc<span class="token punctuation">.</span><span class="token function">Marshal</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> err
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> n<span class="token punctuation">.</span><span class="token function">step</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> pb<span class="token punctuation">.</span>Message<span class="token punctuation">&#123;</span>Type<span class="token punctuation">:</span> pb<span class="token punctuation">.</span>MsgProp<span class="token punctuation">,</span> Entries<span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Entry<span class="token punctuation">&#123;</span><span class="token punctuation">&#123;</span>Type<span class="token punctuation">:</span> pb<span class="token punctuation">.</span>EntryConfChange<span class="token punctuation">,</span> Data<span class="token punctuation">:</span> data<span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>ApplyConfChange</strong>:</p>
+<p>应用层调用该方法的时机是在配置变更提议已经通过两阶段提交之后，该方法会通过 node.confc 向算法层发送配置变更内容，算法层 goroutine 接收到后会直接应用，使得变更即时生效.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">ApplyConfChange</span><span class="token punctuation">(</span>cc pb<span class="token punctuation">.</span>ConfChange<span class="token punctuation">)</span> <span class="token operator">*</span>pb<span class="token punctuation">.</span>ConfState <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> cs pb<span class="token punctuation">.</span>ConfState
+    <span class="token keyword">select</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 向配置更新channel写入要更新的配置</span>
+    <span class="token keyword">case</span> n<span class="token punctuation">.</span>confc <span class="token operator">&lt;-</span> cc<span class="token punctuation">:</span>
+    <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+    <span class="token keyword">return</span> <span class="token operator">&amp;</span>cs
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>ReadIndex</strong>:</p>
+<p>应用层调用 node.ReadIndex 方法向算法层发起读数据请求. 实际上会往 node.recvc channel 中传入一条类型为 MsgReadIndex 的消息:</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">ReadIndex</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> rctx <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> n<span class="token punctuation">.</span><span class="token function">step</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> pb<span class="token punctuation">.</span>Message<span class="token punctuation">&#123;</span>Type<span class="token punctuation">:</span> pb<span class="token punctuation">.</span>MsgReadIndex<span class="token punctuation">,</span> Entries<span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Entry<span class="token punctuation">&#123;</span><span class="token punctuation">&#123;</span>Data<span class="token punctuation">:</span> rctx<span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>Step</strong>:</p>
+<p>应用层调用 Node.Step 方法，可以向算法层 goroutine 传送一条自由指定类型的消息，但类型不能是 MsgHup（驱动本节点进行选举）或者 MsgBeat（驱动本 leader 节点进行心跳广播），因为这些动作应该是由定时器驱动，而非人为调用.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">Step</span><span class="token punctuation">(</span>ctx context<span class="token punctuation">.</span>Context<span class="token punctuation">,</span> m pb<span class="token punctuation">.</span>Message<span class="token punctuation">)</span> <span class="token builtin">error</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// ignore unexpected local messages receiving over network</span>
+    <span class="token keyword">if</span> <span class="token function">IsLocalMsg</span><span class="token punctuation">(</span>m<span class="token punctuation">.</span>Type<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// TODO: return an error?</span>
+        <span class="token keyword">return</span> <span class="token boolean">nil</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> n<span class="token punctuation">.</span><span class="token function">step</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> m<span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token function">IsLocalMsg</span><span class="token punctuation">(</span>msgt pb<span class="token punctuation">.</span>MessageType<span class="token punctuation">)</span> <span class="token builtin">bool</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">return</span> msgt <span class="token operator">==</span> pb<span class="token punctuation">.</span>MsgHup <span class="token operator">||</span> msgt <span class="token operator">==</span> pb<span class="token punctuation">.</span>MsgBeat 
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>Ready 和 Advance</strong>：</p>
+<p>应用层调用 Node.Ready 方法返回 node.readyc channel 用于监听，当应用层从 readyc 中读取到 Ready 信号时，说明算法层已经产生了新一轮的处理结果，应用层需要进行响应处理；</p>
+<p>当应用层处理完毕后，需要调用 Node.Advance 方法，通过向 node.advancec channel 中发送信号的方式，示意应用层已处理完毕，算法层可以进入下一轮调度循环.</p>
+<p>因此，Node.Ready 和 Node.Advance 方法是成对使用的，当两个方法各被调用一次，意味着应用层与算法层之间完成了一轮交互，紧接着会开启下一轮，周而复始，循环往复.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">Ready</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;-</span><span class="token keyword">chan</span> Ready <span class="token punctuation">&#123;</span> 
+    <span class="token keyword">return</span> n<span class="token punctuation">.</span>readyc 
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">func</span> <span class="token punctuation">(</span>n <span class="token operator">*</span>node<span class="token punctuation">)</span> <span class="token function">Advance</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">select</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">case</span> n<span class="token punctuation">.</span>advancec <span class="token operator">&lt;-</span> <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">:</span>
+    <span class="token comment">// ...</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="4-6-readOnly"><a href="#4-6-readOnly" class="headerlink" title="4.6 readOnly"></a>4.6 readOnly</h2><p>代码位于 .&#x2F;raft&#x2F;read_only.go 文件</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> readOnly <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 使用entry的数据为key，保存当前pending的readIndex状态</span>
+    pendingReadIndex <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token operator">*</span>readIndexStatus
+    <span class="token comment">// 保存entry的数据为的队列，pending的readindex状态在这个队列中进行排队</span>
+    readIndexQueue   <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>readOnly 是挂起的读请求队列，由 raft 节点持有.</p>
+<p>pendingReadIndex：是一系列还未处理的读请求，通过 map 的形式存储，建立读请求 id 与读请状态间的映射关系；</p>
+<p>readIndexQueue：读请求 id 数组，本质上是个队列，根据读请求到达的时间顺序先进先出.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> readIndexStatus <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 保存原始的readIndex请求消息</span>
+    req   pb<span class="token punctuation">.</span>Message
+    <span class="token comment">// 保存收到该readIndex请求时的leader commit索引</span>
+    index <span class="token builtin">uint64</span>
+    <span class="token comment">// 保存有什么节点进行了应答，从这里可以计算出来是否有超过半数应答了</span>
+    acks  <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">uint64</span><span class="token punctuation">]</span><span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>readIndexStatus 是一笔读请求的状态信息：</p>
+<p>req：封装读请求的原始消息，消息类型为 MsgReadIndex；</p>
+<p>index：收到读请求时，leader 节点的已提交日志索引；</p>
+<p>acks：对 leader 节点而言，响应读请求前需要证实自己身份的合法性，所以会给所有节点广播一轮特殊的心跳请求，并通过此处的 acks map 记录有哪些节点进行了响应，当达到多数派，就可以对读请求作出响应.</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-etcd-%E4%B8%8E-raft"><span class="top-box-text">1 etcd 与 raft</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E6%9C%AF%E8%AF%AD%E8%A1%A8"><span class="top-box-text">2 术语表</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E7%AE%97%E6%B3%95%E5%B1%82"><span class="top-box-text">3.1 算法层</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E5%BA%94%E7%94%A8%E5%B1%82"><span class="top-box-text">3.2 应用层</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-%E5%AE%8F%E8%A7%82%E6%9E%B6%E6%9E%84"><span class="top-box-text">3.3 宏观架构</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-%E7%AE%97%E6%B3%95%E5%B1%82%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">4 算法层核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-1-Entry"><span class="top-box-text">4.1 Entry</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-2-Message"><span class="top-box-text">4.2 Message</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-3-raftLog"><span class="top-box-text">4.3 raftLog</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-4-Ready"><span class="top-box-text">4.4 Ready</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-5-Node-%E6%8E%A5%E5%8F%A3"><span class="top-box-text">4.5 Node 接口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-6-readOnly"><span class="top-box-text">4.6 readOnly</span></a></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/02/22/Raft-%E7%AE%97%E6%B3%95%E5%8E%9F%E7%90%86/">
+          <h3 class="post-title">
+            下一篇：Raft 算法原理
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
