@@ -510,11 +510,148 @@ etcd 基于 golang 编写，github 开源地址：https://github.com/e">
 <p>req：封装读请求的原始消息，消息类型为 MsgReadIndex；</p>
 <p>index：收到读请求时，leader 节点的已提交日志索引；</p>
 <p>acks：对 leader 节点而言，响应读请求前需要证实自己身份的合法性，所以会给所有节点广播一轮特殊的心跳请求，并通过此处的 acks map 记录有哪些节点进行了响应，当达到多数派，就可以对读请求作出响应.</p>
+<h2 id="4-7-Progress"><a href="#4-7-Progress" class="headerlink" title="4.7 Progress"></a>4.7 Progress</h2><p>代码位于 .&#x2F;raft&#x2F;progress.go 文件.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> Progress <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    Match<span class="token punctuation">,</span> Next <span class="token builtin">uint64</span>
+<span class="token punctuation">&#125;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<p>Progress 是 leader 记录其他节点日志同步进度的载体，<strong>Match 是该节点已同步日志的索引；Next 是 leader 下一次向节点同步日志时的日志索引.</strong></p>
+<h2 id="4-8-raft"><a href="#4-8-raft" class="headerlink" title="4.8 raft"></a>4.8 raft</h2><p>代码位于 <code>./raft/raft.go.</code></p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> raft <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    id <span class="token builtin">uint64</span>
+    <span class="token comment">// 任期号</span>
+    Term <span class="token builtin">uint64</span>
+    <span class="token comment">// 投票给哪个节点ID</span>
+    Vote <span class="token builtin">uint64</span>
+    raftLog <span class="token operator">*</span>raftLog
+    prs         <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">uint64</span><span class="token punctuation">]</span><span class="token operator">*</span>Progress
+    state StateType
+    <span class="token comment">// 该map存放哪些节点投票给了本节点</span>
+    votes <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">uint64</span><span class="token punctuation">]</span><span class="token builtin">bool</span>
+    msgs <span class="token punctuation">[</span><span class="token punctuation">]</span>pb<span class="token punctuation">.</span>Message
+    lead <span class="token builtin">uint64</span>
+    <span class="token comment">// 标识当前还有没有applied的配置数据</span>
+    pendingConf <span class="token builtin">bool</span>
+    readOnly <span class="token operator">*</span>readOnly
+    electionElapsed <span class="token builtin">int</span>
+    heartbeatElapsed <span class="token builtin">int</span>
+    preVote     <span class="token builtin">bool</span>
+    heartbeatTimeout <span class="token builtin">int</span>
+    electionTimeout  <span class="token builtin">int</span>
+    randomizedElectionTimeout <span class="token builtin">int</span>
+    <span class="token comment">// tick函数，在到期的时候调用，不同的角色该函数不同</span>
+    tick <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    step stepFunc
+<span class="token punctuation">&#125;</span>
 
+<span class="token keyword">type</span> stepFunc <span class="token keyword">func</span><span class="token punctuation">(</span>r <span class="token operator">*</span>raft<span class="token punctuation">,</span> m pb<span class="token punctuation">.</span>Message<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>raft 类是 raft 共识算法的抽象,几乎囊括了一个 raft 节点正常运行时所必备的全部信息.</p>
+<p>（1）id：节点 id；</p>
+<p>（2）Term：节点当前的任期号；</p>
+<p>（3）raftLog：日志管理模块；</p>
+<p>（4）prs：记录了其他节点的日志同步进度；</p>
+<p>（5）state：当前节点的角色状态：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> StateType <span class="token builtin">uint64</span>
+
+<span class="token keyword">const</span> <span class="token punctuation">(</span>
+    StateFollower StateType <span class="token operator">=</span> <span class="token boolean">iota</span>
+    StateCandidate
+    StateLeader
+    StatePreCandidate
+<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>（6）votes：当前节点角色为 candiate 时会使用到，记录有哪些节点给当前节点投了票；</p>
+<p>（7）msgs：当前节点需要发送的消息，最终会通过 Ready 结构体传给应用层进行发送；</p>
+<p>（8）lead：节点的 leader id；</p>
+<p>（9）pendingConf：标识当前节点是否有还没有被应用的配置变更数据；</p>
+<p>（10）readOnly：挂起的读请求队列；</p>
+<p>（11）preVote：标识当前节点是否处于预竞选状态；</p>
+<p>（12）electionElapsed：选举计时，单位为 tick；</p>
+<p>（13）heartbeatElapsed：心跳计时，单位为 tick；</p>
+<p>（14）heartbeatTimeout：leader 广播心跳的时间间隔，单位 tick；</p>
+<p>（15）electionTimeout：candidate&#x2F;follower 进行选举的时间间隔，单位 tick；</p>
+<p>（16）randomizedElectionTimeout：新增随机扰动后的选举时间间隔，范围在 [electionTimeout, 2* electionTimeout - 1] 之间，每次切换节点身份时，这个随机扰动值会被重置一次；</p>
+<p>（17）tick：节点的定时处理函数，不同角色的处理函数不同，leader 是广播心跳的 tickHeartbeat 函数，follower 和 candidate 是发起竞选的 tickElection 函数；</p>
+<p>（18）step：节点的状态机处理函数，不同角色的状态机函数不同，分为 stepLeader、stepCandidate 和 stepFollower 三类.</p>
+<h1 id="5-应用层核心数据结构"><a href="#5-应用层核心数据结构" class="headerlink" title="5 应用层核心数据结构"></a>5 应用层核心数据结构</h1><p>本节中，以 etcd 提供的 raft 运行示例作为参照，学习应用层的代码架构和实现细节. 为了使得整个流程更加连贯和立体，此处还会简单谈及的 kvStore（数据状态机）和 httpapi（客户端）的一些内容.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> raftNode <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    proposeC    <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token builtin">string</span>            <span class="token comment">// proposed messages (k,v)</span>
+    confChangeC <span class="token operator">&lt;-</span><span class="token keyword">chan</span> raftpb<span class="token punctuation">.</span>ConfChange <span class="token comment">// proposed cluster config changes</span>
+    commitC     <span class="token keyword">chan</span><span class="token operator">&lt;-</span> <span class="token operator">*</span><span class="token builtin">string</span>           <span class="token comment">// entries committed to log (k,v)</span>
+    <span class="token comment">// ...</span>
+    id          <span class="token builtin">int</span>      <span class="token comment">// client ID for raft session</span>
+    peers       <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span> <span class="token comment">// raft peer URLs</span>
+    <span class="token comment">// ...</span>
+
+    appliedIndex  <span class="token builtin">uint64</span>
+
+    <span class="token comment">// raft backing for the commit/error channel</span>
+    node        raft<span class="token punctuation">.</span>Node
+    raftStorage <span class="token operator">*</span>raft<span class="token punctuation">.</span>MemoryStorage
+
+    <span class="token comment">// ...</span>
+    transport <span class="token operator">*</span>rafthttp<span class="token punctuation">.</span>Transport
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>raftNode 是在应用层中额外封装了一层的 raft 节点，处理持有算法层的入口之外，还包含了与客户端、数据状态机、预写日志持久化模块、通信模块交互的一些能力.</p>
+<p>（1）proposeC：用于接收客户端发送的写请求；</p>
+<p>（2）confChangeC：用于接收客户端发送的配置变更请求；</p>
+<p>（3）commitC：用于将已提交的日志应用到数据状态机；</p>
+<p>（4）id：raft 节点 id；</p>
+<p>（5）peers：同一集群内其他 raft 节点的标识信息；</p>
+<p>（6）appliedIndex：本节点已应用到状态机的日志索引；</p>
+<p>（7）node：算法层入口，即 4.5 小节中重点介绍的 Node 接口；</p>
+<p>（8）raftStorage：持久化预写日志存储模块；</p>
+<p>（9）transport: raft 集群通信模块.</p>
+<h2 id="5-2-kvStore"><a href="#5-2-kvStore" class="headerlink" title="5.2 kvStore"></a>5.2 kvStore</h2><p>代码位于 <code>./contrib/raftexample/kvstore.go.</code></p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> kvstore <span class="token keyword">struct</span> <span class="token punctuation">&#123;</span>
+    proposeC    <span class="token keyword">chan</span><span class="token operator">&lt;-</span> <span class="token builtin">string</span> <span class="token comment">// channel for proposing updates</span>
+    mu          sync<span class="token punctuation">.</span>RWMutex
+    kvStore     <span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token builtin">string</span> <span class="token comment">// current committed key-value pairs</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>kvstore 是一个乞丐版的键值对存储模块，用于以小见大，模拟还原 etcd 存储系统与 raft 节点间的交互模式.</p>
+<p>（1）proposeC：与 raftNode.proposeC 是同一个 channel，负责向 raftNode 发送来自客户端的写数据请求；</p>
+<p>（2）mu：读写锁，保证数据并发安全；</p>
+<p>（3）kvStore：键值对存储介质，可以理解为，它就是数据状态机.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token function">newKVStore</span><span class="token punctuation">(</span>snapshotter <span class="token operator">*</span>snap<span class="token punctuation">.</span>Snapshotter<span class="token punctuation">,</span> proposeC <span class="token keyword">chan</span><span class="token operator">&lt;-</span> <span class="token builtin">string</span><span class="token punctuation">,</span> commitC <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token operator">*</span><span class="token builtin">string</span><span class="token punctuation">,</span> errorC <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token operator">*</span>kvstore <span class="token punctuation">&#123;</span>
+    s <span class="token operator">:=</span> <span class="token operator">&amp;</span>kvstore<span class="token punctuation">&#123;</span>proposeC<span class="token punctuation">:</span> proposeC<span class="token punctuation">,</span> kvStore<span class="token punctuation">:</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">map</span><span class="token punctuation">[</span><span class="token builtin">string</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">)</span><span class="token punctuation">,</span> snapshotter<span class="token punctuation">:</span> snapshotter<span class="token punctuation">&#125;</span>
+   
+    <span class="token comment">// read commits from raft into kvStore map until error</span>
+    <span class="token keyword">go</span> s<span class="token punctuation">.</span><span class="token function">readCommits</span><span class="token punctuation">(</span>commitC<span class="token punctuation">,</span> errorC<span class="token punctuation">)</span>
+    <span class="token keyword">return</span> s
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>kvstore 模块启动时，会注入一个 commitC channel，和 raftNode.commitC 是同一个 channel.</p>
+<p>kvstore 会持续监听该 channel，获取到 raftNode 提交的日志数据，将其应用到数据状态机：</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>kvstore<span class="token punctuation">)</span> <span class="token function">readCommits</span><span class="token punctuation">(</span>commitC <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token operator">*</span><span class="token builtin">string</span><span class="token punctuation">,</span> errorC <span class="token operator">&lt;-</span><span class="token keyword">chan</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">for</span> data <span class="token operator">:=</span> <span class="token keyword">range</span> commitC <span class="token punctuation">&#123;</span>
+        <span class="token comment">// ...</span>
+        <span class="token keyword">var</span> dataKv kv
+        dec <span class="token operator">:=</span> gob<span class="token punctuation">.</span><span class="token function">NewDecoder</span><span class="token punctuation">(</span>bytes<span class="token punctuation">.</span><span class="token function">NewBufferString</span><span class="token punctuation">(</span><span class="token operator">*</span>data<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">if</span> err <span class="token operator">:=</span> dec<span class="token punctuation">.</span><span class="token function">Decode</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>dataKv<span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+            log<span class="token punctuation">.</span><span class="token function">Fatalf</span><span class="token punctuation">(</span><span class="token string">"raftexample: could not decode message (%v)"</span><span class="token punctuation">,</span> err<span class="token punctuation">)</span>
+        <span class="token punctuation">&#125;</span>
+        s<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        s<span class="token punctuation">.</span>kvStore<span class="token punctuation">[</span>dataKv<span class="token punctuation">.</span>Key<span class="token punctuation">]</span> <span class="token operator">=</span> dataKv<span class="token punctuation">.</span>Val
+        s<span class="token punctuation">.</span>mu<span class="token punctuation">.</span><span class="token function">Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>此外，kvstore 提供了 Propose 方法供客户端发送写请求，kvstore 随之通过 proposeC 将请求发送给 raftNode 处理.</p>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>s <span class="token operator">*</span>kvstore<span class="token punctuation">)</span> <span class="token function">Propose</span><span class="token punctuation">(</span>k <span class="token builtin">string</span><span class="token punctuation">,</span> v <span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">var</span> buf bytes<span class="token punctuation">.</span>Buffer
+    <span class="token keyword">if</span> err <span class="token operator">:=</span> gob<span class="token punctuation">.</span><span class="token function">NewEncoder</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>buf<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Encode</span><span class="token punctuation">(</span>kv<span class="token punctuation">&#123;</span>k<span class="token punctuation">,</span> v<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">&#123;</span>
+        log<span class="token punctuation">.</span><span class="token function">Fatal</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span>
+    s<span class="token punctuation">.</span>proposeC <span class="token operator">&lt;-</span> <span class="token function">string</span><span class="token punctuation">(</span>buf<span class="token punctuation">.</span><span class="token function">Bytes</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-etcd-%E4%B8%8E-raft"><span class="top-box-text">1 etcd 与 raft</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E6%9C%AF%E8%AF%AD%E8%A1%A8"><span class="top-box-text">2 术语表</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E7%AE%97%E6%B3%95%E5%B1%82"><span class="top-box-text">3.1 算法层</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E5%BA%94%E7%94%A8%E5%B1%82"><span class="top-box-text">3.2 应用层</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-%E5%AE%8F%E8%A7%82%E6%9E%B6%E6%9E%84"><span class="top-box-text">3.3 宏观架构</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-%E7%AE%97%E6%B3%95%E5%B1%82%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">4 算法层核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-1-Entry"><span class="top-box-text">4.1 Entry</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-2-Message"><span class="top-box-text">4.2 Message</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-3-raftLog"><span class="top-box-text">4.3 raftLog</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-4-Ready"><span class="top-box-text">4.4 Ready</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-5-Node-%E6%8E%A5%E5%8F%A3"><span class="top-box-text">4.5 Node 接口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-6-readOnly"><span class="top-box-text">4.6 readOnly</span></a></li></ol></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-etcd-%E4%B8%8E-raft"><span class="top-box-text">1 etcd 与 raft</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#2-%E6%9C%AF%E8%AF%AD%E8%A1%A8"><span class="top-box-text">2 术语表</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-1-%E7%AE%97%E6%B3%95%E5%B1%82"><span class="top-box-text">3.1 算法层</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-2-%E5%BA%94%E7%94%A8%E5%B1%82"><span class="top-box-text">3.2 应用层</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#3-3-%E5%AE%8F%E8%A7%82%E6%9E%B6%E6%9E%84"><span class="top-box-text">3.3 宏观架构</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-%E7%AE%97%E6%B3%95%E5%B1%82%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">4 算法层核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-1-Entry"><span class="top-box-text">4.1 Entry</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-2-Message"><span class="top-box-text">4.2 Message</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#4-3-raftLog"><span class="top-box-text">4.3 raftLog</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-4-Ready"><span class="top-box-text">4.4 Ready</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-5-Node-%E6%8E%A5%E5%8F%A3"><span class="top-box-text">4.5 Node 接口</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-6-readOnly"><span class="top-box-text">4.6 readOnly</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-7-Progress"><span class="top-box-text">4.7 Progress</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#4-8-raft"><span class="top-box-text">4.8 raft</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#5-%E5%BA%94%E7%94%A8%E5%B1%82%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">5 应用层核心数据结构</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#5-2-kvStore"><span class="top-box-text">5.2 kvStore</span></a></li></ol></li></ol>
         </div>
           
       </div>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang-八股汇总-杂项</title>
+<meta name="keywords" content="Golang-八股汇总-杂项, HeXu">
+<meta name="description" content=":&#x3D;和&#x3D;有什么区别？  &#x3D;是赋值变量，:&#x3D;是定义变量
+Go 的指针有什么用？一个指针可以指向任意变量的地址，它所指向的地址在32位或64位机器上分别固定占4或8个字节。指针的作用有
+
+获取变量的值
+
+">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang-八股汇总-杂项">
+<meta property="og:description" content=":&#x3D;和&#x3D;有什么区别？  &#x3D;是赋值变量，:&#x3D;是定义变量
+Go 的指针有什么用？一个指针可以指向任意变量的地址，它所指向的地址在32位或64位机器上分别固定占4或8个字节。指针的作用有
+
+获取变量的值
+
+">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang-八股汇总-杂项</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-02-29</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h3 id="和-有什么区别？"><a href="#和-有什么区别？" class="headerlink" title=":&#x3D;和&#x3D;有什么区别？"></a>:&#x3D;和&#x3D;有什么区别？</h3><p>  &#x3D;是<strong>赋值</strong>变量，:&#x3D;是<strong>定义</strong>变量</p>
+<h3 id="Go-的指针有什么用？"><a href="#Go-的指针有什么用？" class="headerlink" title="Go 的指针有什么用？"></a>Go 的指针有什么用？</h3><p>一个指针可以指向任意变量的地址，它所指向的地址在<strong>32</strong>位或<strong>64</strong>位机器上分别<strong>固定</strong>占<strong>4</strong>或<strong>8</strong>个字节。指针的作用有</p>
+<ul>
+<li>获取变量的值</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">import</span> fmt
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">&#123;</span>
+  a <span class="token operator">:=</span> <span class="token number">1</span>
+  p <span class="token operator">:=</span> <span class="token operator">&amp;</span>a<span class="token comment">//取址&amp;</span>
+  fmt<span class="token punctuation">.</span><span class="token function">Printf</span><span class="token punctuation">(</span><span class="token string">"%d\n"</span><span class="token punctuation">,</span> <span class="token operator">*</span>p<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//取值*</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<ul>
+<li>改变变量的值</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token comment">// 交换函数</span>
+<span class="token keyword">func</span> <span class="token function">swap</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span> b <span class="token operator">*</span><span class="token builtin">int</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+  <span class="token operator">*</span>a<span class="token punctuation">,</span> <span class="token operator">*</span>b <span class="token operator">=</span> <span class="token operator">*</span>b<span class="token punctuation">,</span> <span class="token operator">*</span>a
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<ul>
+<li>用指针替代值传入函数，比如类的接收器就是这样的。</li>
+</ul>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">type</span> A <span class="token keyword">struct</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>a <span class="token operator">*</span>A<span class="token punctuation">)</span> <span class="token function">fun</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+
+<h3 id="Go多种拼接字符串的方法，及其效率"><a href="#Go多种拼接字符串的方法，及其效率" class="headerlink" title="Go多种拼接字符串的方法，及其效率"></a>Go多种拼接字符串的方法，及其效率</h3><p>拼接字符串的方式有：**+ , fmt.Sprintf , strings.Builder, bytes.Buffer, strings.Join**</p>
+<ul>
+<li>关于<code>+</code>：使用<code>+</code>操作符进行拼接时，会对字符串进行遍历，计算并开辟一个新的空间来存储原来的两个字符串</li>
+<li><code>fmt.Sprintf()</code>:由于采用了接口参数，必须要用<strong>反射</strong>获取值，因此有性能损耗</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">str :&#x3D; &quot;dasda1&quot;
+str &#x3D; fmt.Sprintf(&quot;%s%s&quot;, str, str)
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+<ul>
+<li><code>strings.Builder</code>:用<code>WriteString()</code>进行拼接，内部实现是<strong>指针</strong>+<strong>切片</strong>，同时String()返回拼接后的字符串，它是直接把**[]byte<strong>转换为</strong>string<strong>，这里为了避免内存拷贝的问题，使用了</strong>强制转换**来避免内存拷贝</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">var builder strings.Builder
+builder.WriteString(&quot;sadas&quot;)
+builder.String()
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<ul>
+<li><code>bytes.Buffer</code>底层也是一个<code>[]byte</code>切片，<code>WriteString</code>方法采用动态扩展<code>slice</code>的机制，字符串追加采用<code>copy</code>的方式将追加的部分拷贝到尾部，<code>copy</code>是内置的拷贝函数，可以减少内存分配。</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">buf :&#x3D; new(bytes.Buffer)
+buf.WriteString(&quot;asong&quot;)
+ret :&#x3D; buf.String()
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<ul>
+<li><code>strings.join</code>也是基于<code>strings.builder</code>来实现的，在join方法内调用了<code>b.Grow(n)</code>方法，这个是进行<strong>初步的容量分配</strong>，而前面计算的n的长度就是我们要拼接的slice的长度，因为我们传入切片长度固定，所以<strong>提前进行容量分配可以减少内存分配</strong>，很高效。</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">ret :&#x3D; strings.Join(a,&quot;&quot;)<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p><strong>性能比较</strong>：<strong>strings.Join ≈ strings.Builder &gt; bytes.Buffer &gt; “+” &gt; fmt.Sprintf</strong></p>
+<h3 id="go中json序列化支持的格式有哪些？"><a href="#go中json序列化支持的格式有哪些？" class="headerlink" title="go中json序列化支持的格式有哪些？"></a>go中json序列化支持的格式有哪些？</h3><p>   JSON object key 只支持<strong>string，指针。Channel、complex、function</strong> 等type 无法进行序列化<br>  如果<strong>Channel、complex、function</strong> 等类型放在了结构体中且是小写字母未被导出，那么还是可以序列化这个结构体的</p>
+<h3 id="go-的数据类型"><a href="#go-的数据类型" class="headerlink" title="go 的数据类型"></a>go 的数据类型</h3><ol>
+<li>引用类型， 默认 <code>nil</code><ol>
+<li>切片 <code>slice</code></li>
+<li>映射 <code>map</code></li>
+<li>函数 <code>func</code></li>
+<li>方法 <code>(p *P)func</code></li>
+<li>通道 <code>channel</code></li>
+</ol>
+</li>
+<li>指针类型，默认 <code>nil</code></li>
+<li>值类型<ol>
+<li>数组，默认 0</li>
+<li>布尔，默认 false</li>
+<li>int，默认0</li>
+<li>string，默认“”</li>
+<li>float，默认0.0</li>
+</ol>
+</li>
+</ol>
+<h3 id="var-x-string-nil合理吗"><a href="#var-x-string-nil合理吗" class="headerlink" title="var x string &#x3D; nil合理吗?"></a>var x string &#x3D; nil合理吗?</h3><p>  不合理，不能用nil当作string的值（nil只能赋值给指针、chan、func、interface、map或slice 类型的变量，或者和error类型一样的内置接口类型）</p>
+<h3 id="make和new有什么区别？"><a href="#make和new有什么区别？" class="headerlink" title="make和new有什么区别？"></a><strong>make和new有什么区别？</strong></h3><p>  都是<strong>为变量分配内存</strong></p>
+<p>  不同点就是</p>
+<ol>
+<li><strong>作用的变量类型不一样</strong>，new是给<strong>string，int，数组和结构体分配内存</strong>，make是<strong>初始化内置的数据结构</strong>，为<strong>切片，map，channel</strong>分配内存（使用make函数初始化[]int时，必须给它第二个参数length，但是map就不用）</li>
+<li><strong>返回的类型</strong>不一样，new返回指向变量的<strong>指针</strong>，它为每个新类型分配一片内存，初始化为0且返回类型*T的内存地址，它相当于&amp;T{}；make返回<strong>变量本身</strong>，是引用</li>
+</ol>
+<h3 id="for-range中内存地址会变化吗？"><a href="#for-range中内存地址会变化吗？" class="headerlink" title="for range中内存地址会变化吗？"></a>for range中内存地址会变化吗？</h3><p>  在 for a,b :&#x3D; range c 遍历中， <strong>a 和 b 在内存中只会存在一份</strong>，即之后每次循环时遍历到的数据都是以值<strong>覆盖的方式</strong>赋给 a 和 b，a，b 的内存地址始终不变。如果开协程就要创建临时变量。</p>
+<h3 id="defer有什么作用？多个defer的顺序？defer和return的顺序？defer和panic的顺序呢？"><a href="#defer有什么作用？多个defer的顺序？defer和return的顺序？defer和panic的顺序呢？" class="headerlink" title="defer有什么作用？多个defer的顺序？defer和return的顺序？defer和panic的顺序呢？"></a><strong>defer有什么作用？多个defer的顺序？defer和return的顺序？defer和panic的顺序呢？</strong></h3><ul>
+<li>作用：defer延迟函数，释放资源，收尾工作；如释放锁，关闭文件，关闭链接，捕获panic。在使用中，打开一个资源就直接把defer函数跟在后面。</li>
+<li>多个 defer 调用顺序是** LIFO（后入先出）<strong>，defer后的操作可以理解为</strong>压入栈中**。</li>
+<li>defer，return，return value（函数返回值） 执行顺序：首先return，其次return value，最后defer。defer可以修改函数最终返回值，修改时机：<strong>有名返回值或者函数返回指针</strong> </li>
+<li>panic会中断流程，panic之后的逻辑不会运行，panic之前的defer会执行，后面的不会执行。且<strong>panic之后先调用defer  才执行panic</strong></li>
+</ul>
+<h3 id="rune类型了解吗？说说"><a href="#rune类型了解吗？说说" class="headerlink" title="rune类型了解吗？说说"></a>rune类型了解吗？说说</h3><p>  ASCII 码只需要 7 bit 就可以完整地表示，但只能表示英文字母在内的128个字符，为了表示世界上大部分的文字系统，发明了 Unicode， 它是ASCII的超集，包含世界上书写系统中存在的所有字符，并为每个代码分配一个标准编号（称为Unicode CodePoint），在 Go 语言中称之为 rune，是 <strong>int32</strong>类型的<strong>别名</strong>。</p>
+<p>  因为golang中的字符串底层实现是通过byte数组的，在utf-8编码下中文占3个字节，而golang默认编码正好是utf-8，使用<strong>len([]rune(“中文字符”))就可以得到正确的长度</strong>，诸如此类。</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">sample :&#x3D; &quot;我爱GO&quot;
+runeSamp :&#x3D; []rune(sample)
+runeSamp[0] &#x3D; &#39;你&#39;
+fmt.Println(string(runeSamp))  &#x2F;&#x2F; &quot;你爱GO&quot;
+fmt.Println(len(runeSamp))  &#x2F;&#x2F; 4<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="开发中你会用到空结构体struct-吗，说说它的用途"><a href="#开发中你会用到空结构体struct-吗，说说它的用途" class="headerlink" title="- 开发中你会用到空结构体struct{}吗，说说它的用途"></a>- 开发中你会用到空结构体struct{}吗，说说它的用途</h3><ul>
+<li>用map模拟一个set，那么就要把值置为struct{}，struct{}本身不占任何空间，可以避免任何多余的内存分配</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">type Set map[string]struct&#123;&#125;
+
+func main() &#123;
+  set :&#x3D; make(Set)
+
+  for _, item :&#x3D; range []string&#123;&quot;A&quot;, &quot;A&quot;, &quot;B&quot;, &quot;C&quot;&#125; &#123;
+    set[item] &#x3D; struct&#123;&#125;&#123;&#125;
+  &#125;
+  fmt.Println(len(set)) &#x2F;&#x2F; 3
+  if _, ok :&#x3D; set[&quot;A&quot;]; ok &#123;
+    fmt.Println(&quot;A exists&quot;) &#x2F;&#x2F; A exists
+  &#125;
+&#125;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<ul>
+<li>有时候给通道发送一个空结构体,channel&lt;-struct{}{}，也是节省了空间</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">func main() &#123;
+  ch :&#x3D; make(chan struct&#123;&#125;, 1)
+  go func() &#123;
+    &lt;-ch
+    &#x2F;&#x2F; do something
+  &#125;()
+  ch &lt;- struct&#123;&#125;&#123;&#125;
+  &#x2F;&#x2F; ...
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<ul>
+<li>仅有方法的结构体</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">type Lamp struct&#123;&#125;
+<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+
+<h3 id="说说go中的select和IO多路复用中的select？"><a href="#说说go中的select和IO多路复用中的select？" class="headerlink" title="说说go中的select和IO多路复用中的select？"></a>说说go中的select和IO多路复用中的select？</h3><blockquote>
+<p>Go 语言的 select 语句借鉴自 Unix 的 <strong>select()</strong> 函数，在 Unix 中，可以通过调用 select() 函数来<strong>监控</strong>一系列的<strong>文件句柄</strong>，一旦其中一个文件句柄发生了 IO 动作，该 select() 调用就会被返回（C 语言中就是这么做的），后来该机制也被用于实现高并发的 Socket 服务器程序。Go 语言直接在语言级别支持 select关键字，用于处理并发编程中<strong>通道</strong>之间<strong>异步 IO 通信</strong>问题。</p>
+</blockquote>
+<ul>
+<li>go中的select语句 就是用来<strong>监听和channel有关</strong>的IO操作，当IO操作发生时，触发相应的case动作，如果不设置 default条件，当没有IO操作发生时，select语句就会一直阻塞，如果有一个或多个IO操作发生时，Go运行时会<strong>随机选择</strong>一个case执行，但此时将无法保证执行顺序，对于空的select语句会引起死锁，</li>
+<li><strong>select</strong> 实现多路复用的方式是，将已连接的 Socket 都放到一个<strong>文件描述符集合</strong>，然后调用 select 函数将文件描述符集合<strong>拷贝</strong>到内核里，让内核来检查是否有网络事件产生，检查的方式很粗暴，就是通过<strong>遍历</strong>文件描述符集合的方式，当检查到有事件产生后，将此 Socket 标记为可读或可写， 接着再把整个文件描述符集合<strong>拷贝</strong>回用户态里，然后用户态还需要再通过<strong>遍历</strong>的方法找到可读或可写的 Socket，然后再对其处理。</li>
+</ul>
+<h3 id="两个nil可能不相等吗？"><a href="#两个nil可能不相等吗？" class="headerlink" title="两个nil可能不相等吗？"></a>两个nil可能不相等吗？</h3><p>  可能不等。interface在运行时绑定值，只有值为nil接口值才为nil，但是与指针的nil不相等，<strong>两个nil只有在类型相同时才相等</strong>。</p>
+<h3 id="go中的int和int32是一个类型吗？"><a href="#go中的int和int32是一个类型吗？" class="headerlink" title="go中的int和int32是一个类型吗？"></a>go中的int和int32是一个类型吗？</h3><p>  不是一个概念！go语言中的int的大小是和<strong>操作系统位数</strong>相关的，如果是<strong>32位</strong>操作系统，int类型的大小就是<strong>4字节</strong>。如果是<strong>64位</strong>操作系统，int类型的大小就是<strong>8个字节</strong>。除此之外uint也与操作系统有关。</p>
+<p>  int8占1个字节，int16占2个字节，int32占4个字节，int64占8个字节。</p>
+<h3 id="uint型变量分别是1，2，他们相减的结果是多少？"><a href="#uint型变量分别是1，2，他们相减的结果是多少？" class="headerlink" title="uint型变量分别是1，2，他们相减的结果是多少？"></a>uint型变量分别是1，2，他们相减的结果是多少？</h3><pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">var a uint &#x3D; 1
+var b uint &#x3D; 2
+fmt.Println(a - b)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>  答案，结果会溢出，如果是32位系统，结果是2^32-1，如果是64位系统，结果2^64-1.</p>
+<h3 id="go中的tag是怎么实现的？有什么作用？"><a href="#go中的tag是怎么实现的？有什么作用？" class="headerlink" title="go中的tag是怎么实现的？有什么作用？"></a>go中的tag是怎么实现的？有什么作用？</h3><p>  使用反射实现的，就是运行时候检测自身状态。</p>
+<p>  tag可以为结构体成员提供属性，常见的有</p>
+<ul>
+<li>json<strong>序列化</strong>或<strong>反序列化</strong>时字段的名称</li>
+<li>db: sqlx模块中对应的数据库字段名</li>
+<li>form: gin框架中对应的前端的数据字段名</li>
+<li>binding: 搭配 form 使用, 默认如果没查找到结构体中的某个字段则不报错值为空, binding为 required 代表没找到返回错误给前端</li>
+</ul>
+<h3 id="go如何实现面向对象的三大特性：继承、封装、多态？"><a href="#go如何实现面向对象的三大特性：继承、封装、多态？" class="headerlink" title="go如何实现面向对象的三大特性：继承、封装、多态？"></a><strong>go如何实现面向对象的三大特性：继承、封装、多态？</strong></h3><p>  <strong>封装</strong>：就是把抽象出的字段和字段的操作封装在一起，数据被保护在内部，程序的其他包只有通过被授权的操作（方法）才能对字段进行操作。</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">type Person struct &#123;
+  name string
+  age int
+&#125;
+
+func NewPerson() Person &#123;
+  return Person&#123;&#125;
+&#125;
+
+func (this *Person) SetName(name string) &#123;
+  this.name &#x3D; name
+&#125;
+func (this *Person) GetName() string &#123;
+  return this.name
+&#125;
+
+func (this *Person) SetAge(age int) &#123;
+  this.age &#x3D; age
+&#125;
+func (this *Person) GetAge() string &#123;
+  return this.age
+&#125;
+
+func main() &#123;
+  p :&#x3D; NewPerson()
+  p.SetName(&quot;xiaofei&quot;)
+  fmt.Println(p.GetName())
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>  <strong>继承</strong>：当多个结构体存在相同的属性（字段）和方法时，可以从这些结构体中抽象出一个基结构体A，在A中定义这些相同的属性和方法。其他的结构体不需要重新定义这些属性和方法，只需嵌套一个匿名结构体A即可。</p>
+<p>  在golang中，如果一个struct<strong>嵌套</strong>了另一个匿名结构体，那么这个结构体可以直接访问匿名结构体的字段和方法，从而实现继承特性。</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">type Student struct &#123;
+  Person
+  StuId int
+&#125;
+
+func (this *Student) SetId(id int) &#123;
+  this.StuId &#x3D; id
+&#125;
+func (this *Student) GetId() int &#123;
+  return this.StuId
+&#125;
+func main() &#123;
+  stu :&#x3D; oop.Student&#123;&#125;
+
+  stu.SetName(&quot;xiaofei&quot;)  &#x2F;&#x2F; 可以直接访问Person的Set、Get方法
+  stu.SetAge(22)
+  stu.SetId(123)
+
+  fmt.Printf(&quot;I am a student，My name is %s, my age is %d, my id is %d&quot;, stu.GetName(), stu.GetAge(), stu.GetId)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>  <strong>多态</strong>：基类指针可以指向任何派生类的对象，并在运行时绑定最终调用的方法的过程被称为多态。多态是运行时特性，而继承则是编译时特性，也就是说继承关系在编译时就已经确定了，而多态则可以实现运行时的动态绑定。</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">&#x2F;&#x2F; 小狗和小鸟都是动物，都会移动和叫，它们共同的方法就可以提炼出来定义为一个抽象的接口。
+type Animal interface &#123;
+  Move()
+  Shout()
+&#125;
+
+type Dog struct &#123;
+&#125;
+
+func (dog Dog) Move() &#123;
+  fmt.Println(&quot;I am dog, I moved by 4 legs.&quot;)
+&#125;
+func (dog Dog) Shout() &#123;
+  fmt.Println(&quot;WANG WANG WANG&quot;)
+&#125;
+
+type Bird struct &#123;
+&#125;
+
+func (bird Bird) Move() &#123;
+  fmt.Println(&quot;I am bird, I fly with 2 wings&quot;)
+&#125;
+func (bird Bird) Shout() &#123;
+  fmt.Println(&quot;ji ji ji &quot;)
+&#125;
+
+type ShowAnimal struct &#123;
+&#125;
+
+func (s ShowAnimal) Show(animal Animal) &#123;
+  animal.Move()
+  animal.Shout()
+&#125;
+
+func main() &#123;
+  show :&#x3D; ShowAnimal&#123;&#125;
+  dog :&#x3D; Dog&#123;&#125;
+  bird :&#x3D; Bird&#123;&#125;
+
+  show.Show(dog)
+  show.Show(bird)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%92%8C-%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">:&#x3D;和&#x3D;有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go-%E7%9A%84%E6%8C%87%E9%92%88%E6%9C%89%E4%BB%80%E4%B9%88%E7%94%A8%EF%BC%9F"><span class="top-box-text">Go 的指针有什么用？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go%E5%A4%9A%E7%A7%8D%E6%8B%BC%E6%8E%A5%E5%AD%97%E7%AC%A6%E4%B8%B2%E7%9A%84%E6%96%B9%E6%B3%95%EF%BC%8C%E5%8F%8A%E5%85%B6%E6%95%88%E7%8E%87"><span class="top-box-text">Go多种拼接字符串的方法，及其效率</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%ADjson%E5%BA%8F%E5%88%97%E5%8C%96%E6%94%AF%E6%8C%81%E7%9A%84%E6%A0%BC%E5%BC%8F%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">go中json序列化支持的格式有哪些？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go-%E7%9A%84%E6%95%B0%E6%8D%AE%E7%B1%BB%E5%9E%8B"><span class="top-box-text">go 的数据类型</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#var-x-string-nil%E5%90%88%E7%90%86%E5%90%97"><span class="top-box-text">var x string &#x3D; nil合理吗?</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#make%E5%92%8Cnew%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">make和new有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#for-range%E4%B8%AD%E5%86%85%E5%AD%98%E5%9C%B0%E5%9D%80%E4%BC%9A%E5%8F%98%E5%8C%96%E5%90%97%EF%BC%9F"><span class="top-box-text">for range中内存地址会变化吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#defer%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F%E5%A4%9A%E4%B8%AAdefer%E7%9A%84%E9%A1%BA%E5%BA%8F%EF%BC%9Fdefer%E5%92%8Creturn%E7%9A%84%E9%A1%BA%E5%BA%8F%EF%BC%9Fdefer%E5%92%8Cpanic%E7%9A%84%E9%A1%BA%E5%BA%8F%E5%91%A2%EF%BC%9F"><span class="top-box-text">defer有什么作用？多个defer的顺序？defer和return的顺序？defer和panic的顺序呢？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#rune%E7%B1%BB%E5%9E%8B%E4%BA%86%E8%A7%A3%E5%90%97%EF%BC%9F%E8%AF%B4%E8%AF%B4"><span class="top-box-text">rune类型了解吗？说说</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%BC%80%E5%8F%91%E4%B8%AD%E4%BD%A0%E4%BC%9A%E7%94%A8%E5%88%B0%E7%A9%BA%E7%BB%93%E6%9E%84%E4%BD%93struct-%E5%90%97%EF%BC%8C%E8%AF%B4%E8%AF%B4%E5%AE%83%E7%9A%84%E7%94%A8%E9%80%94"><span class="top-box-text">- 开发中你会用到空结构体struct{}吗，说说它的用途</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4go%E4%B8%AD%E7%9A%84select%E5%92%8CIO%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E4%B8%AD%E7%9A%84select%EF%BC%9F"><span class="top-box-text">说说go中的select和IO多路复用中的select？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%A4%E4%B8%AAnil%E5%8F%AF%E8%83%BD%E4%B8%8D%E7%9B%B8%E7%AD%89%E5%90%97%EF%BC%9F"><span class="top-box-text">两个nil可能不相等吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E7%9A%84int%E5%92%8Cint32%E6%98%AF%E4%B8%80%E4%B8%AA%E7%B1%BB%E5%9E%8B%E5%90%97%EF%BC%9F"><span class="top-box-text">go中的int和int32是一个类型吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#uint%E5%9E%8B%E5%8F%98%E9%87%8F%E5%88%86%E5%88%AB%E6%98%AF1%EF%BC%8C2%EF%BC%8C%E4%BB%96%E4%BB%AC%E7%9B%B8%E5%87%8F%E7%9A%84%E7%BB%93%E6%9E%9C%E6%98%AF%E5%A4%9A%E5%B0%91%EF%BC%9F"><span class="top-box-text">uint型变量分别是1，2，他们相减的结果是多少？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E7%9A%84tag%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84%EF%BC%9F%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F"><span class="top-box-text">go中的tag是怎么实现的？有什么作用？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E9%9D%A2%E5%90%91%E5%AF%B9%E8%B1%A1%E7%9A%84%E4%B8%89%E5%A4%A7%E7%89%B9%E6%80%A7%EF%BC%9A%E7%BB%A7%E6%89%BF%E3%80%81%E5%B0%81%E8%A3%85%E3%80%81%E5%A4%9A%E6%80%81%EF%BC%9F"><span class="top-box-text">go如何实现面向对象的三大特性：继承、封装、多态？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/02/29/%E9%9D%A2%E8%AF%95%E5%85%AB%E8%82%A1%E6%B1%87%E6%80%BB/">
+          <h3 class="post-title">
+            下一篇：面试八股汇总
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
