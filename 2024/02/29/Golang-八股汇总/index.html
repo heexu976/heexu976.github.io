@@ -353,10 +353,110 @@ func main() &#123;
   show.Show(dog)
   show.Show(bird)
 &#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="go写单元测试的规范说下？"><a href="#go写单元测试的规范说下？" class="headerlink" title="go写单元测试的规范说下？"></a>go写单元测试的规范说下？</h3><ol>
+<li><strong>文件名称</strong>：需要创建单独的测试文件，名字规则为 xxx_test.go</li>
+<li><strong>包名称</strong>：单元测试文件的包名为原文件的包名添加下划线接test</li>
+</ol>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">&#x2F;&#x2F; 原文件包名：
+
+package xxx
+
+&#x2F;&#x2F; 单元测试文件包名：
+
+package xxx_test<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<ol start="3">
+<li><strong>方法名称</strong>：单元测试文件中的测试方法和原文件中的待测试的方法名相对应，以Test开头，举例如下：</li>
+</ol>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">&#x2F;&#x2F; 原文件方法：
+func Xxx(name string) error 
+ 
+&#x2F;&#x2F; 单元测试文件方法：
+func TestXxx()<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<ol start="4">
+<li><strong>参数名称</strong>：单元测试方法的参数必须是<code>t *testing.T</code>，举例如下：</li>
+</ol>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">func TestZipFiles(t *testing.T) &#123; ... &#125;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<h3 id="go-run和go-build的区别是什么？"><a href="#go-run和go-build的区别是什么？" class="headerlink" title="go run和go build的区别是什么？"></a>go run和go build的区别是什么？</h3><p>  go run <strong>编译并直接运行程序</strong>，它会产生一个<strong>临时文件</strong>（但实际不存在，也不会生成 .exe 文件），直接在命令行输出程序执行结果，<strong>方便用户调试</strong>。运行速度也相应较慢。</p>
+<p>  go build 用于<strong>测试编译包</strong>，主要检查<strong>是否会有编译错误</strong>，如果是一个可执行文件的源码（即是 main 包），就会在当前目录直接生成一个可执行文件（ .exe 文件）。运行速度快</p>
+<h3 id="init-函数是什么时候执行的？一个文件可以有多个init-函数吗？"><a href="#init-函数是什么时候执行的？一个文件可以有多个init-函数吗？" class="headerlink" title="init() 函数是什么时候执行的？一个文件可以有多个init()函数吗？"></a>init() 函数是什么时候执行的？一个文件可以有多个init()函数吗？</h3><p>   在main函数之前执行，可以有多个</p>
+<h3 id="使用init-注意的点有哪些？"><a href="#使用init-注意的点有哪些？" class="headerlink" title="使用init()注意的点有哪些？"></a>使用init()注意的点有哪些？</h3><ul>
+<li>初始化不能采用初始化表达式初始化的变量；</li>
+<li>程序运行前执行注册</li>
+<li>实现sync.Once功能</li>
+<li>不能被其它函数调用</li>
+<li>init函数没有入口参数和返回值：</li>
+<li>每个包可以有多个init函数，<strong>每个源文件也可以有多个init函数</strong>。</li>
+<li>同一个包的init执行顺序，golang没有明确定义，编程时要注意程序不要依赖这个执行顺序。</li>
+<li>不同包的init函数按照包导入的依赖关系决定执行顺序（程序编译时，先执行导入包的init函数，再执行本包内的init函数）</li>
+</ul>
+<h3 id="go中初始化的顺序是怎么样的？"><a href="#go中初始化的顺序是怎么样的？" class="headerlink" title="go中初始化的顺序是怎么样的？"></a>go中初始化的顺序是怎么样的？</h3><p>  由runtime初始化每个导入的包，初始化不是按照从上到下的导入顺序，而是按照解析的依赖关系，没有依赖的包最先初始化。</p>
+<p>  每个包首先初始化包作用域的常量和变量（常量优先于变量），然后执行包的<code>init()</code>函数。同一个包，甚至是同一个源文件可以有多个<code>init()</code>函数。<code>init()</code>函数没有入参和返回值，不能被其他函数调用，同一个包内多个<code>init()</code>函数的执行顺序不作保证。</p>
+<p>  执行顺序：*<em>import –&gt; const –&gt; var –&gt;</em>***<code>init()</code><strong><strong>–&gt;</strong></strong><code>main()</code>**</p>
+<p>  一个文件可以有多个<code>init()</code>函数！</p>
+<h3 id="go中main函数有哪些注意的点？"><a href="#go中main函数有哪些注意的点？" class="headerlink" title="go中main函数有哪些注意的点？"></a>go中main函数有哪些注意的点？</h3><ul>
+<li>不能带参数</li>
+<li>不能有返回值</li>
+<li>所处的包必须是main包</li>
+<li>可以用flag包解析和获取命令行参数</li>
+</ul>
+<h3 id="关于var-Codec-GobCodec-nil-这种写法的作用？"><a href="#关于var-Codec-GobCodec-nil-这种写法的作用？" class="headerlink" title="关于var _ Codec &#x3D; (*GobCodec)(nil)这种写法的作用？"></a>关于var _ Codec &#x3D; (*GobCodec)(nil)这种写法的作用？</h3><p>  将nil转换为GobCodec类型，然后再转换为Codec接口，如果转换失败，说明GobCodec没有实现Codec接口的所有方法。</p>
+<h3 id="一些tips"><a href="#一些tips" class="headerlink" title="一些tips"></a>一些tips</h3><ul>
+<li>fallthrough 会使其强制执行后面的代码</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">func main() &#123;
+ 
+    s :&#x3D; &quot;nowcoder&quot;
+ 
+    a :&#x3D; 0
+    switch s &#123;
+    case &quot;nowcoder&quot;:
+        a++
+        fallthrough
+    case &quot;haha&quot;:
+        a++
+        fallthrough
+    default:
+        a++
+    &#125;
+    fmt.Println(a)
+&#125;
+&#x2F;&#x2F;输出3<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<ul>
+<li>Go中无类型浮点常量，即<code>const zero = 0.0</code>，说zero是浮点型常量是错误的</li>
+<li>go语言常量要是<strong>编译时</strong>就能<strong>确定</strong>的数据，所以errors.New(“xxx”) 要等到运行时才能确定，所以它不满足</li>
+<li>panic需要等defer结束后才会向上传递。出现panic的时候，会先按照defer的后进先出的顺序执行，最后才会执行panic。</li>
+<li><code>cap</code>的作用<ul>
+<li>arry：返回数组的元素个数</li>
+<li>slice：返回slice的最大容量</li>
+<li>channel：返回channel的buffer容量</li>
+</ul>
+</li>
+<li>内置函数 delete 只能删除** map**中的key</li>
+<li>go中i++必须是单独的一条语句</li>
+<li>go中异常的触发情况<ul>
+<li>空指针解析</li>
+<li>下标越界</li>
+<li>除数为0</li>
+<li>调用panic函数</li>
+</ul>
+</li>
+<li>全局变量要定义在函数之外，而在函数之外定义的变量只能用<strong>var</strong>定义。</li>
+<li>Go语言中字符串是不可变的，所以不能对字符串中某个字符单独赋值。</li>
+<li>go语言的自动内存管理机制使得只要还有一个指针引用一个变量，那这个变量就会在内存中得以保留，因此在Go语言函数内部返回指向本地变量的指针是安全的。</li>
+<li>go语言的指针不支持运算</li>
+<li>**…**有两种用法。<ul>
+<li>在函数中做参数使用，表示可以接受任意数量的参数</li>
+<li>打散分片为分片类型的单个值</li>
+</ul>
+</li>
+</ul>
+
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%92%8C-%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">:&#x3D;和&#x3D;有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go-%E7%9A%84%E6%8C%87%E9%92%88%E6%9C%89%E4%BB%80%E4%B9%88%E7%94%A8%EF%BC%9F"><span class="top-box-text">Go 的指针有什么用？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go%E5%A4%9A%E7%A7%8D%E6%8B%BC%E6%8E%A5%E5%AD%97%E7%AC%A6%E4%B8%B2%E7%9A%84%E6%96%B9%E6%B3%95%EF%BC%8C%E5%8F%8A%E5%85%B6%E6%95%88%E7%8E%87"><span class="top-box-text">Go多种拼接字符串的方法，及其效率</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%ADjson%E5%BA%8F%E5%88%97%E5%8C%96%E6%94%AF%E6%8C%81%E7%9A%84%E6%A0%BC%E5%BC%8F%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">go中json序列化支持的格式有哪些？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go-%E7%9A%84%E6%95%B0%E6%8D%AE%E7%B1%BB%E5%9E%8B"><span class="top-box-text">go 的数据类型</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#var-x-string-nil%E5%90%88%E7%90%86%E5%90%97"><span class="top-box-text">var x string &#x3D; nil合理吗?</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#make%E5%92%8Cnew%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">make和new有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#for-range%E4%B8%AD%E5%86%85%E5%AD%98%E5%9C%B0%E5%9D%80%E4%BC%9A%E5%8F%98%E5%8C%96%E5%90%97%EF%BC%9F"><span class="top-box-text">for range中内存地址会变化吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#defer%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F%E5%A4%9A%E4%B8%AAdefer%E7%9A%84%E9%A1%BA%E5%BA%8F%EF%BC%9Fdefer%E5%92%8Creturn%E7%9A%84%E9%A1%BA%E5%BA%8F%EF%BC%9Fdefer%E5%92%8Cpanic%E7%9A%84%E9%A1%BA%E5%BA%8F%E5%91%A2%EF%BC%9F"><span class="top-box-text">defer有什么作用？多个defer的顺序？defer和return的顺序？defer和panic的顺序呢？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#rune%E7%B1%BB%E5%9E%8B%E4%BA%86%E8%A7%A3%E5%90%97%EF%BC%9F%E8%AF%B4%E8%AF%B4"><span class="top-box-text">rune类型了解吗？说说</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%BC%80%E5%8F%91%E4%B8%AD%E4%BD%A0%E4%BC%9A%E7%94%A8%E5%88%B0%E7%A9%BA%E7%BB%93%E6%9E%84%E4%BD%93struct-%E5%90%97%EF%BC%8C%E8%AF%B4%E8%AF%B4%E5%AE%83%E7%9A%84%E7%94%A8%E9%80%94"><span class="top-box-text">- 开发中你会用到空结构体struct{}吗，说说它的用途</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4go%E4%B8%AD%E7%9A%84select%E5%92%8CIO%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E4%B8%AD%E7%9A%84select%EF%BC%9F"><span class="top-box-text">说说go中的select和IO多路复用中的select？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%A4%E4%B8%AAnil%E5%8F%AF%E8%83%BD%E4%B8%8D%E7%9B%B8%E7%AD%89%E5%90%97%EF%BC%9F"><span class="top-box-text">两个nil可能不相等吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E7%9A%84int%E5%92%8Cint32%E6%98%AF%E4%B8%80%E4%B8%AA%E7%B1%BB%E5%9E%8B%E5%90%97%EF%BC%9F"><span class="top-box-text">go中的int和int32是一个类型吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#uint%E5%9E%8B%E5%8F%98%E9%87%8F%E5%88%86%E5%88%AB%E6%98%AF1%EF%BC%8C2%EF%BC%8C%E4%BB%96%E4%BB%AC%E7%9B%B8%E5%87%8F%E7%9A%84%E7%BB%93%E6%9E%9C%E6%98%AF%E5%A4%9A%E5%B0%91%EF%BC%9F"><span class="top-box-text">uint型变量分别是1，2，他们相减的结果是多少？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E7%9A%84tag%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84%EF%BC%9F%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F"><span class="top-box-text">go中的tag是怎么实现的？有什么作用？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E9%9D%A2%E5%90%91%E5%AF%B9%E8%B1%A1%E7%9A%84%E4%B8%89%E5%A4%A7%E7%89%B9%E6%80%A7%EF%BC%9A%E7%BB%A7%E6%89%BF%E3%80%81%E5%B0%81%E8%A3%85%E3%80%81%E5%A4%9A%E6%80%81%EF%BC%9F"><span class="top-box-text">go如何实现面向对象的三大特性：继承、封装、多态？</span></a></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%92%8C-%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">:&#x3D;和&#x3D;有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go-%E7%9A%84%E6%8C%87%E9%92%88%E6%9C%89%E4%BB%80%E4%B9%88%E7%94%A8%EF%BC%9F"><span class="top-box-text">Go 的指针有什么用？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go%E5%A4%9A%E7%A7%8D%E6%8B%BC%E6%8E%A5%E5%AD%97%E7%AC%A6%E4%B8%B2%E7%9A%84%E6%96%B9%E6%B3%95%EF%BC%8C%E5%8F%8A%E5%85%B6%E6%95%88%E7%8E%87"><span class="top-box-text">Go多种拼接字符串的方法，及其效率</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%ADjson%E5%BA%8F%E5%88%97%E5%8C%96%E6%94%AF%E6%8C%81%E7%9A%84%E6%A0%BC%E5%BC%8F%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">go中json序列化支持的格式有哪些？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go-%E7%9A%84%E6%95%B0%E6%8D%AE%E7%B1%BB%E5%9E%8B"><span class="top-box-text">go 的数据类型</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#var-x-string-nil%E5%90%88%E7%90%86%E5%90%97"><span class="top-box-text">var x string &#x3D; nil合理吗?</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#make%E5%92%8Cnew%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">make和new有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#for-range%E4%B8%AD%E5%86%85%E5%AD%98%E5%9C%B0%E5%9D%80%E4%BC%9A%E5%8F%98%E5%8C%96%E5%90%97%EF%BC%9F"><span class="top-box-text">for range中内存地址会变化吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#defer%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F%E5%A4%9A%E4%B8%AAdefer%E7%9A%84%E9%A1%BA%E5%BA%8F%EF%BC%9Fdefer%E5%92%8Creturn%E7%9A%84%E9%A1%BA%E5%BA%8F%EF%BC%9Fdefer%E5%92%8Cpanic%E7%9A%84%E9%A1%BA%E5%BA%8F%E5%91%A2%EF%BC%9F"><span class="top-box-text">defer有什么作用？多个defer的顺序？defer和return的顺序？defer和panic的顺序呢？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#rune%E7%B1%BB%E5%9E%8B%E4%BA%86%E8%A7%A3%E5%90%97%EF%BC%9F%E8%AF%B4%E8%AF%B4"><span class="top-box-text">rune类型了解吗？说说</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%BC%80%E5%8F%91%E4%B8%AD%E4%BD%A0%E4%BC%9A%E7%94%A8%E5%88%B0%E7%A9%BA%E7%BB%93%E6%9E%84%E4%BD%93struct-%E5%90%97%EF%BC%8C%E8%AF%B4%E8%AF%B4%E5%AE%83%E7%9A%84%E7%94%A8%E9%80%94"><span class="top-box-text">- 开发中你会用到空结构体struct{}吗，说说它的用途</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4go%E4%B8%AD%E7%9A%84select%E5%92%8CIO%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E4%B8%AD%E7%9A%84select%EF%BC%9F"><span class="top-box-text">说说go中的select和IO多路复用中的select？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%A4%E4%B8%AAnil%E5%8F%AF%E8%83%BD%E4%B8%8D%E7%9B%B8%E7%AD%89%E5%90%97%EF%BC%9F"><span class="top-box-text">两个nil可能不相等吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E7%9A%84int%E5%92%8Cint32%E6%98%AF%E4%B8%80%E4%B8%AA%E7%B1%BB%E5%9E%8B%E5%90%97%EF%BC%9F"><span class="top-box-text">go中的int和int32是一个类型吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#uint%E5%9E%8B%E5%8F%98%E9%87%8F%E5%88%86%E5%88%AB%E6%98%AF1%EF%BC%8C2%EF%BC%8C%E4%BB%96%E4%BB%AC%E7%9B%B8%E5%87%8F%E7%9A%84%E7%BB%93%E6%9E%9C%E6%98%AF%E5%A4%9A%E5%B0%91%EF%BC%9F"><span class="top-box-text">uint型变量分别是1，2，他们相减的结果是多少？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E7%9A%84tag%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84%EF%BC%9F%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F"><span class="top-box-text">go中的tag是怎么实现的？有什么作用？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E9%9D%A2%E5%90%91%E5%AF%B9%E8%B1%A1%E7%9A%84%E4%B8%89%E5%A4%A7%E7%89%B9%E6%80%A7%EF%BC%9A%E7%BB%A7%E6%89%BF%E3%80%81%E5%B0%81%E8%A3%85%E3%80%81%E5%A4%9A%E6%80%81%EF%BC%9F"><span class="top-box-text">go如何实现面向对象的三大特性：继承、封装、多态？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E5%86%99%E5%8D%95%E5%85%83%E6%B5%8B%E8%AF%95%E7%9A%84%E8%A7%84%E8%8C%83%E8%AF%B4%E4%B8%8B%EF%BC%9F"><span class="top-box-text">go写单元测试的规范说下？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go-run%E5%92%8Cgo-build%E7%9A%84%E5%8C%BA%E5%88%AB%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="top-box-text">go run和go build的区别是什么？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#init-%E5%87%BD%E6%95%B0%E6%98%AF%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E6%89%A7%E8%A1%8C%E7%9A%84%EF%BC%9F%E4%B8%80%E4%B8%AA%E6%96%87%E4%BB%B6%E5%8F%AF%E4%BB%A5%E6%9C%89%E5%A4%9A%E4%B8%AAinit-%E5%87%BD%E6%95%B0%E5%90%97%EF%BC%9F"><span class="top-box-text">init() 函数是什么时候执行的？一个文件可以有多个init()函数吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BD%BF%E7%94%A8init-%E6%B3%A8%E6%84%8F%E7%9A%84%E7%82%B9%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">使用init()注意的点有哪些？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E5%88%9D%E5%A7%8B%E5%8C%96%E7%9A%84%E9%A1%BA%E5%BA%8F%E6%98%AF%E6%80%8E%E4%B9%88%E6%A0%B7%E7%9A%84%EF%BC%9F"><span class="top-box-text">go中初始化的顺序是怎么样的？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%ADmain%E5%87%BD%E6%95%B0%E6%9C%89%E5%93%AA%E4%BA%9B%E6%B3%A8%E6%84%8F%E7%9A%84%E7%82%B9%EF%BC%9F"><span class="top-box-text">go中main函数有哪些注意的点？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%85%B3%E4%BA%8Evar-Codec-GobCodec-nil-%E8%BF%99%E7%A7%8D%E5%86%99%E6%B3%95%E7%9A%84%E4%BD%9C%E7%94%A8%EF%BC%9F"><span class="top-box-text">关于var _ Codec &#x3D; (*GobCodec)(nil)这种写法的作用？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%80%E4%BA%9Btips"><span class="top-box-text">一些tips</span></a></li></ol>
         </div>
           
       </div>
