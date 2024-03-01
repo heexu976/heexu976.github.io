@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang-八股-GMP-Goroutine</title>
+<meta name="keywords" content="Golang-八股-GMP-Goroutine, HeXu">
+<meta name="description" content="说下进程和协程和线程有什么区别？  进程是一个应用程序的启动实例，每个进程都有独立的内存空间，不同的进程之间通过进程之间的通信方式来进行通信。而协程和线程比较相近，但是也有很大区别：
+
+首先从内存占用的方面来说，创建一个协程的栈内存消耗是2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang-八股-GMP-Goroutine">
+<meta property="og:description" content="说下进程和协程和线程有什么区别？  进程是一个应用程序的启动实例，每个进程都有独立的内存空间，不同的进程之间通过进程之间的通信方式来进行通信。而协程和线程比较相近，但是也有很大区别：
+
+首先从内存占用的方面来说，创建一个协程的栈内存消耗是2">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang-八股-GMP-Goroutine</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-01</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h3 id="说下进程和协程和线程有什么区别？"><a href="#说下进程和协程和线程有什么区别？" class="headerlink" title="说下进程和协程和线程有什么区别？"></a><strong>说下进程和协程和线程有什么区别？</strong></h3><p>  进程是一个应用程序的启动实例，每个进程都有独立的内存空间，不同的进程之间通过进程之间的通信方式来进行通信。而协程和线程比较相近，但是也有很大区别：</p>
+<ul>
+<li>首先从<strong>内存占用</strong>的方面来说，创建<strong>一个协程的栈内存消耗是2KB</strong>，而创建<strong>一个线程需要消耗1MB栈内存</strong>。比如在Go构建的HTTP Server中对于每个请求创建一个协程处理非常轻松，而如果是创建一个线程取处理每一个请求的话就会太浪费资源了。</li>
+<li>然后就是<strong>创建和销毁方面</strong>，线程创建和销毁都会有很大的消耗，因为要和操作系统内核交互，通常会采用线程池。而goroutine的创建和销毁消耗很小，是用户级的。</li>
+<li>然后是<strong>切换</strong>，线程切换需要将数据保存到各种寄存器，以便将来恢复，要消耗1000到1500纳秒，而<strong>goroutine切换只需要保存三个寄存器</strong>，只需要消耗200纳秒，其切换成本比线程小得多。</li>
+</ul>
+<h3 id="go什么时候发生协程切换？（协程切换的时机？）"><a href="#go什么时候发生协程切换？（协程切换的时机？）" class="headerlink" title="go什么时候发生协程切换？（协程切换的时机？）"></a>go什么时候发生协程切换？（协程切换的时机？）</h3><ul>
+<li><strong>select操作阻塞时</strong></li>
+<li><strong>io阻塞</strong></li>
+<li><strong>channel阻塞</strong></li>
+<li>程序员显式调用：runtime.Gosched()</li>
+<li>等待锁</li>
+</ul>
+<h3 id="go什么时候会发生阻塞呢？"><a href="#go什么时候会发生阻塞呢？" class="headerlink" title="go什么时候会发生阻塞呢？"></a>go什么时候会发生阻塞呢？</h3><ul>
+<li><strong>channel阻塞</strong>：当goroutine读写channel发生阻塞时，会调用gopark函数，该<strong>G脱离当前的M和P</strong>，调度器将新的G放入当前M。</li>
+<li><strong>系统调用</strong>：当某个G由于系统调用陷入内核态，该<strong>P就会脱离当前M</strong>，此时P会更新自己的状态为Psyscall，M与G相互绑定，进行系统调用。结束以后，若该P状态还是Psyscall，则直接关联该M和G，否则使用闲置的处理器处理该G。</li>
+<li><strong>系统监控</strong>：当某个G在P上运行的时间超过10ms时候，或者P处于Psyscall状态过长等情况就会调用retake函数，触发新的调度。</li>
+<li><strong>主动让出</strong>：由于是协作式调度，该G会主动让出当前的P（通过GoSched），更新状态为Grunnable，该P会调度队列中的G运行。</li>
+</ul>
+<h3 id="有若干个goroutine，有一个panic会怎么样？"><a href="#有若干个goroutine，有一个panic会怎么样？" class="headerlink" title="有若干个goroutine，有一个panic会怎么样？"></a>有若干个goroutine，有一个panic会怎么样？</h3><p>  有一个panic，那么剩余goroutine也会退出，程序退出。如果不想程序退出，那么必须通过调用 recover() 方法来捕获 panic 并恢复将要崩掉的程序。</p>
+<h3 id="defer可以捕获goroutine的子goroutine吗？"><a href="#defer可以捕获goroutine的子goroutine吗？" class="headerlink" title="defer可以捕获goroutine的子goroutine吗？"></a>defer可以捕获goroutine的子goroutine吗？</h3><p>  不可以。它们处于不同的调度器P中。对于子goroutine，必须通过 <strong>recover() 机制来进行恢复</strong>，然后结合日志进行打印（或者通过channel传递error）</p>
+<h3 id="什么是go调度器？为什么会有调度器？调度器的优点？"><a href="#什么是go调度器？为什么会有调度器？调度器的优点？" class="headerlink" title="什么是go调度器？为什么会有调度器？调度器的优点？"></a>什么是go调度器？为什么会有调度器？调度器的优点？</h3><ul>
+<li>在Go中，调度器的功能是<strong>把可运行的goroutine分配到工作线程M上</strong>。Go调度本质是把大量的goroutine分配到少量线程上去执行，并利用多核并行，实现更强大的并发。</li>
+<li>最开始只有单进程，计算机只能一个任务一个任务处理，后来出现了多线程、多进程，但是设计变得很复杂且不可避免，然后就是Go所出现的协程，它就是一种用户态的轻量级线程，<strong>而通过把多个协程调度到多个线程上就可以有更好的性能表现，而这个就是调度器所负责的工作</strong>。</li>
+<li>优点：Go 语言的调度器<strong>通过使用与 CPU 数量相等的线程减少线程频繁切换的内存开销</strong>，同时在每一个线程上执行额外开销更低的 goroutine 来降低操作系统和硬件的负载。</li>
+</ul>
+<h3 id="说下什么是GMP模型？"><a href="#说下什么是GMP模型？" class="headerlink" title="说下什么是GMP模型？"></a><strong>说下什么是GMP模型？</strong></h3><ul>
+<li>G 代表着** goroutine**，即协程</li>
+<li>P 代表着<strong>上下文处理器</strong>，每个P还有自己的本地队列，存放的也是等待运行的G。</li>
+<li>M 代表 <strong>thread 线程</strong>，想运行任务就要获得P，从P的本地队列中获取G。</li>
+<li>这个模型中还包括全局队列，存放等待运行的G。</li>
+</ul>
+<h3 id="说下go-func的整体过程？（说下GMP调度流程）"><a href="#说下go-func的整体过程？（说下GMP调度流程）" class="headerlink" title="说下go func的整体过程？（说下GMP调度流程）"></a>说下go func的整体过程？（说下GMP调度流程）</h3><p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/2sgA65fwb1YEVs2rFCBByr/image.png?auth_key=1709271975-vKQS2XgCKEpgdV1iyVdXDb-0-adf353b11826d529278e05c4a9cd0d3a"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/2sgA65fwb1YEVs2rFCBByr/image.png?auth_key=1709271975-vKQS2XgCKEpgdV1iyVdXDb-0-adf353b11826d529278e05c4a9cd0d3a"  lazyload></a></p>
+<ol>
+<li><p>首先通过**go func()**创建一个goroutine</p>
+</li>
+<li><p>新创建的G会先保存在<strong>P的本地队列</strong>中，如果P的本地队列已经<strong>满了就会保存在全局的队列</strong>中</p>
+</li>
+<li><p>G只能运行在M中，一个M必须持有一个P，<strong>M与P是1：1的关系</strong></p>
+<p> M会从P的本地队列弹出一个可执行状态的G来执行，如果P的本地队列为空，就会想其他的<strong>M-P</strong>组合偷取一个可执行的G来执行</p>
+</li>
+<li><p>一个M调度G执行的过程是一个循环机制</p>
+</li>
+<li><p>当 G因为<strong>系统调用(syscall)</strong> 阻塞时会阻塞 M，此时 P会和 M解绑即 <strong>hand off</strong>，并寻找新的 idle 的 M，若没有 idle 的 M就会新建⼀个 M</p>
+</li>
+<li><p>当 G因 **channel **或者 <strong>network I&#x2F;O 阻塞</strong>时，不会阻塞 M，M会寻找其他 runnable 的 G</p>
+</li>
+<li><p>当这个M-G系统调用结束时候，这个G会<strong>尝试获取一个空闲的P</strong>执行，并放入到这个P的<strong>本地队列</strong>。如果获取不到P，那么这个线程M变成休眠状态， 加入到空闲线程中，然后这个G会被放入全局队列中</p>
+</li>
+</ol>
+<h3 id="那GMP模型为什么要有P呢，线程M直接从全局队列中拿不好吗？"><a href="#那GMP模型为什么要有P呢，线程M直接从全局队列中拿不好吗？" class="headerlink" title="- 那GMP模型为什么要有P呢，线程M直接从全局队列中拿不好吗？"></a>- 那GMP模型为什么要有P呢，线程M直接从全局队列中拿不好吗？</h3><ul>
+<li>每个 P 有自己的本地队列，<strong>大幅度的减轻了对全局队列的直接依赖</strong>，所带来的效果就是<strong>锁竞争的减少</strong>。而 GM 模型的性能开销大头就是锁竞争。</li>
+<li>每个 P 相对的平衡上，在 GMP 模型中也实现了 Work Stealing （工作量窃取机制）算法，如果 P 的本地队列为空，则会从全局队列或其他 P 的本地队列中窃取可运行的 G 来运行，减少空转，提高了资源利用率。</li>
+</ul>
+<h3 id="GMP模型中p和m的数量，以及其数量关系？"><a href="#GMP模型中p和m的数量，以及其数量关系？" class="headerlink" title="- GMP模型中p和m的数量，以及其数量关系？"></a>- GMP模型中p和m的数量，以及其数量关系？</h3><ul>
+<li>默认<strong>P的数量 &#x3D; CPU 个数</strong>，由启动时环境变量 <strong>$GOMAXPROCS</strong> 或者是由 runtime 的方法 <strong>GOMAXPROCS()</strong> 决定，上限是<strong>256</strong></li>
+<li>M的数量是<strong>内核线程数量</strong>，<strong>默认和上限是10000</strong>，但实际开发中并不会达到这个数量，<strong>runtime&#x2F;debug</strong> 中的 **SetMaxThreads **函数，设置 M 的最大数量，一个 M 阻塞了，会创建新的 M。</li>
+<li>M 与 P 的数量<strong>没有绝对关系</strong>，一个 M 阻塞，P 就会去创建或者切换另一个 M，所以，即使 P 的默认数量是 1，也有可能会创建很多个 M 出来。</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8B%E8%BF%9B%E7%A8%8B%E5%92%8C%E5%8D%8F%E7%A8%8B%E5%92%8C%E7%BA%BF%E7%A8%8B%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">说下进程和协程和线程有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E5%8F%91%E7%94%9F%E5%8D%8F%E7%A8%8B%E5%88%87%E6%8D%A2%EF%BC%9F%EF%BC%88%E5%8D%8F%E7%A8%8B%E5%88%87%E6%8D%A2%E7%9A%84%E6%97%B6%E6%9C%BA%EF%BC%9F%EF%BC%89"><span class="top-box-text">go什么时候发生协程切换？（协程切换的时机？）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E5%8F%91%E7%94%9F%E9%98%BB%E5%A1%9E%E5%91%A2%EF%BC%9F"><span class="top-box-text">go什么时候会发生阻塞呢？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%9C%89%E8%8B%A5%E5%B9%B2%E4%B8%AAgoroutine%EF%BC%8C%E6%9C%89%E4%B8%80%E4%B8%AApanic%E4%BC%9A%E6%80%8E%E4%B9%88%E6%A0%B7%EF%BC%9F"><span class="top-box-text">有若干个goroutine，有一个panic会怎么样？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#defer%E5%8F%AF%E4%BB%A5%E6%8D%95%E8%8E%B7goroutine%E7%9A%84%E5%AD%90goroutine%E5%90%97%EF%BC%9F"><span class="top-box-text">defer可以捕获goroutine的子goroutine吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AFgo%E8%B0%83%E5%BA%A6%E5%99%A8%EF%BC%9F%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E6%9C%89%E8%B0%83%E5%BA%A6%E5%99%A8%EF%BC%9F%E8%B0%83%E5%BA%A6%E5%99%A8%E7%9A%84%E4%BC%98%E7%82%B9%EF%BC%9F"><span class="top-box-text">什么是go调度器？为什么会有调度器？调度器的优点？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8B%E4%BB%80%E4%B9%88%E6%98%AFGMP%E6%A8%A1%E5%9E%8B%EF%BC%9F"><span class="top-box-text">说下什么是GMP模型？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8Bgo-func%E7%9A%84%E6%95%B4%E4%BD%93%E8%BF%87%E7%A8%8B%EF%BC%9F%EF%BC%88%E8%AF%B4%E4%B8%8BGMP%E8%B0%83%E5%BA%A6%E6%B5%81%E7%A8%8B%EF%BC%89"><span class="top-box-text">说下go func的整体过程？（说下GMP调度流程）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%82%A3GMP%E6%A8%A1%E5%9E%8B%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E6%9C%89P%E5%91%A2%EF%BC%8C%E7%BA%BF%E7%A8%8BM%E7%9B%B4%E6%8E%A5%E4%BB%8E%E5%85%A8%E5%B1%80%E9%98%9F%E5%88%97%E4%B8%AD%E6%8B%BF%E4%B8%8D%E5%A5%BD%E5%90%97%EF%BC%9F"><span class="top-box-text">- 那GMP模型为什么要有P呢，线程M直接从全局队列中拿不好吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#GMP%E6%A8%A1%E5%9E%8B%E4%B8%ADp%E5%92%8Cm%E7%9A%84%E6%95%B0%E9%87%8F%EF%BC%8C%E4%BB%A5%E5%8F%8A%E5%85%B6%E6%95%B0%E9%87%8F%E5%85%B3%E7%B3%BB%EF%BC%9F"><span class="top-box-text">- GMP模型中p和m的数量，以及其数量关系？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-std/">
+          <h3 class="post-title">
+            下一篇：Golang-八股-std
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
