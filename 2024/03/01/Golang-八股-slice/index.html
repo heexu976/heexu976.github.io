@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang-八股-slice</title>
+<meta name="keywords" content="Golang-八股-slice, HeXu">
+<meta name="description" content="数组和切片有什么区别？  数组在go中不常用，一般用的都是切片，区别如下
+
+Go中数组是定长的，且每个长度的数组都是不同的类型，而切片是动态扩容的，其类型和长度是无关的。
+
+数组是一片连续的内存，slice实际上是一个结构体，有三个字段le">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang-八股-slice">
+<meta property="og:description" content="数组和切片有什么区别？  数组在go中不常用，一般用的都是切片，区别如下
+
+Go中数组是定长的，且每个长度的数组都是不同的类型，而切片是动态扩容的，其类型和长度是无关的。
+
+数组是一片连续的内存，slice实际上是一个结构体，有三个字段le">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang-八股-slice</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-01</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h3 id="数组和切片有什么区别？"><a href="#数组和切片有什么区别？" class="headerlink" title="数组和切片有什么区别？"></a>数组和切片有什么区别？</h3><p>  数组在go中不常用，一般用的都是切片，区别如下</p>
+<ul>
+<li><p>Go中数组是<strong>定长</strong>的，且每个长度的数组都是不同的类型，而切片是<strong>动态扩容</strong>的，其类型和长度是无关的。</p>
+</li>
+<li><p>数组是一片<strong>连续的内存</strong>，slice实际上是一个<strong>结构体，有三个字段len（长度），cap（容量），array（指针，指向底层数组）</strong></p>
+<p>  其指针指向底层数组，且这个底层数组可以被<strong>多个slice同时指向</strong>，所以操作一个slice中的元素可能影响到其他slice。</p>
+</li>
+</ul>
+<p>  tips：在使用<code>s[low:high]</code>或者<code>s[low : high : max]</code>创建新切片的时候，默认都是直接指向原数组，如果使用<code>append</code>函数时原数组的容量足够那就直接追加，如果不够那就自己另起炉灶。</p>
+<h3 id="切片的容量是如何增长的？"><a href="#切片的容量是如何增长的？" class="headerlink" title="切片的容量是如何增长的？"></a><strong>切片的容量是如何增长的？</strong></h3><p>  使用append向slice追加元素实际上就是往底层数组上追加元素，如果底层数组的len不够slice就会迁移到新的内存位置，并预留一定的buffer。</p>
+<ul>
+<li><p>go1.18版本之前：</p>
+<p>  <strong>若原slice容量小于1024，新的slice会扩容为原容量的2倍</strong></p>
+<p>  <strong>若大于等于1024，会扩容为原来的1.25倍</strong></p>
+<p>  go1.18版本之后：</p>
+<p>  <strong>若原slice容量小于256，新的slice会扩容为原容量的2倍</strong></p>
+<p>  <strong>若大于等于1024，则会扩容为</strong> **<code>newcap = oldcap+(oldcap+3*256)/4</code><strong>（</strong><code>newcap = 1.25oldcap +192</code>**）</p>
+</li>
+<li><p>实际上源码中还会根据内存分配策略对newcap做一个<strong>内存对齐</strong>，进行内存对齐之后，<strong>新slice的容量是要大于等于newcap</strong>（以下代码取自源码中的<code>growslice</code>函数）</p>
+</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">capmem &#x3D; roundupsize(uintptr(newcap) * ptrSize)
+
+newcap &#x3D; int(capmem &#x2F; ptrSize)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="向一个nil的slice（未初始化）添加元素会怎么样？"><a href="#向一个nil的slice（未初始化）添加元素会怎么样？" class="headerlink" title="向一个nil的slice（未初始化）添加元素会怎么样？"></a>向一个nil的slice（未初始化）添加元素会怎么样？</h3><p>  append()函数本身会有判断，可以帮忙初始化，本质上还是用过append函数获得底层数组的扩容。通过<code>mallocgc</code>向Go的内存管理器申请内存，然后赋给原来的nil slice</p>
+<h3 id="切片作为函数参数是怎么传递的？"><a href="#切片作为函数参数是怎么传递的？" class="headerlink" title="切片作为函数参数是怎么传递的？"></a><strong>切片作为函数参数是怎么传递的？</strong></h3><p>  <strong>Go里面函数传参只有值传递一种方式</strong>，所以当切片作为参数时，其实也是切片的拷贝，但是在拷贝的切片中，其包含的指针成员变量的值是一样的，也就是说它们指向的数据源是一样，因此在调用函数内修改形参能影响实参.</p>
+<p>  如果直接传slice（<code>func f(s []int)</code>），则实参slice并不会被函数中的操作改变，如果传的是slice的指针（<code>func f(s *[]int)</code>），是会改变原slice的。</p>
+<p>  但是，<strong>不论是传slice还是slice的指针，如果改变了底层数组的数据，就是会反映到实参slice的底层数据中</strong>。因为就算你传的是slice，但是底层数据在slice里就是一个指针，在代码里，是直接通过类似 <code>s[i]=10</code> 这种操作改变 slice 底层数组元素值。</p>
+<h3 id="如何判断两个字符串切片是相等的？"><a href="#如何判断两个字符串切片是相等的？" class="headerlink" title="如何判断两个字符串切片是相等的？"></a>如何判断两个字符串切片是相等的？</h3><p>  <code>reflect.DeepEqual()</code> ， 但反射非常影响性能</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%95%B0%E7%BB%84%E5%92%8C%E5%88%87%E7%89%87%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">数组和切片有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%88%87%E7%89%87%E7%9A%84%E5%AE%B9%E9%87%8F%E6%98%AF%E5%A6%82%E4%BD%95%E5%A2%9E%E9%95%BF%E7%9A%84%EF%BC%9F"><span class="top-box-text">切片的容量是如何增长的？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%90%91%E4%B8%80%E4%B8%AAnil%E7%9A%84slice%EF%BC%88%E6%9C%AA%E5%88%9D%E5%A7%8B%E5%8C%96%EF%BC%89%E6%B7%BB%E5%8A%A0%E5%85%83%E7%B4%A0%E4%BC%9A%E6%80%8E%E4%B9%88%E6%A0%B7%EF%BC%9F"><span class="top-box-text">向一个nil的slice（未初始化）添加元素会怎么样？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%88%87%E7%89%87%E4%BD%9C%E4%B8%BA%E5%87%BD%E6%95%B0%E5%8F%82%E6%95%B0%E6%98%AF%E6%80%8E%E4%B9%88%E4%BC%A0%E9%80%92%E7%9A%84%EF%BC%9F"><span class="top-box-text">切片作为函数参数是怎么传递的？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E5%88%A4%E6%96%AD%E4%B8%A4%E4%B8%AA%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%88%87%E7%89%87%E6%98%AF%E7%9B%B8%E7%AD%89%E7%9A%84%EF%BC%9F"><span class="top-box-text">如何判断两个字符串切片是相等的？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/02/29/Golang-%E5%85%AB%E8%82%A1-%E6%9D%82%E9%A1%B9/">
+          <h3 class="post-title">
+            下一篇：Golang-八股-杂项
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
