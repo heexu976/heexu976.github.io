@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang-八股-sync-锁</title>
+<meta name="keywords" content="Golang-八股-sync-锁, HeXu">
+<meta name="description" content="除了锁之外还有什么方式可以安全读写共享变量？
+gorutine+channel：将共享变量的读写放到一个 goroutine 中，其它 goroutine 通过 channel 进行读写操作。
+信号量：可以用个数为 1 的信号量（semap">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang-八股-sync-锁">
+<meta property="og:description" content="除了锁之外还有什么方式可以安全读写共享变量？
+gorutine+channel：将共享变量的读写放到一个 goroutine 中，其它 goroutine 通过 channel 进行读写操作。
+信号量：可以用个数为 1 的信号量（semap">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang-八股-sync-锁</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-01</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h3 id="除了锁之外还有什么方式可以安全读写共享变量？"><a href="#除了锁之外还有什么方式可以安全读写共享变量？" class="headerlink" title="除了锁之外还有什么方式可以安全读写共享变量？"></a>除了锁之外还有什么方式可以安全读写共享变量？</h3><ol>
+<li><strong>gorutine+channel</strong>：将共享变量的读写放到一个 goroutine 中，其它 goroutine 通过 channel 进行读写操作。</li>
+<li><strong>信号量</strong>：可以用个数为 1 的信号量（semaphore）实现互斥</li>
+</ol>
+<h3 id="go竞态条件了解吗？"><a href="#go竞态条件了解吗？" class="headerlink" title="go竞态条件了解吗？"></a>go竞态条件了解吗？</h3><p>  所谓竞态竞争，就是当<strong>两个或以上的goroutine访问相同资源时候，对资源进行读&#x2F;写。</strong></p>
+<p>  比如<code>var a int = 0</code>，有两个协程分别对a+&#x3D;1，我们发现最后a不一定为2.这就是竞态竞争。</p>
+<p>  通常我们可以用<code>go run -race xx.go</code>来进行检测。</p>
+<p>  解决方法是，对临界区资源上锁，或者使用原子操作(atomics)，原子操作的开销小于上锁。</p>
+<h3 id="go中原子操作与互斥锁的区别？"><a href="#go中原子操作与互斥锁的区别？" class="headerlink" title="go中原子操作与互斥锁的区别？"></a>go中原子操作与互斥锁的区别？</h3><ol>
+<li>互斥锁是一种<strong>数据结构</strong>，用来让<strong>一个线程执行程序的关键部分</strong>，完成互斥的多个操作。</li>
+<li>原子操作是<strong>针对某个值</strong>的<strong>单个互斥操作</strong>。atomic源码位于<code>sync\atomic</code>。通过阅读源码可知，atomic采用<strong>CAS</strong>（CompareAndSwap）的方式实现的。所谓CAS就是使用了CPU中的原子性操作。在操作共享变量的时候，CAS不需要对其进行加锁，而是通过类似于乐观锁的方式进行检测，总是假设被操作的值未曾改变（即与旧值相等），并一旦确认这个假设的真实性就立即进行值替换。本质上是<strong>不断占用CPU资源来避免加锁的开销</strong>。</li>
+</ol>
+<h3 id="悲观锁和乐观锁分别是什么意思？mutex是乐观锁还是悲观锁？"><a href="#悲观锁和乐观锁分别是什么意思？mutex是乐观锁还是悲观锁？" class="headerlink" title="- 悲观锁和乐观锁分别是什么意思？mutex是乐观锁还是悲观锁？"></a>- 悲观锁和乐观锁分别是什么意思？mutex是乐观锁还是悲观锁？</h3><ul>
+<li>在修改数据之前<strong>先锁定，再修改</strong>的方式被称之为悲观并发控制。</li>
+<li>乐观锁假设数据一般情况不会造成冲突，<strong>先尝试修改，如果发生冲突就让用户决定怎么做</strong>，这样可以提高吞吐量。</li>
+<li>go中的<strong>mutex是悲观锁</strong></li>
+</ul>
+<h3 id="mutex的正常模式和饥饿模式分别是什么意思？"><a href="#mutex的正常模式和饥饿模式分别是什么意思？" class="headerlink" title="- mutex的正常模式和饥饿模式分别是什么意思？"></a>- <strong>mutex的正常模式和饥饿模式分别是什么意思？</strong></h3><p>简单来说</p>
+<p>正常模式下，所有goroutine按照FIFO的顺序进行锁获取，被唤醒的goroutine和新请求锁的goroutine同时进行锁获取，通常<strong>新请求锁的goroutine更容易获取锁</strong>(持续占有cpu)，被唤醒的goroutine则不容易获取到锁。公平性：否。</p>
+<p>饥饿模式下，所有尝试获取锁的goroutine进行等待排队，<strong>新请求锁的goroutine不会进行锁获取</strong>(禁用自旋)，而是加入队列尾部等待获取锁。公平性：是。</p>
+<ul>
+<li>正常模式<ol>
+<li>当前的mutex只有一个gorutine来获取，那么没有竞争，直接返回。</li>
+<li>新的goruntine进来，如果当前mutex已经被获取了，则该goruntine进入<strong>一个先入先出的waiter队列</strong>，在mutex被释放后，waiter按照先进先出的方式获取锁。该goruntine会处于自旋状态(不挂起，继续占有cpu)。</li>
+<li>新的goruntine进来，在高并发情况下，被唤醒的 waiter 可能比较悲剧地获取不到锁，这时，它会被插入到队列的前面。如果 <strong>waiter 获取不到锁的时间超过阈值 1 毫秒</strong>，那么，这个 Mutex 就进入到了饥饿模式。</li>
+</ol>
+</li>
+<li>饥饿模式<br><strong>Mutex 的拥有者将直接把锁交给队列最前面的 waiter</strong>。新来的 goroutine 不会尝试获取锁，即使看起来锁没有被持有，它也不会去抢，也不会 spin（自旋），它会乖乖地加入到等待队列的尾部。 如果拥有 Mutex 的 waiter 发现下面两种情况的其中之一，它就会把这个 Mutex 转换成正常模式:<ol>
+<li>此 waiter 已经是队列中的最后一个 waiter 了，没有其它的等待锁的 goroutine 了；</li>
+<li>此 waiter 的等待时间小于 1 毫秒。</li>
+</ol>
+</li>
+</ul>
+<h3 id="go中加锁和解锁过程可以描述一下吗？"><a href="#go中加锁和解锁过程可以描述一下吗？" class="headerlink" title="go中加锁和解锁过程可以描述一下吗？"></a>go中加锁和解锁过程可以描述一下吗？</h3><p><strong>加锁</strong>：</p>
+<p>简单来说就是通过<strong>CAS原子操作</strong>命令<strong>获取锁</strong>，根据不同的场景选择自旋重试加锁或者阻塞等待被唤醒后加锁</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">func (m *Mutex) Lock() &#123;
+  if atomic.CompareAndSwapInt32(&amp;m.state, 0, mutexLocked) &#123;
+    return
+  &#125;
+  m.lockSlow()
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>解锁</strong></p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">func (m *Mutex) Unlock() &#123;
+  new :&#x3D; atomic.AddInt32(&amp;m.state, -mutexLocked)
+  if new !&#x3D; 0 &#123;
+    m.unlockSlow(new)
+  &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>注意：</p>
+<ul>
+<li>在Lock()之前不使用UnLock()会导致panic异常</li>
+<li>使用Lock()加锁之后，再使用Lock()会导致死锁，因为不支持重入锁，需要调用UnLock()解锁之后次才行</li>
+<li>锁和goroutine之间没有关联，一个goroutine可以Lock()，另一个可以UnLock()</li>
+</ul>
+<h3 id="mutex锁的结构了解过吗？简单说说"><a href="#mutex锁的结构了解过吗？简单说说" class="headerlink" title="mutex锁的结构了解过吗？简单说说"></a>mutex锁的结构了解过吗？简单说说</h3><pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">type Mutex struct &#123;
+  state int32
+  sema  uint32
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<ul>
+<li><p>其中的<strong>state</strong>表示的是锁的状态，有锁定、被唤醒、饥饿模式等，并用state的二进制位来表示，不同模式下会有不同的处理方式</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/pJm5HADSnxvKubhVFLprce/image.png?auth_key=1709299878-m1HSivHNLUnXFWcoeumbG2-0-17c92e66e8b180bdd5c6c131cd150e4f"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/pJm5HADSnxvKubhVFLprce/image.png?auth_key=1709299878-m1HSivHNLUnXFWcoeumbG2-0-17c92e66e8b180bdd5c6c131cd150e4f"  lazyload></a></p>
+<ul>
+<li><code>locked</code>：表示互斥锁的锁定状态（0表示没有锁定，1表示已被锁定）</li>
+<li><code>woken</code>：表示是否有协程已经被唤醒（0表示没有协程唤醒，1表示已有协程唤醒）</li>
+<li><code>starving</code>：表示这个锁是否处于饥饿状态（0表示没有饥饿，1表示饥饿状态）</li>
+<li><code>waitersCount</code>：当前互斥锁上等待的 Goroutine 个数</li>
+</ul>
+</li>
+<li><p><strong>sema</strong>就是信号量，对sema通过取哈希值和查找就可以得到sudog队列，用于控制goroutine的阻塞与唤醒，若是阻塞就将g添加到sudog等待队列并且阻塞g，若是唤醒就从sudog中取出g并且唤醒</p>
+</li>
+</ul>
+<h3 id="sync-waitGroup说说底层怎么实现的？"><a href="#sync-waitGroup说说底层怎么实现的？" class="headerlink" title="sync.waitGroup说说底层怎么实现的？"></a>sync.waitGroup说说底层怎么实现的？</h3><p>使用如下：</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">func main() &#123;
+  wg :&#x3D; sync.WaitGroup&#123;&#125;
+  wg.Add(1) &#x2F;&#x2F; wg计数+1
+  go func() &#123;
+    defer wg.Done() &#x2F;&#x2F; wg计数-1
+    time.Sleep(3 * time.Second)
+  &#125;()
+  wg.Wait() &#x2F;&#x2F; 等待 wg 结束(wg计数为0)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>  结构体如下</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">type WaitGroup struct &#123;
+    &#x2F;&#x2F; 避免复制使用的一个技巧，可以告诉vet工具违反了复制使用的规则
+    noCopy noCopy
+    &#x2F;&#x2F; 64bit(8bytes)的值分成两段，高32bit是计数值，低32bit是waiter的计数
+    &#x2F;&#x2F; 另外32bit是用作信号量的
+    &#x2F;&#x2F; 因为64bit值的原子操作需要64bit对齐，但是32bit编译器不支持，所以数组中的元素在不同的架构中不一样，具体处理看下面的方法
+    &#x2F;&#x2F; 总之，会找到对齐的那64bit作为state，其余的32bit做信号量
+    state1 [3]uint32
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ul>
+<li><code>noCopy</code>: 这个是一个使用技巧, 如果一个结构体中有此字段, vet 工具会在编译时检查避免被 copy 使用</li>
+<li><code>state1</code>: 从定义可以看出, 其长度为3, 每个32bit, 里面包含了<code>waitGroup</code>的计数值和信号量和 waiter 计数</li>
+</ul>
+<p>  state1结构：</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">state[0]  &#x2F;&#x2F; 调用 wait 等待的 goroutine 数量
+state[1]  &#x2F;&#x2F; 计数
+state[2]  &#x2F;&#x2F; 信号量<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<ul>
+<li><strong><code>Add</code></strong> 主要是对<code>state1</code>字段中的计数值部分进行操作, 步骤如下:<ol>
+<li>将参数<code>delta</code>左移32位</li>
+<li>将值加到计数值上(<code>state1[1]</code>), 这个值是可负可正</li>
+</ol>
+</li>
+<li><strong><code>Done</code><strong>实际上就是调用<code>Add(-1)</code>，而检测到<code>-1</code>之后的计数值为0时, 通过</strong>信号量</strong>唤醒正在<code>wait</code>的阻塞协程</li>
+<li>调用 <strong><code>wait</code></strong> 时, 会将<code>waiter</code>+1, 然后将自身加入到等待队列中并阻塞, 等待<code>Done</code>时的唤醒</li>
+</ul>
+<h3 id="一些tips"><a href="#一些tips" class="headerlink" title="一些tips"></a>一些tips</h3><p>  sync.Waitgroup 里面有 noCopy 结构，不应该使用值拷贝，只能使用指针传递。</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%99%A4%E4%BA%86%E9%94%81%E4%B9%8B%E5%A4%96%E8%BF%98%E6%9C%89%E4%BB%80%E4%B9%88%E6%96%B9%E5%BC%8F%E5%8F%AF%E4%BB%A5%E5%AE%89%E5%85%A8%E8%AF%BB%E5%86%99%E5%85%B1%E4%BA%AB%E5%8F%98%E9%87%8F%EF%BC%9F"><span class="top-box-text">除了锁之外还有什么方式可以安全读写共享变量？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E7%AB%9E%E6%80%81%E6%9D%A1%E4%BB%B6%E4%BA%86%E8%A7%A3%E5%90%97%EF%BC%9F"><span class="top-box-text">go竞态条件了解吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E5%8E%9F%E5%AD%90%E6%93%8D%E4%BD%9C%E4%B8%8E%E4%BA%92%E6%96%A5%E9%94%81%E7%9A%84%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">go中原子操作与互斥锁的区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%82%B2%E8%A7%82%E9%94%81%E5%92%8C%E4%B9%90%E8%A7%82%E9%94%81%E5%88%86%E5%88%AB%E6%98%AF%E4%BB%80%E4%B9%88%E6%84%8F%E6%80%9D%EF%BC%9Fmutex%E6%98%AF%E4%B9%90%E8%A7%82%E9%94%81%E8%BF%98%E6%98%AF%E6%82%B2%E8%A7%82%E9%94%81%EF%BC%9F"><span class="top-box-text">- 悲观锁和乐观锁分别是什么意思？mutex是乐观锁还是悲观锁？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#mutex%E7%9A%84%E6%AD%A3%E5%B8%B8%E6%A8%A1%E5%BC%8F%E5%92%8C%E9%A5%A5%E9%A5%BF%E6%A8%A1%E5%BC%8F%E5%88%86%E5%88%AB%E6%98%AF%E4%BB%80%E4%B9%88%E6%84%8F%E6%80%9D%EF%BC%9F"><span class="top-box-text">- mutex的正常模式和饥饿模式分别是什么意思？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%AD%E5%8A%A0%E9%94%81%E5%92%8C%E8%A7%A3%E9%94%81%E8%BF%87%E7%A8%8B%E5%8F%AF%E4%BB%A5%E6%8F%8F%E8%BF%B0%E4%B8%80%E4%B8%8B%E5%90%97%EF%BC%9F"><span class="top-box-text">go中加锁和解锁过程可以描述一下吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#mutex%E9%94%81%E7%9A%84%E7%BB%93%E6%9E%84%E4%BA%86%E8%A7%A3%E8%BF%87%E5%90%97%EF%BC%9F%E7%AE%80%E5%8D%95%E8%AF%B4%E8%AF%B4"><span class="top-box-text">mutex锁的结构了解过吗？简单说说</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#sync-waitGroup%E8%AF%B4%E8%AF%B4%E5%BA%95%E5%B1%82%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84%EF%BC%9F"><span class="top-box-text">sync.waitGroup说说底层怎么实现的？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%80%E4%BA%9Btips"><span class="top-box-text">一些tips</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-GC-%E5%86%85%E5%AD%98-%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98/">
+          <h3 class="post-title">
+            下一篇：Golang-八股-GC-内存-性能调优
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
