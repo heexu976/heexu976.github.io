@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang-八股-map</title>
+<meta name="keywords" content="Golang-八股-map, HeXu">
+<meta name="description" content="说下什么是map？  &lt;key-value&gt;键值对组成的数据结构，同一key只会出现一次
+map底层的数据结构是怎么实现的？  首先其采用的哈希查找表的数据结构，使用链表解决哈希冲突
+  Go中的map本身是一个指针，指向hma">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang-八股-map">
+<meta property="og:description" content="说下什么是map？  &lt;key-value&gt;键值对组成的数据结构，同一key只会出现一次
+map底层的数据结构是怎么实现的？  首先其采用的哈希查找表的数据结构，使用链表解决哈希冲突
+  Go中的map本身是一个指针，指向hma">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang-八股-map</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-01</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h3 id="说下什么是map？"><a href="#说下什么是map？" class="headerlink" title="说下什么是map？"></a>说下什么是map？</h3><p>  &lt;<code>key-value</code>&gt;键值对组成的数据结构，同一key只会出现一次</p>
+<h3 id="map底层的数据结构是怎么实现的？"><a href="#map底层的数据结构是怎么实现的？" class="headerlink" title="map底层的数据结构是怎么实现的？"></a><strong>map底层的数据结构是怎么实现的？</strong></h3><p>  首先其采用的<strong>哈希查找表</strong>的数据结构，使用<strong>链表</strong>解决<strong>哈希冲突</strong></p>
+<p>  Go中的map本身是一个指针，指向<strong>hmap</strong>结构体，该结构体中比较重要的字段分别是元素个数<strong>count</strong>，<strong>桶的对数B</strong>，以及指向<strong>buckets数组</strong>的指针buckets。</p>
+<p>  而其中的buckets数组则是由一个一个桶组成，也就是<strong>bmap</strong>，其存储了<strong>8个key-value键值对</strong>，还有一个<strong>存储所有key的hash值的高八位的数组</strong>，还有一个指向下一个桶的<strong>指针overflow</strong>。</p>
+<h3 id="map是如何初始化的？"><a href="#map是如何初始化的？" class="headerlink" title="map是如何初始化的？"></a>map是如何初始化的？</h3><pre><code><pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">mp :&#x3D; make(map[string]string, 10)<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+</code></pre>
+<ol>
+<li>首先创建一个<strong>hmap结构体</strong>对象</li>
+<li>生成一个<strong>哈希因子hash0</strong>并赋值到hmap对象中</li>
+<li>根据hint&#x3D;10，根据<strong>算法规则</strong>计算<strong>B</strong></li>
+</ol>
+<pre><code><pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">hint            B
+0~8             0
+9~13            1
+14~26           2
+....<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+</code></pre>
+<ol start="4">
+<li>根据<strong>B</strong>去创建桶，也就是<strong>bmap对象</strong>，并且存放在<strong>buckets</strong>数组中，当前bmap的数量应为2<ol>
+<li>当 B &lt; 4 的时候，根据 B 创建桶的个数的规则为 ：2^{B} (标准桶)</li>
+<li>当 B &gt;&#x3D; 4 的时候，根据 B 创建桶的个数的规则为 2^{B} + 2^{B-4}(标准桶 + 溢出桶)</li>
+</ol>
+</li>
+</ol>
+<h3 id="slice和map作为函数参数时有什么区别？"><a href="#slice和map作为函数参数时有什么区别？" class="headerlink" title="slice和map作为函数参数时有什么区别？"></a>slice和map作为函数参数时有什么区别？</h3><p>  map其实是一个<strong>hmap</strong>的<strong>指针</strong>，函数内修改map会反映到外部的map</p>
+<p>  不论是传slice还是slice的指针，如果改变了底层数组的数据，就是会反映到实参slice的底层数据中。因为就算你传的是slice，但是底层数据在slice里就是一个指针，在代码里，是直接通过类似 s[i]&#x3D;10 这种操作改变 slice 底层数组元素值。</p>
+<p>  但是如果函数中slice发生了<strong>扩容</strong>，那么slice的底层数组就会发生拷贝，指向新的底层数组，这样就不会影响外部的slice</p>
+<h3 id="map中的key是如何定位的？（描述下写入数据、读取数据的过程？）"><a href="#map中的key是如何定位的？（描述下写入数据、读取数据的过程？）" class="headerlink" title="map中的key是如何定位的？（描述下写入数据、读取数据的过程？）"></a><strong>map中的key是如何定位的？（描述下写入数据、读取数据的过程？）</strong></h3><ol>
+<li>对key用哈希函数计算哈希值</li>
+<li>对哈希值取<strong>后B位</strong>为桶号，找到这个桶</li>
+<li>然后根据哈希值得<strong>前8位寻找tophash</strong>值，得到槽位号</li>
+<li>如果<strong>对应的槽位没有则从overflow指针</strong>继续查找</li>
+</ol>
+<h3 id="触发map扩容的条件是什么？"><a href="#触发map扩容的条件是什么？" class="headerlink" title="触发map扩容的条件是什么？"></a><strong>触发map扩容的条件是什么？</strong></h3><ul>
+<li>map中数据<strong>总个数&#x2F;桶个数</strong> （<strong>负载因子</strong>）&gt; 6.5,就会引发<strong>翻倍扩容</strong></li>
+<li>使用了<strong>太多溢出桶</strong>（若B≤15，则overflow数量 &gt; 2 ^ B或者B&gt;15，overflow≥2^15时），就会引发<strong>等量扩容</strong></li>
+</ul>
+<h3 id="说说翻倍（增量）扩容是如何扩容的（rehash是什么意思）"><a href="#说说翻倍（增量）扩容是如何扩容的（rehash是什么意思）" class="headerlink" title="说说翻倍（增量）扩容是如何扩容的（rehash是什么意思）"></a><strong>说说翻倍（增量）扩容是如何扩容的（rehash是什么意思）</strong></h3><p>  <strong>翻倍扩容</strong>就是将旧桶中的数据分流到<strong>新的两个桶</strong>中（比例不定），并且分流后的桶编号的位置为：同编号位置和翻倍后对应编号位置。</p>
+<ol>
+<li>遍历所有的key，根据key重新生成哈希值，并且根据哈希值的<strong>低B位</strong>来决定将此键值<strong>分流到哪个桶中</strong>（因为翻倍了，所以B比原来多1，所以低B位肯定比原来多一位，就看那一位是0是1来决定这个数据是迁移到与旧桶编号一致的位置还是迁移到翻倍后对应的编号位置），这就是rehash</li>
+<li>hmap数据结构中oldbuckets成员指身原bucket，而buckets指向了新申请的bucket。新的键值对被插入新的bucket中。 后续对map的访问操作会触发迁移，将oldbuckets中的键值对逐步的搬迁过来。当oldbuckets中的键值对全部搬迁完毕后，删除oldbuckets。</li>
+</ol>
+<h3 id="等量扩容是什么意思？"><a href="#等量扩容是什么意思？" class="headerlink" title="等量扩容是什么意思？"></a>等量扩容是什么意思？</h3><p>  就是把松散的键值对重新排列一次，以使bucket的使用率更高，进而保证更快的存取。</p>
+<h3 id="map的key为什么是无序的？"><a href="#map的key为什么是无序的？" class="headerlink" title="map的key为什么是无序的？"></a>map的key为什么是无序的？</h3><ul>
+<li>map 在扩容后，会发生** key 的搬迁**，原来落在同一个 bucket 中的 key中有些key就会进行搬迁。</li>
+<li>并且Go<strong>并不是从0号bucket进行遍历</strong>的，每次都是从一个<strong>随机序号的bucket</strong>进行遍历，并且也会在这个bucket中随机的一个key-value进行遍历</li>
+</ul>
+<h3 id="map的key类型和value类型有什么限制吗？"><a href="#map的key类型和value类型有什么限制吗？" class="headerlink" title="map的key类型和value类型有什么限制吗？"></a>map的key类型和value类型有什么限制吗？</h3><ul>
+<li>只要是<strong>可以比较的类型</strong>都可以当作key，也就是<strong>除了slice，map，functions</strong>这几种类型都是可以的</li>
+<li>任何类型都可以当作value</li>
+</ul>
+<h3 id="map是并发安全的吗？"><a href="#map是并发安全的吗？" class="headerlink" title="map是并发安全的吗？"></a>map是并发安全的吗？</h3><p>  map <strong>并不是</strong>一个线程安全的数据结构<br>同时读写一个 map 是未定义的行为，如果被检测到，会直接 panic。在增删改查的过程中都会检测写标志，一旦发现<strong>写标志置位（等于1）</strong>，则直接 <strong>panic</strong>。赋值和删除函数在检测完写标志是复位之后，先将写标志位置位，才会进行之后的操作</p>
+<h3 id="怎么处理对-map-进行并发访问？"><a href="#怎么处理对-map-进行并发访问？" class="headerlink" title="怎么处理对 map 进行并发访问？"></a>怎么处理对 map 进行并发访问？</h3><ol>
+<li>使用内置的sync.map</li>
+<li>使用读写锁实现并发安全map</li>
+</ol>
+<h3 id="sync-map底层原理"><a href="#sync-map底层原理" class="headerlink" title="sync.map底层原理"></a>sync.map底层原理</h3><p>  <a target="_blank" rel="noopener" href="https://www.cnblogs.com/yinbiao/p/15838957.html">https://www.cnblogs.com/yinbiao/p/15838957.html</a></p>
+<ol>
+<li>设计思想<ul>
+<li><p><strong>空间换时间</strong>：存放冗余的数据结构：<strong>read</strong>和<strong>dirty</strong>，二者存放的都是<strong>key-entry</strong>，entry其实是一个<strong>指针</strong>，指向value，read和dirty各自维护一套key，<strong>key指向的都是同一个value</strong>，也就是说，只要修改了这个entry，对read和dirty都是可见的</p>
+<p>  一切操作<strong>先去read</strong>中执行，因为read是<strong>并发读安全</strong>的，无需锁，实在在read中找不到，再去dirty中。read在sycn.map中是一种<strong>冗余</strong>的数据结构，因为read和dirty中数据有<strong>很大一部分是重复</strong>的，而且二者还会进行<strong>数据同步</strong></p>
+</li>
+<li><p><strong>读写分离</strong>：sync.map中有<strong>专门用于读</strong>的数据结构：read，将其和写操作分离开来，可以<strong>避免读写冲突</strong>，而采用读写分离策略的代价就是冗余的数据结构，其实还是空间换时间的思想</p>
+</li>
+<li><p><strong>双检查机制</strong>：在sync.map中，每次当read不符合要求要去操作dirty前，都会<strong>上锁</strong>，上锁后<strong>再次判断</strong>是否符合要求，因为read有可能在上锁期间，产生了变化，突然又符合要求了，read符合要求了，尽量还是在read中操作，因为read并发读安全</p>
+</li>
+<li><p><strong>延迟删除</strong>：在删除操作中，删除kv，仅仅只是先将需要删除的kv<strong>打一个标记</strong>，这样可以尽快的让delete操作<strong>先返回</strong>，减少耗时，在后面提升dirty时，再一次性的删除需要删除的kv</p>
+</li>
+<li><p><strong>read优先</strong>：需要进行读取，删除，更新操作时，<strong>优先操作read</strong>，因为read无锁的，更快，实在在read中得不到结果，再去dirty中</p>
+</li>
+<li><p><strong>状态机机制</strong>：entry的指针p，是有状态的，<strong>nil</strong>，<strong>expunged(指向被删除的元素)<strong>，</strong>正常</strong>，三种状态.</p>
+<ul>
+<li>update（更新）时：p的状态从expunged转为nil，然后又转为正常值</li>
+<li>add（新增）时：当需要刷新dirty，p的状态从nil转为expunged</li>
+<li>delete（删除）时：p的状态从正常值转为nil</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>数据结构</li>
+</ol>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">&#x2F;&#x2F; Map 并发安全的map结构体
+type Map struct &#123;
+  mu sync.Mutex &#x2F;&#x2F; 锁，保护read和dirty字段
+
+  read atomic.Value &#x2F;&#x2F; 存仅读数据，原子操作，并发读安全，实际存储readOnly类型的数据
+
+  dirty map[interface&#123;&#125;]*entry &#x2F;&#x2F; 存最新写入的数据
+
+  misses int &#x2F;&#x2F; 计数器，每次在read字段中没找所需数据时，+1
+  &#x2F;&#x2F; 当此值到达一定阈值时，将dirty字段赋值给read
+&#125;
+
+&#x2F;&#x2F; readOnly 存储map中仅读数据的结构体
+type readOnly struct &#123;
+  m       map[interface&#123;&#125;]*entry &#x2F;&#x2F; 其底层依然是个最简单的map
+  amended bool                   &#x2F;&#x2F; 标志位，标识m.dirty中存储的数据是否和m.read中的不一样，flase 相同，true不相同
+&#125;
+
+&#x2F;&#x2F; entry 键值对中的值结构体
+type entry struct &#123;
+  p unsafe.Pointer &#x2F;&#x2F; 指针，指向实际存储value值的地方
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ul>
+<li>read在进行非读操作时，需要锁mu进行保护</li>
+<li>写入的数据，都是<strong>直接写到dirty</strong>，后面根据<strong>read miss次数</strong>达到<strong>阈值</strong>，会进行read和dirty数据的同步</li>
+<li>readOnly中专门有一个标志位，用来标注read和dirty中是否有不同，以便进行read和dirty数据同步</li>
+</ul>
+<h3 id="map和sync-map效率对比呢？"><a href="#map和sync-map效率对比呢？" class="headerlink" title="- map和sync.map效率对比呢？"></a>- map和sync.map效率对比呢？</h3><p>  map加的读写锁，这样读写都要锁</p>
+<p>  但是sync.Map里有两个map一个是专门用于读的read map，另一个是提供读写的dirty map；优先读read map，若不存在<strong>则加锁</strong>穿透读dirty map，同时记录一个未从read map读到的计数，当计数到达一定值，就将read map用dirty map进行覆盖</p>
+<p>  使用 sync.map 之后，对 map 的读写，不需要加锁。并且它通过空间换时间的方式，使用read 和dirty 两个map 来进行读写分离，降低锁时间来提高效率。</p>
+<h3 id="一些tips"><a href="#一些tips" class="headerlink" title="一些tips"></a>一些tips</h3><p>  map 反序列化时 json.Unmarshal 的入参需要传递 map 的<strong>地址</strong></p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8B%E4%BB%80%E4%B9%88%E6%98%AFmap%EF%BC%9F"><span class="top-box-text">说下什么是map？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#map%E5%BA%95%E5%B1%82%E7%9A%84%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84%EF%BC%9F"><span class="top-box-text">map底层的数据结构是怎么实现的？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#map%E6%98%AF%E5%A6%82%E4%BD%95%E5%88%9D%E5%A7%8B%E5%8C%96%E7%9A%84%EF%BC%9F"><span class="top-box-text">map是如何初始化的？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#slice%E5%92%8Cmap%E4%BD%9C%E4%B8%BA%E5%87%BD%E6%95%B0%E5%8F%82%E6%95%B0%E6%97%B6%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">slice和map作为函数参数时有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#map%E4%B8%AD%E7%9A%84key%E6%98%AF%E5%A6%82%E4%BD%95%E5%AE%9A%E4%BD%8D%E7%9A%84%EF%BC%9F%EF%BC%88%E6%8F%8F%E8%BF%B0%E4%B8%8B%E5%86%99%E5%85%A5%E6%95%B0%E6%8D%AE%E3%80%81%E8%AF%BB%E5%8F%96%E6%95%B0%E6%8D%AE%E7%9A%84%E8%BF%87%E7%A8%8B%EF%BC%9F%EF%BC%89"><span class="top-box-text">map中的key是如何定位的？（描述下写入数据、读取数据的过程？）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%A7%A6%E5%8F%91map%E6%89%A9%E5%AE%B9%E7%9A%84%E6%9D%A1%E4%BB%B6%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="top-box-text">触发map扩容的条件是什么？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E7%BF%BB%E5%80%8D%EF%BC%88%E5%A2%9E%E9%87%8F%EF%BC%89%E6%89%A9%E5%AE%B9%E6%98%AF%E5%A6%82%E4%BD%95%E6%89%A9%E5%AE%B9%E7%9A%84%EF%BC%88rehash%E6%98%AF%E4%BB%80%E4%B9%88%E6%84%8F%E6%80%9D%EF%BC%89"><span class="top-box-text">说说翻倍（增量）扩容是如何扩容的（rehash是什么意思）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E7%AD%89%E9%87%8F%E6%89%A9%E5%AE%B9%E6%98%AF%E4%BB%80%E4%B9%88%E6%84%8F%E6%80%9D%EF%BC%9F"><span class="top-box-text">等量扩容是什么意思？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#map%E7%9A%84key%E4%B8%BA%E4%BB%80%E4%B9%88%E6%98%AF%E6%97%A0%E5%BA%8F%E7%9A%84%EF%BC%9F"><span class="top-box-text">map的key为什么是无序的？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#map%E7%9A%84key%E7%B1%BB%E5%9E%8B%E5%92%8Cvalue%E7%B1%BB%E5%9E%8B%E6%9C%89%E4%BB%80%E4%B9%88%E9%99%90%E5%88%B6%E5%90%97%EF%BC%9F"><span class="top-box-text">map的key类型和value类型有什么限制吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#map%E6%98%AF%E5%B9%B6%E5%8F%91%E5%AE%89%E5%85%A8%E7%9A%84%E5%90%97%EF%BC%9F"><span class="top-box-text">map是并发安全的吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%80%8E%E4%B9%88%E5%A4%84%E7%90%86%E5%AF%B9-map-%E8%BF%9B%E8%A1%8C%E5%B9%B6%E5%8F%91%E8%AE%BF%E9%97%AE%EF%BC%9F"><span class="top-box-text">怎么处理对 map 进行并发访问？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#sync-map%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86"><span class="top-box-text">sync.map底层原理</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#map%E5%92%8Csync-map%E6%95%88%E7%8E%87%E5%AF%B9%E6%AF%94%E5%91%A2%EF%BC%9F"><span class="top-box-text">- map和sync.map效率对比呢？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%80%E4%BA%9Btips"><span class="top-box-text">一些tips</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-slice/">
+          <h3 class="post-title">
+            下一篇：Golang-八股-slice
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
