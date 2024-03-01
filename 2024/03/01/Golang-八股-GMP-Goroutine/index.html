@@ -156,11 +156,99 @@
 <li>M的数量是<strong>内核线程数量</strong>，<strong>默认和上限是10000</strong>，但实际开发中并不会达到这个数量，<strong>runtime&#x2F;debug</strong> 中的 **SetMaxThreads **函数，设置 M 的最大数量，一个 M 阻塞了，会创建新的 M。</li>
 <li>M 与 P 的数量<strong>没有绝对关系</strong>，一个 M 阻塞，P 就会去创建或者切换另一个 M，所以，即使 P 的默认数量是 1，也有可能会创建很多个 M 出来。</li>
 </ul>
+<h3 id="说下GMP模型有哪些调度策略（特性）？"><a href="#说下GMP模型有哪些调度策略（特性）？" class="headerlink" title="说下GMP模型有哪些调度策略（特性）？"></a>说下GMP模型有哪些调度策略（特性）？</h3><ul>
+<li>复用线程：避免频繁的创建、销毁线程，⽽是对线程的复⽤<ul>
+<li><strong>work stealing</strong>机制：当本线程⽆可运⾏的G时，尝试从其他线程绑定的P偷取G，⽽不是销毁线程</li>
+<li><strong>hand off</strong>机制：当本线程因为G进行系统调用阻塞的时候，线程释放绑定的P，把P转移给其它空闲的线程执行</li>
+</ul>
+</li>
+<li>利用并行：<code>GOMAXPROCS</code>设置P的数量，最多有<code>GOMAXPROCS</code>个线程分布在多个CPU上同时运行。<code>GOMAXPROCS</code>也限制了并发的程度，比如<code>GOMAXPROCS = 核数/2</code>，则最多利用了一半的CPU核进行并行。</li>
+<li>抢占：在goroutine中要等待一个协程主动让出CPU才执行下一个协程，在Go中，<strong>一个goroutine最多占用CPU 10ms</strong>，防止其他goroutine被饿死。</li>
+<li>全局G队列：在新的调度器中依然有全局G队列，但功能已经被弱化了，当M执行work stealing从其他P偷不到G时，它可以从全局G队列获取G。</li>
+</ul>
+<h3 id="go中GMP有哪些状态？"><a href="#go中GMP有哪些状态？" class="headerlink" title="go中GMP有哪些状态？"></a>go中GMP有哪些状态？</h3><p>G的状态：<br><strong>_Gidle</strong>：刚刚被分配并且还没有被初始化，值为0，为创建goroutine后的默认值</p>
+<p><strong>_Grunnable</strong>： 没有执行代码，没有栈的所有权，存储在运行队列中，可能在某个P的本地队列或全局队列中(如上图)。</p>
+<p><strong>_Grunning</strong>： 正在执行代码的goroutine，拥有栈的所有权(如上图)。</p>
+<p><strong>_Gsyscall</strong>：正在执行系统调用，拥有栈的所有权，与P脱离，但是与某个M绑定，会在调用结束后被分配到运行队列(如上图)。</p>
+<p><strong>_Gwaiting</strong>：被阻塞的goroutine，阻塞在某个channel的发送或者接收队列(如上图)。</p>
+<p><strong>_Gdead</strong>： 当前goroutine未被使用，没有执行代码，可能有分配的栈，分布在空闲列表gFree，可能是一个刚刚初始化的goroutine，也可能是执行了goexit退出的goroutine(如上图)。</p>
+<p><strong>_Gcopystac</strong>：栈正在被拷贝，没有执行代码，不在运行队列上，执行权在</p>
+<p><strong>_Gscan</strong> ： GC 正在扫描栈空间，没有执行代码，可以与其他状态同时存在。</p>
+<p>P的状态：</p>
+<p><strong>_Pidle</strong> ：处理器没有运行用户代码或者调度器，被空闲队列或者改变其状态的结构持有，运行队列为空</p>
+<p><strong>_Prunning</strong> ：被线程 M 持有，并且正在执行用户代码或者调度器(如上图)</p>
+<p><strong>_Psyscall</strong>：没有执行用户代码，当前线程陷入系统调用(如上图)</p>
+<p><strong>_Pgcstop</strong> ：被线程 M 持有，当前处理器由于垃圾回收被停止</p>
+<p><strong>_Pdead</strong> ：当前处理器已经不被使用</p>
+<p>M的状态：</p>
+<p><strong>自旋线程</strong>：处于运行状态但是没有可执行goroutine的线程，数量最多为GOMAXPROC，若是数量大于GOMAXPROC就会进入休眠。</p>
+<p><strong>非自旋线程</strong>：处于运行状态有可执行goroutine的线程。</p>
+<h3 id="如何控制并发数？"><a href="#如何控制并发数？" class="headerlink" title="如何控制并发数？"></a>如何控制并发数？</h3><ol>
+<li>make一个控制数量的<strong>带缓冲的channel</strong>，在开协程的时候，协程中执行完毕工作逻辑就释放channel中的资源借此控制协程并发数量。</li>
+<li>三方库的<strong>协程池</strong></li>
+</ol>
+<h3 id="goroutine创建的时候如果要传一个参数进去有什么要注意的点？"><a href="#goroutine创建的时候如果要传一个参数进去有什么要注意的点？" class="headerlink" title="goroutine创建的时候如果要传一个参数进去有什么要注意的点？"></a>goroutine创建的时候如果要传一个参数进去有什么要注意的点？</h3><p>  错误示范（打印发现i每次地址都是同一个）：</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">for _, i :&#x3D; range a &#123;
+    fmt.Printf(&quot;-----%s---\n&quot;, i)
+ 
+    go func() &#123;
+        time.Sleep(time.Second * 4)
+        testDomain(i)
+    &#125;()
+ 
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>  正确示范（这种操作会先将i的值传递给形参a，i的变化不会对testDomain方法的执行产生影响）：</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">for _, i :&#x3D; range a &#123;
+    fmt.Printf(&quot;-----%s---\n&quot;, i)
+    go func(a string) &#123;
+        &#x2F;&#x2F;time.Sleep(time.Second * 4)
+        testDomain(a)
+    &#125;(i)
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="goroutine泄露了解过吗，什么时候会有goroutine泄露？怎么排查？"><a href="#goroutine泄露了解过吗，什么时候会有goroutine泄露？怎么排查？" class="headerlink" title="goroutine泄露了解过吗，什么时候会有goroutine泄露？怎么排查？"></a>goroutine泄露了解过吗，什么时候会有goroutine泄露？怎么排查？</h3><p>  简单总结了几种常见的泄漏原因：</p>
+<ul>
+<li><code>Goroutine</code>内的逻辑进入死循坏，一直占用资源</li>
+<li><code>Goroutine</code>配合<code>channel</code>&#x2F;<code>mutex</code>使用时，由于使用不当导致一直被阻塞</li>
+<li><code>Goroutine</code>内的逻辑长时间等待，导致<code>Goroutine</code>数量暴增</li>
+</ul>
+<p>  使用<strong>goleak工具</strong>排查，在相关方法中defer调用即可</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">func GetData() &#123;
+ var ch chan struct&#123;&#125;
+ go func() &#123;
+  &lt;- ch
+ &#125;()
+&#125;
+
+&#x2F;&#x2F;测试文件
+func TestGetDataWithGoleak(t *testing.T) &#123;
+ defer goleak.VerifyNone(t)
+ GetData()
+&#125;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>  运行结果</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">&#x3D;&#x3D;&#x3D; RUN   TestGetDataWithGoleak
+    leaks.go:78: found unexpected goroutines:
+        [Goroutine 35 in state chan receive (nil chan), with asong.cloud&#x2F;Golang_Dream&#x2F;code_demo&#x2F;goroutine_oos_detector.GetData.func1 on top of the stack:
+        goroutine 35 [chan receive (nil chan)]:
+        asong.cloud&#x2F;Golang_Dream&#x2F;code_demo&#x2F;goroutine_oos_detector.GetData.func1()
+         &#x2F;Users&#x2F;go&#x2F;src&#x2F;asong.cloud&#x2F;Golang_Dream&#x2F;code_demo&#x2F;goroutine_oos_detector&#x2F;main.go:12 +0x1f
+        created by asong.cloud&#x2F;Golang_Dream&#x2F;code_demo&#x2F;goroutine_oos_detector.GetData
+         &#x2F;Users&#x2F;go&#x2F;src&#x2F;asong.cloud&#x2F;Golang_Dream&#x2F;code_demo&#x2F;goroutine_oos_detector&#x2F;main.go:11 +0x3c
+        ]
+--- FAIL: TestGetDataWithGoleak (0.45s)
+
+FAIL
+
+Process finished with the exit code 1<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
 
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8B%E8%BF%9B%E7%A8%8B%E5%92%8C%E5%8D%8F%E7%A8%8B%E5%92%8C%E7%BA%BF%E7%A8%8B%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">说下进程和协程和线程有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E5%8F%91%E7%94%9F%E5%8D%8F%E7%A8%8B%E5%88%87%E6%8D%A2%EF%BC%9F%EF%BC%88%E5%8D%8F%E7%A8%8B%E5%88%87%E6%8D%A2%E7%9A%84%E6%97%B6%E6%9C%BA%EF%BC%9F%EF%BC%89"><span class="top-box-text">go什么时候发生协程切换？（协程切换的时机？）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E5%8F%91%E7%94%9F%E9%98%BB%E5%A1%9E%E5%91%A2%EF%BC%9F"><span class="top-box-text">go什么时候会发生阻塞呢？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%9C%89%E8%8B%A5%E5%B9%B2%E4%B8%AAgoroutine%EF%BC%8C%E6%9C%89%E4%B8%80%E4%B8%AApanic%E4%BC%9A%E6%80%8E%E4%B9%88%E6%A0%B7%EF%BC%9F"><span class="top-box-text">有若干个goroutine，有一个panic会怎么样？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#defer%E5%8F%AF%E4%BB%A5%E6%8D%95%E8%8E%B7goroutine%E7%9A%84%E5%AD%90goroutine%E5%90%97%EF%BC%9F"><span class="top-box-text">defer可以捕获goroutine的子goroutine吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AFgo%E8%B0%83%E5%BA%A6%E5%99%A8%EF%BC%9F%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E6%9C%89%E8%B0%83%E5%BA%A6%E5%99%A8%EF%BC%9F%E8%B0%83%E5%BA%A6%E5%99%A8%E7%9A%84%E4%BC%98%E7%82%B9%EF%BC%9F"><span class="top-box-text">什么是go调度器？为什么会有调度器？调度器的优点？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8B%E4%BB%80%E4%B9%88%E6%98%AFGMP%E6%A8%A1%E5%9E%8B%EF%BC%9F"><span class="top-box-text">说下什么是GMP模型？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8Bgo-func%E7%9A%84%E6%95%B4%E4%BD%93%E8%BF%87%E7%A8%8B%EF%BC%9F%EF%BC%88%E8%AF%B4%E4%B8%8BGMP%E8%B0%83%E5%BA%A6%E6%B5%81%E7%A8%8B%EF%BC%89"><span class="top-box-text">说下go func的整体过程？（说下GMP调度流程）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%82%A3GMP%E6%A8%A1%E5%9E%8B%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E6%9C%89P%E5%91%A2%EF%BC%8C%E7%BA%BF%E7%A8%8BM%E7%9B%B4%E6%8E%A5%E4%BB%8E%E5%85%A8%E5%B1%80%E9%98%9F%E5%88%97%E4%B8%AD%E6%8B%BF%E4%B8%8D%E5%A5%BD%E5%90%97%EF%BC%9F"><span class="top-box-text">- 那GMP模型为什么要有P呢，线程M直接从全局队列中拿不好吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#GMP%E6%A8%A1%E5%9E%8B%E4%B8%ADp%E5%92%8Cm%E7%9A%84%E6%95%B0%E9%87%8F%EF%BC%8C%E4%BB%A5%E5%8F%8A%E5%85%B6%E6%95%B0%E9%87%8F%E5%85%B3%E7%B3%BB%EF%BC%9F"><span class="top-box-text">- GMP模型中p和m的数量，以及其数量关系？</span></a></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8B%E8%BF%9B%E7%A8%8B%E5%92%8C%E5%8D%8F%E7%A8%8B%E5%92%8C%E7%BA%BF%E7%A8%8B%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">说下进程和协程和线程有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E5%8F%91%E7%94%9F%E5%8D%8F%E7%A8%8B%E5%88%87%E6%8D%A2%EF%BC%9F%EF%BC%88%E5%8D%8F%E7%A8%8B%E5%88%87%E6%8D%A2%E7%9A%84%E6%97%B6%E6%9C%BA%EF%BC%9F%EF%BC%89"><span class="top-box-text">go什么时候发生协程切换？（协程切换的时机？）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E5%8F%91%E7%94%9F%E9%98%BB%E5%A1%9E%E5%91%A2%EF%BC%9F"><span class="top-box-text">go什么时候会发生阻塞呢？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%9C%89%E8%8B%A5%E5%B9%B2%E4%B8%AAgoroutine%EF%BC%8C%E6%9C%89%E4%B8%80%E4%B8%AApanic%E4%BC%9A%E6%80%8E%E4%B9%88%E6%A0%B7%EF%BC%9F"><span class="top-box-text">有若干个goroutine，有一个panic会怎么样？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#defer%E5%8F%AF%E4%BB%A5%E6%8D%95%E8%8E%B7goroutine%E7%9A%84%E5%AD%90goroutine%E5%90%97%EF%BC%9F"><span class="top-box-text">defer可以捕获goroutine的子goroutine吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AFgo%E8%B0%83%E5%BA%A6%E5%99%A8%EF%BC%9F%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E6%9C%89%E8%B0%83%E5%BA%A6%E5%99%A8%EF%BC%9F%E8%B0%83%E5%BA%A6%E5%99%A8%E7%9A%84%E4%BC%98%E7%82%B9%EF%BC%9F"><span class="top-box-text">什么是go调度器？为什么会有调度器？调度器的优点？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8B%E4%BB%80%E4%B9%88%E6%98%AFGMP%E6%A8%A1%E5%9E%8B%EF%BC%9F"><span class="top-box-text">说下什么是GMP模型？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8Bgo-func%E7%9A%84%E6%95%B4%E4%BD%93%E8%BF%87%E7%A8%8B%EF%BC%9F%EF%BC%88%E8%AF%B4%E4%B8%8BGMP%E8%B0%83%E5%BA%A6%E6%B5%81%E7%A8%8B%EF%BC%89"><span class="top-box-text">说下go func的整体过程？（说下GMP调度流程）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%82%A3GMP%E6%A8%A1%E5%9E%8B%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E6%9C%89P%E5%91%A2%EF%BC%8C%E7%BA%BF%E7%A8%8BM%E7%9B%B4%E6%8E%A5%E4%BB%8E%E5%85%A8%E5%B1%80%E9%98%9F%E5%88%97%E4%B8%AD%E6%8B%BF%E4%B8%8D%E5%A5%BD%E5%90%97%EF%BC%9F"><span class="top-box-text">- 那GMP模型为什么要有P呢，线程M直接从全局队列中拿不好吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#GMP%E6%A8%A1%E5%9E%8B%E4%B8%ADp%E5%92%8Cm%E7%9A%84%E6%95%B0%E9%87%8F%EF%BC%8C%E4%BB%A5%E5%8F%8A%E5%85%B6%E6%95%B0%E9%87%8F%E5%85%B3%E7%B3%BB%EF%BC%9F"><span class="top-box-text">- GMP模型中p和m的数量，以及其数量关系？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%8BGMP%E6%A8%A1%E5%9E%8B%E6%9C%89%E5%93%AA%E4%BA%9B%E8%B0%83%E5%BA%A6%E7%AD%96%E7%95%A5%EF%BC%88%E7%89%B9%E6%80%A7%EF%BC%89%EF%BC%9F"><span class="top-box-text">说下GMP模型有哪些调度策略（特性）？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E4%B8%ADGMP%E6%9C%89%E5%93%AA%E4%BA%9B%E7%8A%B6%E6%80%81%EF%BC%9F"><span class="top-box-text">go中GMP有哪些状态？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E6%8E%A7%E5%88%B6%E5%B9%B6%E5%8F%91%E6%95%B0%EF%BC%9F"><span class="top-box-text">如何控制并发数？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#goroutine%E5%88%9B%E5%BB%BA%E7%9A%84%E6%97%B6%E5%80%99%E5%A6%82%E6%9E%9C%E8%A6%81%E4%BC%A0%E4%B8%80%E4%B8%AA%E5%8F%82%E6%95%B0%E8%BF%9B%E5%8E%BB%E6%9C%89%E4%BB%80%E4%B9%88%E8%A6%81%E6%B3%A8%E6%84%8F%E7%9A%84%E7%82%B9%EF%BC%9F"><span class="top-box-text">goroutine创建的时候如果要传一个参数进去有什么要注意的点？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#goroutine%E6%B3%84%E9%9C%B2%E4%BA%86%E8%A7%A3%E8%BF%87%E5%90%97%EF%BC%8C%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E6%9C%89goroutine%E6%B3%84%E9%9C%B2%EF%BC%9F%E6%80%8E%E4%B9%88%E6%8E%92%E6%9F%A5%EF%BC%9F"><span class="top-box-text">goroutine泄露了解过吗，什么时候会有goroutine泄露？怎么排查？</span></a></li></ol>
         </div>
           
       </div>
