@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang-八股-interface</title>
+<meta name="keywords" content="Golang-八股-interface, HeXu">
+<meta name="description" content="Go是动态语言还是静态语言，和别的静态语言或者动态语言有什么不同？动态语言例如Python，调用函数的时候可以传入任意的类型，只要它实现了所需要的函数就可以，如果没有实现，就会在运行过程中出错。
+在Java，C++这类静态语言中，必须要显式">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang-八股-interface">
+<meta property="og:description" content="Go是动态语言还是静态语言，和别的静态语言或者动态语言有什么不同？动态语言例如Python，调用函数的时候可以传入任意的类型，只要它实现了所需要的函数就可以，如果没有实现，就会在运行过程中出错。
+在Java，C++这类静态语言中，必须要显式">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang-八股-interface</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-01</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h3 id="Go是动态语言还是静态语言，和别的静态语言或者动态语言有什么不同？"><a href="#Go是动态语言还是静态语言，和别的静态语言或者动态语言有什么不同？" class="headerlink" title="Go是动态语言还是静态语言，和别的静态语言或者动态语言有什么不同？"></a>Go是动态语言还是静态语言，和别的静态语言或者动态语言有什么不同？</h3><p>动态语言例如Python，调用函数的时候可以传入任意的类型，只要它实现了所需要的函数就可以，如果没有实现，就会在运行过程中出错。</p>
+<p>在Java，C++这类静态语言中，必须要显式的声明实现了某个接口，才能用在使用则个接口的地方，如果传入没有实现接口的类型就会在编译阶段报错</p>
+<p>Go是静态语言，采用了折中的做法：不要显式的声明实现了某个接口，只要实现了相关的方法即可，编译器就会检测到。</p>
+<h3 id="两个interface可以比较吗？"><a href="#两个interface可以比较吗？" class="headerlink" title="两个interface可以比较吗？"></a>两个interface可以比较吗？</h3><p>  Go 语言中，interface 的内部实现包含了 2 个字段，类型 <code>T</code> 和 值 <code>V</code>，interface 可以使用 <code>==</code> 或 <code>!=</code> 比较。2 个 interface 相等有以下 2 种情况</p>
+<ol>
+<li>两个 interface 均等于 nil（此时 V 和 T 都处于 unset 状态）</li>
+<li>类型 T 相同，且对应的值 V 相等。</li>
+</ol>
+<h3 id="Go中的方法和函数是相同的东西吗？有什么区别？"><a href="#Go中的方法和函数是相同的东西吗？有什么区别？" class="headerlink" title="Go中的方法和函数是相同的东西吗？有什么区别？"></a>Go中的方法和函数是相同的东西吗？有什么区别？</h3><p>  方法有一个接收者，给一个函数添加一个接收者，那么它就变成了方法。接收者可以是<code>值接收者</code>，也可以是<code>指针接收者</code>。</p>
+<h3 id="值接收者和指针接收者有什么区别？"><a href="#值接收者和指针接收者有什么区别？" class="headerlink" title="值接收者和指针接收者有什么区别？"></a>值接收者和指针接收者有什么区别？</h3><p>  首先不管方法的接收者是什么类型，该类型的指针和值都可以调用。</p>
+<p>  当实现了一个接收者是值类型的方法，就可以自动生成一个接收者是对应指针类型的方法，因为两者都不会影响接收者。但是，当实现了一个接收者是指针类型的方法，如果此时自动生成一个接收者是值类型的方法，原本期望对接收者的改变（通过指针实现），现在无法实现，因为值类型会产生一个拷贝，不会真正影响调用者。</p>
+<p>  如果方法的接收者是值类型，无论调用者是对象还是对象指针，修改的都是对象的副本，不影响调用者；如果方法的接收者是指针类型，则调用者修改的是指针指向的对象本身。</p>
+<p>  使用指针作为方法的接收者的理由：</p>
+<ul>
+<li>方法能够修改接收者指向的值。</li>
+<li>避免在每次调用方法时复制该值，在值的类型为大型结构体时，这样做会更加高效。</li>
+</ul>
+<h3 id="eface-type-data-和iface-tab-data-的区别是什么？"><a href="#eface-type-data-和iface-tab-data-的区别是什么？" class="headerlink" title="eface(_type, data)和iface(tab, data)的区别是什么？"></a>eface(_type, data)和iface(tab, data)的区别是什么？</h3><p>  <code>iface</code> 描述的接口包含方法，内部维护两个指针，<code>tab</code> 指向一个 <code>itab</code> 实体， 它表示接口的类型以及赋给这个接口的实体类型。<code>data</code> 则指向接口具体的值，一般而言是一个指向堆内存的指针。</p>
+<p>  <code>eface</code> 是不包含任何方法的空接口：<code>interface&#123;&#125;</code>，其字段分别是<code>_type</code>字段，用来描述空接口所承载的具体的实体类型，data描述了具体的值。</p>
+<h3 id="接口的动态类型与动态值指的是什么？接口类型如何和nil作比较？"><a href="#接口的动态类型与动态值指的是什么？接口类型如何和nil作比较？" class="headerlink" title="接口的动态类型与动态值指的是什么？接口类型如何和nil作比较？"></a>接口的动态类型与动态值指的是什么？接口类型如何和nil作比较？</h3><p>  <code>iface</code>包含两个字段：<code>tab</code> 是接口表指针，指向类型信息；<code>data</code> 是数据指针，则指向具体的数据。它们分别被称为<code>动态类型</code>和<code>动态值</code>。而接口值包括<code>动态类型</code>和<code>动态值</code>。</p>
+<p>  接口值的零值是指<code>动态类型</code>和<code>动态值</code>都为 <code>nil</code>。当仅且当这两部分的值都为 <code>nil</code> 的情况下，这个接口值就才会被认为 <code>接口值 == nil</code>。</p>
+<h3 id="类型转换和断言有什么区别？"><a href="#类型转换和断言有什么区别？" class="headerlink" title="类型转换和断言有什么区别？"></a>类型转换和断言有什么区别？</h3><p>  <code>类型转换</code>、<code>类型断言</code>本质都是把一个类型转换成另外一个类型。不同之处在于，类型断言是对接口变量进行的操作。</p>
+<h3 id="一些tips"><a href="#一些tips" class="headerlink" title="一些tips"></a>一些tips</h3><ul>
+<li>拥有相同方法列表，那么两个接口实质上同一个接口</li>
+<li>A是B的子集，意味着A的方法B中都有，那么A是B的基类，所以A&#x3D;B是可行的</li>
+<li>接口是否能够调用成功是需要运行的时候才能知道</li>
+<li>接口赋值是否可行在编译阶段就可以知道，判断是否在编译期就能判断，就看写代码的时候GO编辑器会不会提示错误。</li>
+</ul>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">val, ok :&#x3D; interfaceName.(TypeName)<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go%E6%98%AF%E5%8A%A8%E6%80%81%E8%AF%AD%E8%A8%80%E8%BF%98%E6%98%AF%E9%9D%99%E6%80%81%E8%AF%AD%E8%A8%80%EF%BC%8C%E5%92%8C%E5%88%AB%E7%9A%84%E9%9D%99%E6%80%81%E8%AF%AD%E8%A8%80%E6%88%96%E8%80%85%E5%8A%A8%E6%80%81%E8%AF%AD%E8%A8%80%E6%9C%89%E4%BB%80%E4%B9%88%E4%B8%8D%E5%90%8C%EF%BC%9F"><span class="top-box-text">Go是动态语言还是静态语言，和别的静态语言或者动态语言有什么不同？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%A4%E4%B8%AAinterface%E5%8F%AF%E4%BB%A5%E6%AF%94%E8%BE%83%E5%90%97%EF%BC%9F"><span class="top-box-text">两个interface可以比较吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go%E4%B8%AD%E7%9A%84%E6%96%B9%E6%B3%95%E5%92%8C%E5%87%BD%E6%95%B0%E6%98%AF%E7%9B%B8%E5%90%8C%E7%9A%84%E4%B8%9C%E8%A5%BF%E5%90%97%EF%BC%9F%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">Go中的方法和函数是相同的东西吗？有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%80%BC%E6%8E%A5%E6%94%B6%E8%80%85%E5%92%8C%E6%8C%87%E9%92%88%E6%8E%A5%E6%94%B6%E8%80%85%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">值接收者和指针接收者有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#eface-type-data-%E5%92%8Ciface-tab-data-%E7%9A%84%E5%8C%BA%E5%88%AB%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="top-box-text">eface(_type, data)和iface(tab, data)的区别是什么？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%8E%A5%E5%8F%A3%E7%9A%84%E5%8A%A8%E6%80%81%E7%B1%BB%E5%9E%8B%E4%B8%8E%E5%8A%A8%E6%80%81%E5%80%BC%E6%8C%87%E7%9A%84%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F%E6%8E%A5%E5%8F%A3%E7%B1%BB%E5%9E%8B%E5%A6%82%E4%BD%95%E5%92%8Cnil%E4%BD%9C%E6%AF%94%E8%BE%83%EF%BC%9F"><span class="top-box-text">接口的动态类型与动态值指的是什么？接口类型如何和nil作比较？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E7%B1%BB%E5%9E%8B%E8%BD%AC%E6%8D%A2%E5%92%8C%E6%96%AD%E8%A8%80%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">类型转换和断言有什么区别？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%B8%80%E4%BA%9Btips"><span class="top-box-text">一些tips</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-map/">
+          <h3 class="post-title">
+            下一篇：Golang-八股-map
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
