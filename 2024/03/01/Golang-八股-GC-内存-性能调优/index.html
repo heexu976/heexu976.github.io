@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang-八股-GC-内存-性能调优</title>
+<meta name="keywords" content="Golang-八股-GC-内存-性能调优, HeXu">
+<meta name="description" content="go的GC是怎么实现的？（GC机制随着golang版本变化如何变化的？）  Go 的 GC 回收有三次演进过程
+
+Go V1.3 之前普通标记清除（mark and sweep）方法，整体过程需要启动 STW，效率极低。
+首先使用STW暂停">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang-八股-GC-内存-性能调优">
+<meta property="og:description" content="go的GC是怎么实现的？（GC机制随着golang版本变化如何变化的？）  Go 的 GC 回收有三次演进过程
+
+Go V1.3 之前普通标记清除（mark and sweep）方法，整体过程需要启动 STW，效率极低。
+首先使用STW暂停">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang-八股-GC-内存-性能调优</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-01</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h3 id="go的GC是怎么实现的？（GC机制随着golang版本变化如何变化的？）"><a href="#go的GC是怎么实现的？（GC机制随着golang版本变化如何变化的？）" class="headerlink" title="go的GC是怎么实现的？（GC机制随着golang版本变化如何变化的？）"></a><strong>go的GC是怎么实现的？（GC机制随着golang版本变化如何变化的？）</strong></h3><p>  Go 的 GC 回收有<strong>三次</strong>演进过程</p>
+<ul>
+<li>Go V1.3 之前普通<strong>标记清除</strong>（mark and sweep）方法，整体过程需要启动 STW，<strong>效率极低。</strong><ol>
+<li>首先使用STW暂停程序，然后分类出可达和不可达对象，做标记</li>
+<li>清除未标记的对象</li>
+<li>然后恢复程序运行，循环往复这个过程</li>
+</ol>
+</li>
+<li>GoV1.5 采用<strong>三色标记法</strong>，<strong>堆</strong>空间启动<strong>写屏障</strong>（堆上对象新增或者更新会将其着色为灰色）<ol>
+<li>默认创建对象是<strong>白色</strong></li>
+<li>每次GC都会从根节点遍历所有对象，把遍历到的对象从白色集合放入灰色集合</li>
+<li>遍历灰色集合，将灰色对象引用的对象从白色集合放入灰色集合，之后将此灰色对象放入黑色集合。</li>
+<li>重复第三步，直到灰色中没有任何对象</li>
+<li>回收所有的白色标记的对象</li>
+</ol>
+</li>
+<li>GoV1.8 采用<strong>混合写屏障</strong>的<strong>三色标记法</strong><ol>
+<li>GC开始将栈上的可到达的对象全部扫描并标记为黑色(之后不再进行第二次重复扫描，无需STW)</li>
+<li>GC期间，任何在<strong>栈上创建的新对象，均为黑色</strong>。</li>
+<li>被删除或者添加的对象标记为灰色（堆上的）</li>
+</ol>
+</li>
+</ul>
+<h3 id="Go的内存模型，为什么小对象过多会造成GC压力？"><a href="#Go的内存模型，为什么小对象过多会造成GC压力？" class="headerlink" title="Go的内存模型，为什么小对象过多会造成GC压力？"></a>Go的内存模型，为什么小对象过多会造成GC压力？</h3><p>  通常小对象过多会导致GC三⾊法消耗过多的<strong>GPU</strong>，优化思路是减少对象分配</p>
+<h3 id="说说什么是强三色不变式和弱三色不变式？"><a href="#说说什么是强三色不变式和弱三色不变式？" class="headerlink" title="说说什么是强三色不变式和弱三色不变式？"></a>说说什么是强三色不变式和弱三色不变式？</h3><ul>
+<li><strong>强三色不变式</strong>：强制性不允许黑色对象引用白色对象</li>
+<li><strong>弱三色不变式</strong>：黑色对象可以引用白色对象，但是白色对象必须存在其它灰色对象对它的引用，或者可达到它的链路上游存在</li>
+</ul>
+<h3 id="那什么是插入屏障和删除屏障？"><a href="#那什么是插入屏障和删除屏障？" class="headerlink" title="那什么是插入屏障和删除屏障？"></a>那什么是插入屏障和删除屏障？</h3><p>  <strong>插入屏障</strong>：在A对象引用B对象的时候，B对象被标记为灰色。(将B挂在A下游，B必须被标记为灰色)，满足<strong>强三色不变式</strong>. (不存在黑色对象引用白色对象的情况了， 因为白色会强制变成灰色)，插入屏障机制,在<strong>栈空间的对象操作中不使用</strong>. 而仅仅使用在<strong>堆空间</strong>对象的操作中.</p>
+<p>  <strong>删除屏障</strong>：被删除的对象，如果自身为灰色或者白色，那么被标记为灰色。满足<strong>弱三色不变式</strong>.(保护灰色对象到白色对象的路径不会断)</p>
+<h3 id="说说插入屏障和删除屏障的缺点"><a href="#说说插入屏障和删除屏障的缺点" class="headerlink" title="说说插入屏障和删除屏障的缺点"></a>说说插入屏障和删除屏障的缺点</h3><ul>
+<li>插入写屏障：结束时需要STW来重新扫描栈，标记栈上引用的白色对象的存活；</li>
+<li>删除写屏障：回收精度低，GC开始时STW扫描堆栈来记录初始快照，这个过程会保护开始时刻的所有存活对象。</li>
+</ul>
+<h3 id="简述一下go内存管理的原理？"><a href="#简述一下go内存管理的原理？" class="headerlink" title="- 简述一下go内存管理的原理？"></a>- 简述一下go内存管理的原理？</h3><p>  <a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1422392">Go 语言内存管理（二）：Go 内存管理 - 腾讯云开发者社区-腾讯云 (tencent.com)</a></p>
+<p>  golang内存管理基本是参考<strong>tcmalloc</strong>来进行的。go内存管理本质上是一个<strong>内存池</strong>，只不过内部做了很多优化：<strong>自动伸缩</strong>内存池大小，<strong>合理的切割</strong>内存块。</p>
+<blockquote>
+<p>一些基本概念：<br>页Page：一块8K大小的内存空间。Go向操作系统<strong>申请和释放内存</strong>都是<strong>以页为单位</strong>的。<br>span : 内存块，<strong>一个或多个连续的 page</strong> 组成一个** span** 。如果把 page 比喻成工人， span 可看成是小队，工人被分成若干个队伍，不同的队伍干不同的活。<br>sizeclass : 空间规格，每个 span 都带有一个 <strong>sizeclass <strong>，标记着该 span 中的 page 应该如何使用。使用上面的比喻，就是 sizeclass 标志着 span 是一个什么样的队伍。<br>object : 对象，用来存储一个变量数据内存空间，一个 span 在初始化时，会被切割成一堆等大的 object 。假设 object 的大小是 16B ， span 大小是 8K ，那么就会把 span 中的 page 就会被初始化 8K &#x2F; 16B &#x3D; 512 个 object 。</strong>所谓内存分配，就是分配一个 object 出去</strong>。</p>
+</blockquote>
+<ul>
+<li><p><strong>mheap</strong>：一开始go从操作系统索取一大块内存作为内存池，并放在一个叫mheap的内存池进行管理，mheap将一整块内存切割为不同的区域，并将一部分内存切割为合适的大小。</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/k5tTv4f9gtjMKsjAniZMti/1677118428785.png?auth_key=1709296586-roVkD1EJSo3RVAhLP2GvtT-0-3194833b984c592e790b4933e1b43c13"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/k5tTv4f9gtjMKsjAniZMti/1677118428785.png?auth_key=1709296586-roVkD1EJSo3RVAhLP2GvtT-0-3194833b984c592e790b4933e1b43c13"  lazyload></a></p>
+<p>  <strong>mheap.spans</strong> ：用来存储 page 和 span 信息，比如一个 span 的起始地址是多少，有几个 page，已使用了多大等等。</p>
+<p>  <strong>mheap.bitmap</strong>： 存储着各个 span 中对象的标记信息，比如对象是否可回收等等。</p>
+<p>  <strong>mheap.arena_start</strong> : 将要分配给应用程序使用的空间。</p>
+<p>  再说明下，图中的空间大小，是 Go 向操作系统申请的<strong>虚拟内存地址空间</strong>，操作系统会将该段地址空间预留出来不做它用；而不是真的创建出这么大的虚拟内存，在页表中创建出这么大的映射关系。</p>
+</li>
+<li><p><strong>mcentral</strong>：<strong>用途相同</strong>的 span 会以链表的形式组织在一起。 这里的用途用 sizeclass 来表示，就是指该 span 用来存储哪种大小的对象。比如当分配一块大小为 n 的内存时，系统计算 n 应该使用哪种 sizeclass ，然后根据 sizeclass 的值去找到一个可用的 span 来用作分配。</p>
+<p>  找到合适的 span 后，会从中取一个 object 返回给上层使用。这些 span 被放在一个叫做 mcentral 的结构中管理。</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/q1h7mjzu8PRENBFum7pigh/1677119185283.png?auth_key=1709296586-ALVNpNpVcyvJCoh5aiFza-0-6228c12ee5d6ccc433364959c4658972"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/q1h7mjzu8PRENBFum7pigh/1677119185283.png?auth_key=1709296586-ALVNpNpVcyvJCoh5aiFza-0-6228c12ee5d6ccc433364959c4658972"  lazyload></a></p>
+</li>
+<li><p><strong>mcache</strong>：mcentral 结构中有一个 lock 字段；因为并发情况下，很有可能多个线程同时从 mcentral 那里申请内存的，必须要用锁来避免冲突。</p>
+<p>  但锁是低效的，在高并发的服务中，它会使内存申请成为整个系统的瓶颈；所以在 mcentral 的前面又增加了一层 mcache。</p>
+<p>  每一个 mcache 和每一个处理器(P) 是一一对应的，也就是说每一个 P 都有一个 mcache 成员。 Goroutine 申请内存时，首先从其所在的 P 的 mcache 中分配，如果 mcache 没有可用 span ，再从 mcentral 中获取，并填充到 mcache 中。</p>
+<p>  从 mcache 上分配内存空间是不需要加锁的，因为在同一时间里，一个 P 只有一个线程在其上面运行，不可能出现竞争。没有了锁的限制，大大加速了内存分配。</p>
+</li>
+</ul>
+<h3 id="什么是内存泄露？说下go中的内存泄露的几个情况？"><a href="#什么是内存泄露？说下go中的内存泄露的几个情况？" class="headerlink" title="什么是内存泄露？说下go中的内存泄露的几个情况？"></a>什么是内存泄露？说下go中的内存泄露的几个情况？</h3><p>  内存泄露：程序在申请内存后，没有释放已申请的内存空间，这就导致可用的内存越来越少。</p>
+<ol>
+<li><p><strong>goroutine <strong>在执行时</strong>被阻塞</strong>而无法退出，就会导致 goroutine 的内存泄漏</p>
+</li>
+<li><p>互斥锁没有释放或者是造成<strong>死锁</strong></p>
+</li>
+<li><p>字符串或者<strong>切片截取</strong>引发的内存泄露（就是截取了没有管它）</p>
+<p> string相比切片少了一个容量的cap字段，可以把string当成一个只读的切片类型。获取长string或者切片中的一段内容，由于新生成的对象和老的string或者切片共用一个内存空间，会导致老的string和切片资源暂时得不到释放，造成<strong>短暂的内存泄漏</strong></p>
+</li>
+<li><p>写函数时用<strong>数组传参</strong>，这个<strong>数组非常大</strong>，就会产生内存泄露</p>
+</li>
+</ol>
+<h3 id="函数返回局部变量的指针是否安全？"><a href="#函数返回局部变量的指针是否安全？" class="headerlink" title="函数返回局部变量的指针是否安全？"></a>函数返回局部变量的指针是否安全？</h3><p>  这一点和C++不同，在Go里面返回局部变量的指针是安全的。因为Go会进行<strong>逃逸分析</strong>，如果发现局部变量的作用域超过该函数则会<strong>把指针分配到堆区</strong>，避免内存泄漏。</p>
+<h3 id="什么是逃逸分析？逃逸分析有什么好处？"><a href="#什么是逃逸分析？逃逸分析有什么好处？" class="headerlink" title="什么是逃逸分析？逃逸分析有什么好处？"></a><strong>什么是逃逸分析？逃逸分析有什么好处？</strong></h3><p>  Go语言的逃逸分析是编译器执行静态代码分析后，对内存管理进行的优化和简化，<strong>它可以决定一个变量是分配到堆还栈上</strong>。编译器会根据变量是否被外部引用来决定是否逃逸：</p>
+<ol>
+<li>如果函数外部没有引用，则优先放到栈中</li>
+<li>如果函数外部存在引用，则必定放到堆中</li>
+</ol>
+<p>  通过逃逸分析，那些 <strong>不需要分配到堆上的变量直接分配到栈上，</strong> 堆上的变量少了不但同时减少 GC 的压力，还减轻了内存分配的开销。</p>
+<h3 id="什么是内存逃逸，说下go中什么情况下会发生内存逃逸？"><a href="#什么是内存逃逸，说下go中什么情况下会发生内存逃逸？" class="headerlink" title="什么是内存逃逸，说下go中什么情况下会发生内存逃逸？"></a><strong>什么是内存逃逸，说下go中什么情况下会发生内存逃逸？</strong></h3><p>内存逃逸：本该分配到栈上的变量，跑到了堆上，这就导致了内存逃逸。<br>导致内存逃逸的情况：</p>
+<ol>
+<li><strong>方法内返回局部变量指针</strong></li>
+</ol>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">package main
+
+import &quot;fmt&quot;
+
+func main() &#123;
+    name :&#x3D; point()
+    fmt.Println(*name)
+&#125;
+
+func point() *string &#123;
+    name :&#x3D;&quot;指针&quot;
+    return &amp;name
+&#125;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<ol start="2">
+<li><strong>向 channel 发送指针数据</strong></li>
+<li>在闭包中引用包外的值</li>
+<li><strong>在 slice 或 map 中存储指针</strong></li>
+<li>切片（扩容后）长度太大</li>
+<li>在 interface 类型上调用方法</li>
+</ol>
+<h3 id="我们如何确定是否发生了逃逸（如何排查内存逃逸）？"><a href="#我们如何确定是否发生了逃逸（如何排查内存逃逸）？" class="headerlink" title="我们如何确定是否发生了逃逸（如何排查内存逃逸）？"></a>我们如何确定是否发生了逃逸（如何排查内存逃逸）？</h3><p>  通过执行命令<code>go build -gcglags &#39;-m -l&#39; main.go</code></p>
+<p>  -m用于输出编译器的优化细节（包括使用逃逸分析这种优化）</p>
+<p>  -l 用于禁用相关函数的内联优化，防止逃逸被编译器通过内联彻底的抹除</p>
+<h3 id="C-中这种堆栈和Go有什么区别吗？"><a href="#C-中这种堆栈和Go有什么区别吗？" class="headerlink" title="C++中这种堆栈和Go有什么区别吗？"></a>C++中这种堆栈和Go有什么区别吗？</h3><p>  C++中的堆栈本质上就是操作系统层级的概念</p>
+<p>  而对于用户态Go程序所消耗的堆和栈，其实只是Go运行时通过管理向操作系统申请的堆内存，构造逻辑上的堆和栈</p>
+<h3 id="了解过Go的性能调优吗？说一说"><a href="#了解过Go的性能调优吗？说一说" class="headerlink" title="了解过Go的性能调优吗？说一说"></a><strong>了解过Go的性能调优吗？说一说</strong></h3><ul>
+<li><p>开发中要注意的细节</p>
+<ul>
+<li>对于slice和map来说，预分配好空间性能更好</li>
+<li>字符串处理中对于连接操作来说，<strong>strings.Join ≈ strings.Builder &gt; bytes.Buffer &gt; “+” &gt; fmt.Sprintf</strong></li>
+<li>使用空结构体节省内存：空struct{}可以使用map去模拟set，也可以应用到channel收发数据上。</li>
+<li>使用atomatic包：<ul>
+<li>因为锁是属于操作系统进行系统调用，而atomatic操作是通过硬件实现的，效率比锁高</li>
+<li>sync.Mutex应该用来保护一段逻辑，而不仅仅用于保护一个变量</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>其次要遵循以下调优原则</p>
+<ul>
+<li>要依靠数据不是猜测</li>
+<li>要定位最大瓶颈而不是细枝末节</li>
+<li>不要过早优化</li>
+<li>不要过度优化</li>
+</ul>
+</li>
+<li><p>要使用<strong>pprof工具</strong>对性能进行分析<br><a target="_blank" rel="noopener" href="https://sammyne.github.io/go-profiling/#runtime-pprof">Go 性能调优 | sammyne</a><br>pprof 是 go 官方提供的性能测评工具，包含在** net&#x2F;http&#x2F;pprof** 和 <strong>runtime&#x2F;pprof</strong> 两个包，分别用于不同场景</p>
+</li>
+<li><p>runtime&#x2F;pprof 主要用于可结束的代码块，如一次编解码操作等</p>
+</li>
+<li><p>net&#x2F;http&#x2F;pprof 是对 runtime&#x2F;pprof 的二次封装，主要用于不可结束的代码块，如 web 应用等</p>
+</li>
+</ul>
+<p>pprof 开启后，每隔一段时间（10ms）就会收集下当前的堆栈信息，获取各个函数占用的 CPU 以及内存资源，最后通过对这些采样数据进行分析，形成一个性能分析报告。</p>
+<p>比如说执行如下代码</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">func main() &#123;
+  &#x2F;&#x2F;创建cpu文件来存放这次性能分析收集的cpu信息
+  f, err :&#x3D; os.Create(&quot;cpu&quot;)
+  if err !&#x3D; nil &#123;
+    log.Fatal(err)
+  &#125;
+  _ &#x3D; pprof.StartCPUProfile(f)
+  defer pprof.StopCPUProfile()
+  
+  &#x2F;&#x2F;开100个协程，每个协程都执行counter函数
+  var wg sync.WaitGroup
+  wg.Add(100)
+  for i :&#x3D; 0; i &lt; 100; i++ &#123;
+    go workOnce(&amp;wg)
+  &#125;
+  wg.Wait()
+  &#x2F;&#x2F;创建mem文件来存放这次性能分析收集的mem信息
+  m, err :&#x3D; os.Create(&quot;mem&quot;)
+  if err !&#x3D; nil &#123;
+    log.Fatal(err)
+  &#125;
+  _ &#x3D; pprof.WriteHeapProfile(m)
+  f.Close()
+
+&#125;
+func counter() &#123;
+  slice :&#x3D; make([]int, 0)
+  var c int
+  for i :&#x3D; 0; i &lt; 100000; i++ &#123;
+    c &#x3D; i + 1 + 2 + 3 + 4 + 5
+    slice &#x3D; append(slice, c)
+  &#125;
+&#125;
+func workOnce(wg *sync.WaitGroup) &#123;
+  counter()
+  wg.Done()
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>执行完上述代码之后就会发现文件夹中多了cpu和mem两个文件，然后利用 <code>go tool pprof</code> 工具进行分析。</p>
+<ul>
+<li>使用<strong>trace工具</strong>进一步排查问题</li>
+</ul>
+<p>trace 工具也是 go 工具之一，能够辅助我们跟踪程序的执行情况，进一步方便我们排查问题，往往配合 pprof 使用。trace 的使用和 pprof 类似，为了简化分析，我们首先利用下列代码进行讲解，只是用单核核运行程序：</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">&#x2F;&#x2F;go:build ignore
+&#x2F;&#x2F; +build ignore
+
+package main
+
+import (
+  &quot;log&quot;
+  &quot;os&quot;
+  &quot;runtime&quot;
+  &quot;runtime&#x2F;trace&quot;
+  &quot;sync&quot;
+)
+
+var hello []int
+
+func counter(wg *sync.WaitGroup) &#123;
+  defer wg.Done()
+
+  slice :&#x3D; []int&#123;0&#125;
+  c :&#x3D; 1
+  for i :&#x3D; 0; i &lt; 100000; i++ &#123;
+    c &#x3D; i + 1 + 2 + 3 + 4 + 5
+    slice &#x3D; append(slice, c)
+  &#125;
+  hello &#x3D; slice
+&#125;
+
+func main() &#123;
+  &#x2F;&#x2F;设置单核运行
+  runtime.GOMAXPROCS(1)
+
+  f, err :&#x3D; os.Create(&quot;trace&quot;)
+  if err !&#x3D; nil &#123;
+    log.Fatal(err)
+  &#125;
+  trace.Start(f)
+  defer f.Close()
+  defer trace.Stop()
+
+  var wg sync.WaitGroup
+  wg.Add(3)
+  for i :&#x3D; 0; i &lt; 3; i++ &#123;
+    go counter(&amp;wg)
+  &#125;
+  wg.Wait()
+&#125;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>然后使用<code>go tool trace -http=127.0.0.1:8000 trace</code></p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#go%E7%9A%84GC%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84%EF%BC%9F%EF%BC%88GC%E6%9C%BA%E5%88%B6%E9%9A%8F%E7%9D%80golang%E7%89%88%E6%9C%AC%E5%8F%98%E5%8C%96%E5%A6%82%E4%BD%95%E5%8F%98%E5%8C%96%E7%9A%84%EF%BC%9F%EF%BC%89"><span class="top-box-text">go的GC是怎么实现的？（GC机制随着golang版本变化如何变化的？）</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#Go%E7%9A%84%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%EF%BC%8C%E4%B8%BA%E4%BB%80%E4%B9%88%E5%B0%8F%E5%AF%B9%E8%B1%A1%E8%BF%87%E5%A4%9A%E4%BC%9A%E9%80%A0%E6%88%90GC%E5%8E%8B%E5%8A%9B%EF%BC%9F"><span class="top-box-text">Go的内存模型，为什么小对象过多会造成GC压力？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E4%BB%80%E4%B9%88%E6%98%AF%E5%BC%BA%E4%B8%89%E8%89%B2%E4%B8%8D%E5%8F%98%E5%BC%8F%E5%92%8C%E5%BC%B1%E4%B8%89%E8%89%B2%E4%B8%8D%E5%8F%98%E5%BC%8F%EF%BC%9F"><span class="top-box-text">说说什么是强三色不变式和弱三色不变式？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%82%A3%E4%BB%80%E4%B9%88%E6%98%AF%E6%8F%92%E5%85%A5%E5%B1%8F%E9%9A%9C%E5%92%8C%E5%88%A0%E9%99%A4%E5%B1%8F%E9%9A%9C%EF%BC%9F"><span class="top-box-text">那什么是插入屏障和删除屏障？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E6%8F%92%E5%85%A5%E5%B1%8F%E9%9A%9C%E5%92%8C%E5%88%A0%E9%99%A4%E5%B1%8F%E9%9A%9C%E7%9A%84%E7%BC%BA%E7%82%B9"><span class="top-box-text">说说插入屏障和删除屏障的缺点</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E7%AE%80%E8%BF%B0%E4%B8%80%E4%B8%8Bgo%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86%E7%9A%84%E5%8E%9F%E7%90%86%EF%BC%9F"><span class="top-box-text">- 简述一下go内存管理的原理？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2%EF%BC%9F%E8%AF%B4%E4%B8%8Bgo%E4%B8%AD%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2%E7%9A%84%E5%87%A0%E4%B8%AA%E6%83%85%E5%86%B5%EF%BC%9F"><span class="top-box-text">什么是内存泄露？说下go中的内存泄露的几个情况？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%87%BD%E6%95%B0%E8%BF%94%E5%9B%9E%E5%B1%80%E9%83%A8%E5%8F%98%E9%87%8F%E7%9A%84%E6%8C%87%E9%92%88%E6%98%AF%E5%90%A6%E5%AE%89%E5%85%A8%EF%BC%9F"><span class="top-box-text">函数返回局部变量的指针是否安全？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E9%80%83%E9%80%B8%E5%88%86%E6%9E%90%EF%BC%9F%E9%80%83%E9%80%B8%E5%88%86%E6%9E%90%E6%9C%89%E4%BB%80%E4%B9%88%E5%A5%BD%E5%A4%84%EF%BC%9F"><span class="top-box-text">什么是逃逸分析？逃逸分析有什么好处？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E5%86%85%E5%AD%98%E9%80%83%E9%80%B8%EF%BC%8C%E8%AF%B4%E4%B8%8Bgo%E4%B8%AD%E4%BB%80%E4%B9%88%E6%83%85%E5%86%B5%E4%B8%8B%E4%BC%9A%E5%8F%91%E7%94%9F%E5%86%85%E5%AD%98%E9%80%83%E9%80%B8%EF%BC%9F"><span class="top-box-text">什么是内存逃逸，说下go中什么情况下会发生内存逃逸？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%88%91%E4%BB%AC%E5%A6%82%E4%BD%95%E7%A1%AE%E5%AE%9A%E6%98%AF%E5%90%A6%E5%8F%91%E7%94%9F%E4%BA%86%E9%80%83%E9%80%B8%EF%BC%88%E5%A6%82%E4%BD%95%E6%8E%92%E6%9F%A5%E5%86%85%E5%AD%98%E9%80%83%E9%80%B8%EF%BC%89%EF%BC%9F"><span class="top-box-text">我们如何确定是否发生了逃逸（如何排查内存逃逸）？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#C-%E4%B8%AD%E8%BF%99%E7%A7%8D%E5%A0%86%E6%A0%88%E5%92%8CGo%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB%E5%90%97%EF%BC%9F"><span class="top-box-text">C++中这种堆栈和Go有什么区别吗？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BA%86%E8%A7%A3%E8%BF%87Go%E7%9A%84%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%90%97%EF%BC%9F%E8%AF%B4%E4%B8%80%E8%AF%B4"><span class="top-box-text">了解过Go的性能调优吗？说一说</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-GMP-Goroutine/">
+          <h3 class="post-title">
+            下一篇：Golang-八股-GMP-Goroutine
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
