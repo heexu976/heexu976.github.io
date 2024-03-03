@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-MySql-索引</title>
+<meta name="keywords" content="八股-MySql-索引, HeXu">
+<meta name="description" content="- B树和B+树的区别？
+B+叶子节点有所有索引的冗余和其对应的数据，非叶子节点没有数据，B树没有冗余，非叶子节点有数据
+B+树最后肯定会查询到底，且其叶子节点都排好序了B树可能只查询到中间
+B+树叶子节点之间相互之间也构成一个双向链表，B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-MySql-索引">
+<meta property="og:description" content="- B树和B+树的区别？
+B+叶子节点有所有索引的冗余和其对应的数据，非叶子节点没有数据，B树没有冗余，非叶子节点有数据
+B+树最后肯定会查询到底，且其叶子节点都排好序了B树可能只查询到中间
+B+树叶子节点之间相互之间也构成一个双向链表，B">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-MySql-索引</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="B树和B-树的区别？"><a href="#B树和B-树的区别？" class="headerlink" title="- B树和B+树的区别？"></a>- <strong>B树和B+树的区别？</strong></h2><ul>
+<li>B+<strong>叶子节点有所有索引的冗余</strong>和其对应的数据，非叶子节点没有数据，B树没有冗余，非叶子节点有数据</li>
+<li>B+树最后肯定会<strong>查询到底</strong>，且其叶子节点都排好序了B树可能只查询到中间</li>
+<li>B+树叶子节点之间相互之间也构成一个<strong>双向链表</strong>，B树没有</li>
+</ul>
+<h2 id="为什么MySQL使用B-树？"><a href="#为什么MySQL使用B-树？" class="headerlink" title="- 为什么MySQL使用B+树？"></a>- <strong>为什么MySQL使用B+树？</strong></h2><ul>
+<li>B+树非叶子节点不放数据只放索引，所以可以<strong>存放更多的索引，比B树更矮胖，所以IO次数就比较少</strong></li>
+<li>B+树有很多<strong>冗余节点</strong>，所以插入、删除的效率就比较高，而B树删除插入调整很多</li>
+<li>B+树叶子节点用<strong>双向链表相互连接</strong>了起来，所以范围查询效率比较高</li>
+</ul>
+<h2 id="说一下哈希表，有序数组，二叉搜索树，B树，B-树-做索引的区别？"><a href="#说一下哈希表，有序数组，二叉搜索树，B树，B-树-做索引的区别？" class="headerlink" title="- 说一下哈希表，有序数组，二叉搜索树，B树，B+树 做索引的区别？"></a>- 说一下哈希表，有序数组，二叉搜索树，B树，B+树 做索引的区别？</h2><ul>
+<li><strong>哈希表</strong>：只适合等值查询，不能做范围查询，必须全表扫描；</li>
+<li><strong>有序数据</strong>：适合等值查询和范围查询，但是更新数据的成本太高；</li>
+<li><strong>二叉搜索树</strong>：为了维持 O(log(N)) 的查询复杂度，你就需要保持这棵树是平衡二叉树。为了做这个保证，更新的时间复杂度也是 O(log(N))。</li>
+<li><strong>红黑树</strong>：红黑树就是介于完全不平衡和完全平衡之间的一种二叉树，通过每个节点有红黑两种颜色、从节点到任意叶子节点会经过相同数量的黑色节点等一系列规则，实现了树的层数最大也只会有两倍的差距，这样既能提高插入和删除的效率，又能让树相对平衡从而有还不错的查询效率。从整体上讲，红黑树就是一种中庸之道的二叉树，但是用来当mysql的索引还是有问题，用红黑树存放100万个数据，把树放满，这个树的高度会越变越高和二叉搜索树一样</li>
+<li><strong>B树</strong>：在二分查找树的基础上，增加单个节点的数据存储数量，同时增加了树的子节点数，一次计算可以把查找范围缩小更多。但是非叶子节点会存放索引数据和业务数据，为了查找对比计算，需要把数据加载到内存以及 CPU 高速缓存中时，都要把索引数据和无关的业务数据全部查出来。如果所对比的节点不是所查的数据，那么这些加载进内存的业务数据就毫无用处，全部抛弃。</li>
+<li><strong>B+树</strong>：B+ 树就是为了拆分索引数据与业务数据的平衡多叉树。非叶子节点只保存索引数据，叶子节点保存索引数据与业务数据。这样即保证了叶子节点的简约干净，数据量大大减小，又保证了最终能查到对应的业务数。既提高了单次 I&#x2F;O 数据的有效性，又减少了 I&#x2F;O 次数，还实现了业务。</li>
+</ul>
+<h2 id="MyISAM和InnoDB引擎中的B-树区别是什么？"><a href="#MyISAM和InnoDB引擎中的B-树区别是什么？" class="headerlink" title="- MyISAM和InnoDB引擎中的B+树区别是什么？"></a>- MyISAM和InnoDB引擎中的B+树区别是什么？</h2><p>前者使用非聚簇索引（<strong>叶子节点的data部分放数据记录的地址</strong>），后者主键索引使用聚簇索引（<strong>叶子节点部分就是数据</strong>）</p>
+<h2 id="B-树的查找时间复杂度是多少？"><a href="#B-树的查找时间复杂度是多少？" class="headerlink" title="- B+树的查找时间复杂度是多少？"></a>- B+树的查找时间复杂度是多少？</h2><p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/pvUsqvwejUNyFKqP8JbqE8/1674559818932.png?auth_key=1709466873-w6De4cE4QN9xhAvnwdRuUQ-0-464c19492b2336f8970681835f48b601"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/pvUsqvwejUNyFKqP8JbqE8/1674559818932.png?auth_key=1709466873-w6De4cE4QN9xhAvnwdRuUQ-0-464c19492b2336f8970681835f48b601"  lazyload></a></p>
+<p>这些表述都对</p>
+<h2 id="创建表时，InnoDB-存储引擎会怎么选择索引？"><a href="#创建表时，InnoDB-存储引擎会怎么选择索引？" class="headerlink" title="- 创建表时，InnoDB 存储引擎会怎么选择索引？"></a>- 创建表时，InnoDB 存储引擎会怎么选择索引？</h2><ul>
+<li>如果有主键，默认会使用<strong>主键</strong>作为聚簇索引的索引键（key）；</li>
+<li>如果没有主键，就选择第一个<strong>不包含 NULL 值的唯一列</strong>作为聚簇索引的索引键（key）；</li>
+<li>在上面两个都没有的情况下，InnoDB 将自动生成一个<strong>隐式自增 id 列</strong>作为聚簇索引的索引键（key）；</li>
+</ul>
+<h2 id="说一下mysql索引的类型有哪些？"><a href="#说一下mysql索引的类型有哪些？" class="headerlink" title="- 说一下mysql索引的类型有哪些？"></a>- <strong>说一下mysql索引的类型有哪些？</strong></h2><p>按照不同的标准来说，会有不同的分类方式</p>
+<ul>
+<li>按「数据结构」分类：<strong>B+tree索引、Hash索引、Full-text索引</strong>。</li>
+<li>按「物理存储」分类：<strong>聚簇索引（主键索引）、二级索引（辅助索引）</strong>。</li>
+<li>按「字段特性」分类：<strong>主键索引、唯一索引、普通索引、前缀索引</strong>。<br>  注意主键索引不允许为null，不允许相同，唯一索引允许多个null但不能相同，普通索引允许为null也允许相同，前缀索引只适用于字符串类型的数据，前缀索引是对文本的前几个字符创建索引。</li>
+<li>按「字段个数」分类：<strong>单列索引、联合索引</strong>。</li>
+</ul>
+<p>建立在单列上的索引称为单列索引，比如主键索引；<br>建立在多列上的索引称为联合索引；</p>
+<h2 id="聚簇索引和非聚簇索引的区别？"><a href="#聚簇索引和非聚簇索引的区别？" class="headerlink" title="- 聚簇索引和非聚簇索引的区别？"></a>- 聚簇索引和非聚簇索引的区别？</h2><p>  在聚簇索引之上创建的索引称之为辅助索引（非聚簇索引），辅助索引访问数据总是需要二次查找。辅助索引叶子节点存储的不再是行的物理位置，而是主键值。</p>
+<p>  通过辅助索引首先找到的是主键值，再通过主键值找到数据行的数据页，再通过数据页中的Page Directory找到数据行。</p>
+<h2 id="什么时候联合索引会失效？-说说什么是最左前缀匹配原则？"><a href="#什么时候联合索引会失效？-说说什么是最左前缀匹配原则？" class="headerlink" title="- 什么时候联合索引会失效？(说说什么是最左前缀匹配原则？)"></a>- <strong>什么时候联合索引会失效？(说说什么是最左前缀匹配原则？)</strong></h2><p>  想要使用某个联合索引比如说a,b,c，这是个索引，我们一定要提供a字段条件，这样才能使用联合索引，底层的B+树是先按照a排序，然后在a相同的记录中按照b排序，所以<strong>b 和 c 是全局无序，局部相对有序的</strong>，<strong>利用索引的前提是索引里的 key 是有序的</strong>，这样在没有遵循最左匹配原则的情况下，是无法利用到索引的。</p>
+<h2 id="什么时候联合索引的最左匹配原则会停止？"><a href="#什么时候联合索引的最左匹配原则会停止？" class="headerlink" title="什么时候联合索引的最左匹配原则会停止？"></a>什么时候联合索引的最左匹配原则会停止？</h2><p>  联合索引的最左匹配原则，在遇到**范围查询（如 &gt;、&lt;）**的时候，就会停止匹配，也就是范围查询的字段可以用到联合索引，但是在范围查询字段的后面的字段无法用到联合索引。注意，对于 &gt;&#x3D;、&lt;&#x3D;、BETWEEN、like 前缀匹配的范围查询，并不会停止匹配。</p>
+<ul>
+<li><strong>非聚簇索引一定回表查询吗？(说说什么是覆盖索引？)</strong></li>
+</ul>
+<p>当查询的数据是能在二级索引的 B+Tree 的叶子节点里查询到，这时就不用再查主键索引，比如下面这条查询语句：</p>
+<pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">select id from product where product_no &#x3D; &#39;0002&#39;;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>这种在二级索引的 B+Tree 就能查询到结果的过程就叫作「覆盖索引」，也就是只需要查一个 B+Tree 就能找到数据。</p>
+<h2 id="说说什么是回表？"><a href="#说说什么是回表？" class="headerlink" title="- 说说什么是回表？"></a>- <strong>说说什么是回表？</strong></h2><p>如果我用 product_no 二级索引查询商品，如下查询语句：</p>
+<pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">select * from product where product_no &#x3D; &#39;0002&#39;;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>会先检二级索引中的 B+Tree 的索引值（商品编码，product_no），找到对应的叶子节点，然后获取主键值，然后再通过主键索引中的 B+Tree 树查询到对应的叶子节点，然后获取整行数据。<strong>这个过程叫「回表」，也就是说要查两个 B+Tree 才能查到数据</strong>。</p>
+<h2 id="了解索引下推吗，说说什么是索引下推？"><a href="#了解索引下推吗，说说什么是索引下推？" class="headerlink" title="了解索引下推吗，说说什么是索引下推？"></a>了解索引下推吗，说说什么是索引下推？</h2><p>mysql 5.6 引入的索引下推优化（index condition pushdown）， 可以在联合索引遍历过程中，对联合索引中包含的字段先做判断，直接过滤掉不满足条件的记录，减少回表次数。</p>
+<h2 id="慢查询了解吗，说说什么是慢查询？"><a href="#慢查询了解吗，说说什么是慢查询？" class="headerlink" title="- 慢查询了解吗，说说什么是慢查询？"></a>- 慢查询了解吗，说说什么是慢查询？</h2><p>顾名思义就是<strong>很慢的查询</strong>，当执行SQL超过<strong>long_query_time</strong>参数设定的时间阈值（默认10s）时，就被认为是慢查询，这个SQL语句就是需要优化的。慢查询被记录在<strong>慢查询日志</strong>里。慢查询日志默认是不开启的。如果需要优化SQL语句，就可以开启这个功能。</p>
+<h2 id="慢查询是如何进行排查的？"><a href="#慢查询是如何进行排查的？" class="headerlink" title="- 慢查询是如何进行排查的？"></a>- 慢查询是如何进行排查的？</h2><ol>
+<li>首先开启<strong>慢查询日志</strong>功能，设置时间阈值</li>
+<li>使用<strong>mysqldumpslow</strong>工具分析慢查询日志，使用命令查询慢SQL语句，举个例子查询用是最多的10条慢sql：</li>
+</ol>
+<pre class="line-numbers language-Bash" data-language="Bash"><code class="language-Bash">sql mysqldumpslow -s t -t 10 -g &#39;select&#39; &#x2F;data&#x2F;mysql&#x2F;data&#x2F;dcbi-3306&#x2F;log&#x2F;slow.log<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>随后会得到如下的结果</p>
+<p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/f37j67xFpYwvSpV3p6kzt3/image.png?auth_key=1709467606-ty294rQWrYp7fEcNJjEfnM-0-9ed0280fd40a0398b8d8d12fb52c0caa"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/f37j67xFpYwvSpV3p6kzt3/image.png?auth_key=1709467606-ty294rQWrYp7fEcNJjEfnM-0-9ed0280fd40a0398b8d8d12fb52c0caa"  lazyload></a></p>
+<p>Count：代表这个 SQL 语句执行了多少次  </p>
+<p>Time：代表执行的时间，括号是累计时间  </p>
+<p>Lock：表示锁定的时间，括号是累计时间  </p>
+<p>Rows：表示返回的记录数，括号是累计记录数</p>
+<h2 id="mysql查询慢是什么原因呢？（慢查询的原因是什么呢？）"><a href="#mysql查询慢是什么原因呢？（慢查询的原因是什么呢？）" class="headerlink" title="- mysql查询慢是什么原因呢？（慢查询的原因是什么呢？）"></a>- <strong>mysql查询慢是什么原因呢？（慢查询的原因是什么呢？）</strong></h2><ul>
+<li>缺乏索引： 如果数据库表没有合适的索引，查询时可能需要进行全表扫描，导致查询性能下降。确保常用的查询条件和连接条件上有适当的索引。</li>
+<li>查询条件不恰当： 查询条件的不恰当使用，例如使用了不必要的 LIKE 操作、非 SARGable（无法使用索引的）条件、或者未使用索引的列进行过滤，都可能导致性能下降。</li>
+<li>数据量过大： 当数据库表中的数据量增加时，查询性能可能下降。在这种情况下，可以考虑使用合适的索引、分区表等技术来优化查询性能。</li>
+<li>锁和并发： 当有大量的并发查询时，锁的争用可能导致查询慢。长时间的锁持有、锁等待和死锁都可能影响查询性能。优化数据库的并发控制和事务管理可以缓解这些问题。</li>
+<li>不适当的表设计： 数据库表的设计可能不合理，例如过度规范化或反规范化不足，都可能影响查询性能。合理的数据库设计是提高查询性能的基础。</li>
+<li>硬件性能问题： 数据库运行在性能较差的硬件上，例如 CPU、内存、磁盘等资源不足，都可能导致查询慢。确保硬件配置满足数据库的需求。</li>
+<li>查询缓存失效： 如果查询缓存被频繁地失效，或者查询结果的变化频繁，查询缓存可能会带来性能问题。在某些情况下，禁用查询缓存可能是一个解决方案。</li>
+</ul>
+<h2 id="索引失效的情况有哪些？"><a href="#索引失效的情况有哪些？" class="headerlink" title="- 索引失效的情况有哪些？"></a>- <strong>索引失效的情况有哪些？</strong></h2><ul>
+<li><code>like %xx</code> 或者 <code>like %xx%</code>（左右模糊匹配）造成索引失效</li>
+<li>查询条件中对索引列使用<strong>函数</strong>或者使用<strong>表达式计算</strong>，也会失效</li>
+<li>遇到遇到字符串和数字比较的时候，且字符串是索引，发生<strong>隐式数据类型转换</strong></li>
+<li>使用联合索引的时候<strong>不遵循最左匹配原则</strong>去查找</li>
+<li>where子句中，如果在 OR 前的条件列是索引列，而在 OR 后的条件列不是索引列，那么索引会失效</li>
+</ul>
+<h2 id="慢查询如何解决或者优化呢？"><a href="#慢查询如何解决或者优化呢？" class="headerlink" title="- 慢查询如何解决或者优化呢？"></a>- <strong>慢查询如何解决或者优化呢？</strong></h2><ul>
+<li>首先要优化表结构，即要明确在什么时候需要建立索引，什么时候不需要建立索引</li>
+<li>其次要优化SQL语句，主要是避免索引失效的情况</li>
+</ul>
+<h2 id="说说有什么优化索引的方法？"><a href="#说说有什么优化索引的方法？" class="headerlink" title="- 说说有什么优化索引的方法？"></a>- 说说有什么优化索引的方法？</h2><ul>
+<li><strong>前缀索引</strong>优化<br>  在一些大字符串的字段作为索引时，使用前缀索引可以帮助我们减小索引项的大小。</li>
+<li><strong>覆盖索引</strong>优化<br>  举个例子，假设我们只需要查询商品的名称、价格，有什么方式可以避免回表呢<br>  我们可以建立一个联合索引，即「商品ID、名称、价格」作为一个联合索引。如果索引中存在这些数据，查询将不会再次检索主键索引，从而避免回表。<br>  所以，使用覆盖索引的好处就是，不需要查询出包含整行记录的所有信息，也就减少了大量的 I&#x2F;O 操作。</li>
+<li>主键索引最好是<strong>自增的</strong>，而且长度不要太大<br>  InnoDB 创建主键索引默认为聚簇索引，数据被存放在了 B+Tree 的叶子节点上。也就是说，同一个叶子节点内的各个数据是按主键顺序存放的，因此，每当有一条新的数据插入时，数据库会根据主键将其插入到对应的叶子节点中，所以如果使用自增主键，就是追加方式的，不用重新移动数据，不用自增主键就得插入到中间位置，这将不得不移动其它数据来满足新数据的插入，甚至需要从一个页面复制数据到另外一个页面，会造成页分裂的现象。<br>  主键字段的长度不要太大，因为<strong>主键字段长度越小，意味着二级索引的叶子节点越小（二级索引的叶子节点存放的数据是主键值），这样二级索引占用的空间也就越小</strong>。</li>
+<li><strong>防止索引失效</strong>（避免索引失效的情况）</li>
+<li>索引最好设置为<strong>NOT NULL</strong><ul>
+<li>索引列存在 NULL 就会导致优化器在做索引选择的时候更加复杂，更加难以优化</li>
+<li>NULL 值是一个没意义的值，但是它会占用物理空间，所以会带来的存储空间的问题</li>
+</ul>
+</li>
+</ul>
+<h2 id="什么时候需要建立索引？"><a href="#什么时候需要建立索引？" class="headerlink" title="- 什么时候需要建立索引？"></a>- 什么时候需要建立索引？</h2><ul>
+<li>字段有<strong>唯一性限</strong>制的，比如商品编码；</li>
+<li><strong>经常用于 <strong><strong><code>WHERE</code></strong></strong> 查询条件的字段</strong>，这样能够提高整个表的查询速度，如果查询条件不是一个字段，可以建立联合索引。</li>
+<li><strong>经常用于 <strong><strong><code>GROUP BY</code></strong></strong> 和 <strong><strong><code>ORDER BY</code></strong></strong> 的字段</strong>，这样在查询的时候就不需要再去做一次排序了，因为我们都已经知道了建立索引之后在 B+Tree 中的记录都是排序好的。</li>
+</ul>
+<h2 id="什么时候不需要建立索引？"><a href="#什么时候不需要建立索引？" class="headerlink" title="- 什么时候不需要建立索引？"></a>- 什么时候不需要建立索引？</h2><ul>
+<li><code>WHERE</code> 条件，<code>GROUP BY</code>，<code>ORDER BY</code> 里用不到的字段，索引的价值是快速定位，如果起不到定位的字段通常是不需要创建索引的，因为索引是会占用物理空间的。</li>
+<li><strong>字段中存在大量重复数据</strong>，不需要创建索引，比如性别字段，只有男女，如果数据库表中，男女的记录分布均匀，那么无论搜索哪个值都可能得到一半的数据。在这些情况下，还不如不要索引，因为 MySQL 还有一个查询优化器，查询优化器发现某个值出现在表的数据行中的百分比很高的时候，它一般会忽略索引，进行全表扫描。</li>
+<li>表数据太少的时候，不需要创建索引；</li>
+<li><strong>经常更新的字段不用创建索引</strong>，比如不要对电商项目的用户余额建立索引，因为索引字段频繁修改，由于要维护 B+Tree的有序性，那么就需要频繁的重建索引，这个过程是会影响数据库性能的。</li>
+</ul>
+<h2 id="区分度是什么？MySQL-查看字段区分度的命令？"><a href="#区分度是什么？MySQL-查看字段区分度的命令？" class="headerlink" title="- 区分度是什么？MySQL 查看字段区分度的命令？"></a>- 区分度是什么？MySQL 查看字段区分度的命令？</h2><p>在MySQL中，字段的区分度指的是该字段的<strong>不同取值数量与总取值数量之比</strong>，用来表示该字段在数据集中的重复度。<br>例如，假设有一个名为<code>gender</code>的字段，其中取值只有<code>male</code>和<code>female</code>两种，且在该表中总共有1000条记录。那么该字段的区分度为2&#x2F;1000，即0.002，表示该字段的不同取值数量占总取值数量的比例为0.2%</p>
+<pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">SELECT COUNT(DISTINCT field_name) FROM table_name;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<ul>
+<li>explain用过没有，可以简单说说查询后有哪些字段吗？</li>
+</ul>
+<pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">EXPLAIN SELECT * FROM table WHERE id &#x3D; 100;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/oWvopR2y5zfaUJQ2gyQdAM/1676901212546.png?auth_key=1709468161-2eXBjd1ptnnvri2Ngvz4z4-0-0aab92903c5e23844b704d28a69d6b84"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/oWvopR2y5zfaUJQ2gyQdAM/1676901212546.png?auth_key=1709468161-2eXBjd1ptnnvri2Ngvz4z4-0-0aab92903c5e23844b704d28a69d6b84"  lazyload></a></p>
+<p>执行该命令后，MySQL会返回一份查询执行计划，其中包含了很多重要信息，如下：</p>
+<ul>
+<li>id: 查询中<strong>每个操作</strong>的唯一标识符，有几个select就有几个id，并且id是按照select出现的顺序增长的，id列的值越大<strong>优先级</strong>越高，id相同则是按照执行计划列从上往下执行，id为空则是最后执行</li>
+<li><strong>select_type</strong>: 查询类型，例如简单查询、联合查询、子查询等</li>
+<li>table: 查询涉及的表</li>
+<li><strong>type</strong>: MySQL查询优化器所选的访问类型，包括ALL、index、range、ref等<ul>
+<li><code>system</code>：表示只有一行记录，这是常量连接类型。</li>
+<li><code>const</code>：表示使用常量值进行匹配，通常是在单表上根据主键或唯一索引进行匹配。这是最快的连接类型。</li>
+<li><code>eq_ref</code>：表示使用等值连接，通常出现在多表关联中，使用了主键或唯一索引等唯一值进行匹配。</li>
+<li><code>ref</code>：表示使用非唯一索引进行匹配，通常出现在多表关联中。</li>
+<li><code>range</code>：表示使用范围匹配，使用了索引查找一定范围内的记录，例如使用<code>BETWEEN</code>、<code>IN</code>等关键字。</li>
+<li><code>index</code>：表示扫描整个索引进行匹配，但是不需要读取数据表中的数据。这个连接类型比<code>ALL</code>快，因为它只需要读取索引文件。</li>
+<li><code>ALL</code>：表示全表扫描，通常是没有使用索引或索引使用不当导致的。</li>
+</ul>
+</li>
+<li>possible_keys: 查询中可能使用的索引</li>
+<li><strong>key</strong>: 实际使用的索引</li>
+<li><strong>rows</strong>: MySQL<strong>估计</strong>查询的总行数（这个值是根据MySQL对表和索引统计信息的估算，以及查询中使用的索引、过滤条件等信息计算得出的。）</li>
+<li>Extra: 包含一些额外的关于查询的信息，如使用的排序方式、是否使用了临时表等</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#B%E6%A0%91%E5%92%8CB-%E6%A0%91%E7%9A%84%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">- B树和B+树的区别？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88MySQL%E4%BD%BF%E7%94%A8B-%E6%A0%91%EF%BC%9F"><span class="top-box-text">- 为什么MySQL使用B+树？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%80%E4%B8%8B%E5%93%88%E5%B8%8C%E8%A1%A8%EF%BC%8C%E6%9C%89%E5%BA%8F%E6%95%B0%E7%BB%84%EF%BC%8C%E4%BA%8C%E5%8F%89%E6%90%9C%E7%B4%A2%E6%A0%91%EF%BC%8CB%E6%A0%91%EF%BC%8CB-%E6%A0%91-%E5%81%9A%E7%B4%A2%E5%BC%95%E7%9A%84%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">- 说一下哈希表，有序数组，二叉搜索树，B树，B+树 做索引的区别？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#MyISAM%E5%92%8CInnoDB%E5%BC%95%E6%93%8E%E4%B8%AD%E7%9A%84B-%E6%A0%91%E5%8C%BA%E5%88%AB%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="top-box-text">- MyISAM和InnoDB引擎中的B+树区别是什么？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#B-%E6%A0%91%E7%9A%84%E6%9F%A5%E6%89%BE%E6%97%B6%E9%97%B4%E5%A4%8D%E6%9D%82%E5%BA%A6%E6%98%AF%E5%A4%9A%E5%B0%91%EF%BC%9F"><span class="top-box-text">- B+树的查找时间复杂度是多少？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%88%9B%E5%BB%BA%E8%A1%A8%E6%97%B6%EF%BC%8CInnoDB-%E5%AD%98%E5%82%A8%E5%BC%95%E6%93%8E%E4%BC%9A%E6%80%8E%E4%B9%88%E9%80%89%E6%8B%A9%E7%B4%A2%E5%BC%95%EF%BC%9F"><span class="top-box-text">- 创建表时，InnoDB 存储引擎会怎么选择索引？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E4%B8%80%E4%B8%8Bmysql%E7%B4%A2%E5%BC%95%E7%9A%84%E7%B1%BB%E5%9E%8B%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- 说一下mysql索引的类型有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95%E5%92%8C%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95%E7%9A%84%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">- 聚簇索引和非聚簇索引的区别？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E8%81%94%E5%90%88%E7%B4%A2%E5%BC%95%E4%BC%9A%E5%A4%B1%E6%95%88%EF%BC%9F-%E8%AF%B4%E8%AF%B4%E4%BB%80%E4%B9%88%E6%98%AF%E6%9C%80%E5%B7%A6%E5%89%8D%E7%BC%80%E5%8C%B9%E9%85%8D%E5%8E%9F%E5%88%99%EF%BC%9F"><span class="top-box-text">- 什么时候联合索引会失效？(说说什么是最左前缀匹配原则？)</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E8%81%94%E5%90%88%E7%B4%A2%E5%BC%95%E7%9A%84%E6%9C%80%E5%B7%A6%E5%8C%B9%E9%85%8D%E5%8E%9F%E5%88%99%E4%BC%9A%E5%81%9C%E6%AD%A2%EF%BC%9F"><span class="top-box-text">什么时候联合索引的最左匹配原则会停止？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E4%BB%80%E4%B9%88%E6%98%AF%E5%9B%9E%E8%A1%A8%EF%BC%9F"><span class="top-box-text">- 说说什么是回表？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BA%86%E8%A7%A3%E7%B4%A2%E5%BC%95%E4%B8%8B%E6%8E%A8%E5%90%97%EF%BC%8C%E8%AF%B4%E8%AF%B4%E4%BB%80%E4%B9%88%E6%98%AF%E7%B4%A2%E5%BC%95%E4%B8%8B%E6%8E%A8%EF%BC%9F"><span class="top-box-text">了解索引下推吗，说说什么是索引下推？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%85%A2%E6%9F%A5%E8%AF%A2%E4%BA%86%E8%A7%A3%E5%90%97%EF%BC%8C%E8%AF%B4%E8%AF%B4%E4%BB%80%E4%B9%88%E6%98%AF%E6%85%A2%E6%9F%A5%E8%AF%A2%EF%BC%9F"><span class="top-box-text">- 慢查询了解吗，说说什么是慢查询？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%85%A2%E6%9F%A5%E8%AF%A2%E6%98%AF%E5%A6%82%E4%BD%95%E8%BF%9B%E8%A1%8C%E6%8E%92%E6%9F%A5%E7%9A%84%EF%BC%9F"><span class="top-box-text">- 慢查询是如何进行排查的？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#mysql%E6%9F%A5%E8%AF%A2%E6%85%A2%E6%98%AF%E4%BB%80%E4%B9%88%E5%8E%9F%E5%9B%A0%E5%91%A2%EF%BC%9F%EF%BC%88%E6%85%A2%E6%9F%A5%E8%AF%A2%E7%9A%84%E5%8E%9F%E5%9B%A0%E6%98%AF%E4%BB%80%E4%B9%88%E5%91%A2%EF%BC%9F%EF%BC%89"><span class="top-box-text">- mysql查询慢是什么原因呢？（慢查询的原因是什么呢？）</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%B4%A2%E5%BC%95%E5%A4%B1%E6%95%88%E7%9A%84%E6%83%85%E5%86%B5%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- 索引失效的情况有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%85%A2%E6%9F%A5%E8%AF%A2%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3%E6%88%96%E8%80%85%E4%BC%98%E5%8C%96%E5%91%A2%EF%BC%9F"><span class="top-box-text">- 慢查询如何解决或者优化呢？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E6%9C%89%E4%BB%80%E4%B9%88%E4%BC%98%E5%8C%96%E7%B4%A2%E5%BC%95%E7%9A%84%E6%96%B9%E6%B3%95%EF%BC%9F"><span class="top-box-text">- 说说有什么优化索引的方法？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E9%9C%80%E8%A6%81%E5%BB%BA%E7%AB%8B%E7%B4%A2%E5%BC%95%EF%BC%9F"><span class="top-box-text">- 什么时候需要建立索引？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%B8%8D%E9%9C%80%E8%A6%81%E5%BB%BA%E7%AB%8B%E7%B4%A2%E5%BC%95%EF%BC%9F"><span class="top-box-text">- 什么时候不需要建立索引？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%8C%BA%E5%88%86%E5%BA%A6%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9FMySQL-%E6%9F%A5%E7%9C%8B%E5%AD%97%E6%AE%B5%E5%8C%BA%E5%88%86%E5%BA%A6%E7%9A%84%E5%91%BD%E4%BB%A4%EF%BC%9F"><span class="top-box-text">- 区分度是什么？MySQL 查看字段区分度的命令？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E6%9D%82%E9%A1%B9/">
+          <h3 class="post-title">
+            下一篇：八股-MySql-杂项
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
