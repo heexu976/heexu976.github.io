@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-MySql-事务</title>
+<meta name="keywords" content="八股-MySql-事务, HeXu">
+<meta name="description" content="- 说说ACID是什么意思？
+A 原子性：要寄一块寄，要提交一块提交。通过undo log日志保证
+C 一致性：事务操作前和操作后，数据满足完整性约束，数据库保持一致性状态。 通过保证原子性、一致性、隔离性保证
+I 隔离性：防止并发事务执行">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-MySql-事务">
+<meta property="og:description" content="- 说说ACID是什么意思？
+A 原子性：要寄一块寄，要提交一块提交。通过undo log日志保证
+C 一致性：事务操作前和操作后，数据满足完整性约束，数据库保持一致性状态。 通过保证原子性、一致性、隔离性保证
+I 隔离性：防止并发事务执行">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-MySql-事务</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="说说ACID是什么意思？"><a href="#说说ACID是什么意思？" class="headerlink" title="- 说说ACID是什么意思？"></a>- 说说ACID是什么意思？</h2><ul>
+<li><strong>A 原子性</strong>：要寄一块寄，要提交一块提交。通过<strong>undo log日志</strong>保证</li>
+<li><strong>C 一致性</strong>：事务操作前和操作后，数据满足完整性约束，数据库保持一致性状态。 通过保证原子性、一致性、隔离性保证</li>
+<li><strong>I 隔离性</strong>：防止并发事务执行而导致不一致。通过<strong>MVCC或者锁机制</strong>保证</li>
+<li><strong>D 持久性</strong>：事务处理结束后，对数据的修改就是永久的，即便系统故障也不会丢失。通过<strong>redo log日志</strong>保证</li>
+</ul>
+<h2 id="说说因为并发事务并发导致了什么问题？"><a href="#说说因为并发事务并发导致了什么问题？" class="headerlink" title="- 说说因为并发事务并发导致了什么问题？"></a>- 说说因为并发事务并发导致了什么问题？</h2><ul>
+<li><strong>脏读：</strong>读到了一个未提交事务修改过的数据</li>
+<li><strong>不可重复读：</strong>在一个事务内多次读取同一个数据，如果出现前后两次读到的数据不一样的情况，就意味着发生了「不可重复读」现象</li>
+<li><strong>幻读：</strong>一个事务查询符合查询条件的记录数量，前后查询的记录数量不一致</li>
+</ul>
+<h2 id="说说隔离级别分别有哪些？"><a href="#说说隔离级别分别有哪些？" class="headerlink" title="- 说说隔离级别分别有哪些？"></a>- <strong>说说隔离级别分别有哪些？</strong></h2><ul>
+<li><strong>读未提交</strong>：事务没提交，但是做的变更会被其它事务看到（屁事没干）</li>
+<li><strong>读提交</strong>：事务提交之后变更才会被别人看到（解决脏读）,就是在每个语句执行之前都重新生成一个数据快照（read view）</li>
+<li><strong>可重复读</strong>：InnoDB的默认隔离级别，一个事务执行过程中看到的数据，一直到这个事务启动的时候看到的数据是一致（解决脏读和不可重复读），就是事务启动的时候生成一个数据快照（read view）</li>
+<li><strong>串行化</strong>：直接对记录加读写锁（三个都解决）</li>
+</ul>
+<p><strong>InnoDB 引擎的默认隔离级别虽然是「可重复读」，但是它通过next-key lock 锁（行锁和间隙锁的组合）来锁住记录之间的“间隙”和记录本身，防止其他事务在这个记录之间插入新的记录，这样就避免了幻读现象。</strong></p>
+<h2 id="介绍一下mvcc"><a href="#介绍一下mvcc" class="headerlink" title="介绍一下mvcc"></a>介绍一下mvcc</h2><p>MVCC（Multi-Version Concurrency Control）是一种数据库并发控制的策略，它使得数据库系统能够在多个事务同时进行的情况下，保持数据的一致性和隔离性。</p>
+<p>MVCC 的主要思想是在数据库中为每个事务创建一个独立的、可见的版本。每个事务都能看到一个特定时间点的数据库快照，这样可以避免事务之间的冲突。MVCC 通常应用于支持事务的数据库系统，比如关系型数据库中的 InnoDB 存储引擎。</p>
+<p>以下是 MVCC 的核心概念和工作原理：</p>
+<ol>
+<li>版本号： 每个数据行都有一个版本号或者时间戳，用于标识该数据行的版本。在 MySQL 中，InnoDB 存储引擎使用一个称为 DB_TRX_ID 的系统版本号来表示事务ID。</li>
+<li>数据行版本的生成： 当一个事务开始对数据库进行修改时，它将创建一个新的数据行版本，该版本包含了修改后的数据以及事务的版本号。这样，原始版本的数据保持不变，而新版本的数据只对当前事务可见</li>
+<li>可见性判断： 在读取数据时，事务只能看到在它启动时已经存在的数据行版本，而看不到其他未提交事务的修改。这确保了每个事务在读取数据时都能看到一个一致的数据库快照。</li>
+<li>事务提交： 当一个事务提交时，它的修改将变为数据库的当前版本，并且会使得其他事务可以看到这些修改。</li>
+<li>回滚： 如果一个事务回滚，那么它所做的修改将被撤销，对其他事务的影响就像这个事务从未发生过一样。</li>
+</ol>
+<h2 id="mvcc中的readview是如何工作的？"><a href="#mvcc中的readview是如何工作的？" class="headerlink" title="- mvcc中的readview是如何工作的？"></a>- <strong>mvcc中的readview是如何工作的？</strong></h2><p>Read View可以理解成一个结构体，然后里面都是成员变量</p>
+<pre class="line-numbers language-Go" data-language="Go"><code class="language-Go">type ReadView struct &#123;
+  creator_trx_id int &#x2F;&#x2F;创建该ReadView的事务的事务id
+  m_ids []int &#x2F;&#x2F;创建该视图时数据库中活跃的未提交的事务id列表
+  min_trx_id int &#x2F;&#x2F;创建该ReadView时当前数据库中活跃并且未提交的事务中最小的id
+  max_trx_id int &#x2F;&#x2F;创建ReadView时当前数据库中应该给下一个事务的id值
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>每个聚簇索引记录中有两个隐藏列:</p>
+<ul>
+<li>trx_id，当一个事务对某条聚簇索引记录进行改动时，就会<strong>把该事务的事务 id 记录在 trx_id 隐藏列里</strong>（当前哪个事务在操作这条记录）</li>
+<li>roll_pointer，前操作过这个记录的事务id所形成的老版本，且可以通过它们的id回退到它们修改之前的记录状态，也就是回退到指定的老版本</li>
+</ul>
+<p>一个事务去访问记录的时候，除了自己的更新记录总是可见之外，还有这几种情况：</p>
+<ul>
+<li>首先就是记录的trx_id小于 Read View 中的 <code>min_trx_id</code> 值，也就是肯定提交了，所以可见</li>
+<li>记录的trx_id大于或者等于 Read View 中的 <code>min_trx_id</code> 值，表示这个版本的记录是在创建 Read View <strong>后</strong>才启动的事务生成的，所以该版本的记录对当前事务<strong>不可见</strong>。</li>
+<li>如果记录的 trx_id 值在 Read View 的 <code>min_trx_id</code> 和 <code>max_trx_id</code> 之间，需要判断 trx_id 是否在 m_ids 列表中：<ul>
+<li>如果记录的 trx_id <strong>在</strong> <code>m_ids</code> 列表中，表示生成该版本记录的活跃事务依然活跃着（还没提交事务），所以该版本的记录对当前事务<strong>不可见</strong>。</li>
+<li>如果记录的 trx_id <strong>不在</strong> <code>m_ids</code>列表中，表示生成该版本记录的活跃事务已经被提交，所以该版本的记录对当前事务<strong>可见</strong>。</li>
+</ul>
+</li>
+</ul>
+<p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/74sUKKHLM9ruMhaDxDzd9m/1674364821634.png?auth_key=1709468645-7wLwprA4PFH3MXSmo2UWzS-0-8ca2da654d8cf1aa5c9cf86e99da3991"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/74sUKKHLM9ruMhaDxDzd9m/1674364821634.png?auth_key=1709468645-7wLwprA4PFH3MXSmo2UWzS-0-8ca2da654d8cf1aa5c9cf86e99da3991"  lazyload></a></p>
+<h2 id="可重复读如何实现的？"><a href="#可重复读如何实现的？" class="headerlink" title="- 可重复读如何实现的？"></a>- <strong>可重复读如何实现的？</strong></h2><p><strong>可重复读隔离级别是启动事务时生成一个 Read View，然后整个事务期间都在用这个 Read View</strong>。</p>
+<p>举个例子：首先创建事务A，再创建事务B</p>
+<p>A事务的id是51，B事务的id是52，一条原始记录的trx_id是50，描述下面一个过程</p>
+<ul>
+<li>首先B查看记录，发现记录id是50，小于它的readview中的事务最小值，所以可以访问</li>
+<li>A修改记录，这个记录就变成了这样</li>
+</ul>
+<p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/trxxvDqvZ8Bec3wy8tgsgS/image.png?auth_key=1709469418-iaqH5YxD8jHotwNGGJXUTn-0-49070f906b1faf3f657423874643742e"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/trxxvDqvZ8Bec3wy8tgsgS/image.png?auth_key=1709469418-iaqH5YxD8jHotwNGGJXUTn-0-49070f906b1faf3f657423874643742e"  lazyload></a></p>
+<ul>
+<li><p>B第二次去读取就发现这个记录的trx_id是51在它的m_ids中，说明修改的事务还没提交，所以B不会读取这个版本的记录，会沿着链条往下找到符合条件的记录的版本</p>
+</li>
+<li><p>读提交如何实现的？</p>
+<p><strong>同上，但是读提交隔离级别和可重复读隔离级别的区别是在每次用select语句读取数据时，都会生成一个新的 Read View</strong></p>
+</li>
+</ul>
+<h2 id="对mysql分布式事务的理解，它与普通事务有啥区别？"><a href="#对mysql分布式事务的理解，它与普通事务有啥区别？" class="headerlink" title="- 对mysql分布式事务的理解，它与普通事务有啥区别？"></a>- 对mysql分布式事务的理解，它与普通事务有啥区别？</h2><p>分布式事务是指跨多个数据库或服务的事务操作。在传统的单体应用中，事务操作通常限定在一个数据库实例内，而在分布式系统中，事务可能涉及到多个独立的数据库实例、服务或者其他资源。</p>
+<p>分布式事务的实现需要解决一些额外的挑战，因为各个参与方可能位于不同的物理位置，有可能会出现网络故障、节点宕机等问题。以下是分布式事务与普通事务的主要区别：</p>
+<ul>
+<li>事务的参与方：</li>
+</ul>
+<p>普通事务： 通常涉及单个数据库实例，事务操作限定在一个单一的数据库中。<br>分布式事务： 可能涉及多个数据库、服务、消息队列等资源，这些资源可以分布在不同的物理节点上。</p>
+<ul>
+<li>事务的隔离性：</li>
+</ul>
+<p>普通事务： 遵循数据库的 ACID 属性，提供事务的隔离性，确保在事务未提交之前，对其他事务是不可见的。<br>分布式事务： 由于涉及到多个资源，需要解决分布式环境下的事务隔离问题，通常使用一致性协议来确保事务的隔离性。</p>
+<ul>
+<li>事务的一致性：</li>
+</ul>
+<p>普通事务： 在单体应用中，事务的一致性由数据库系统保证。<br>分布式事务： 需要引入一致性协议，例如两阶段提交（Two-Phase Commit，2PC）或者某些分布式事务中间件，来确保事务的一致性。</p>
+<ul>
+<li>事务的原子性：</li>
+</ul>
+<p>普通事务： 单体应用中，事务的原子性是由数据库系统来保证的。<br>分布式事务： 为了确保分布式环境下的事务原子性，可能需要使用一致性协议，保证所有参与方要么全部提交，要么全部回滚。</p>
+<ul>
+<li>事务的持久性：</li>
+</ul>
+<p>普通事务： 单体应用中，数据库系统负责将事务的结果持久化到磁盘。<br>分布式事务： 对于分布式事务，也需要确保所有参与方将事务的结果持久化到磁盘，以防止数据丢失。</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4ACID%E6%98%AF%E4%BB%80%E4%B9%88%E6%84%8F%E6%80%9D%EF%BC%9F"><span class="top-box-text">- 说说ACID是什么意思？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E5%9B%A0%E4%B8%BA%E5%B9%B6%E5%8F%91%E4%BA%8B%E5%8A%A1%E5%B9%B6%E5%8F%91%E5%AF%BC%E8%87%B4%E4%BA%86%E4%BB%80%E4%B9%88%E9%97%AE%E9%A2%98%EF%BC%9F"><span class="top-box-text">- 说说因为并发事务并发导致了什么问题？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E9%9A%94%E7%A6%BB%E7%BA%A7%E5%88%AB%E5%88%86%E5%88%AB%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- 说说隔离级别分别有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BB%8B%E7%BB%8D%E4%B8%80%E4%B8%8Bmvcc"><span class="top-box-text">介绍一下mvcc</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#mvcc%E4%B8%AD%E7%9A%84readview%E6%98%AF%E5%A6%82%E4%BD%95%E5%B7%A5%E4%BD%9C%E7%9A%84%EF%BC%9F"><span class="top-box-text">- mvcc中的readview是如何工作的？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%8F%AF%E9%87%8D%E5%A4%8D%E8%AF%BB%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E7%9A%84%EF%BC%9F"><span class="top-box-text">- 可重复读如何实现的？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%AF%B9mysql%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1%E7%9A%84%E7%90%86%E8%A7%A3%EF%BC%8C%E5%AE%83%E4%B8%8E%E6%99%AE%E9%80%9A%E4%BA%8B%E5%8A%A1%E6%9C%89%E5%95%A5%E5%8C%BA%E5%88%AB%EF%BC%9F"><span class="top-box-text">- 对mysql分布式事务的理解，它与普通事务有啥区别？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E7%B4%A2%E5%BC%95/">
+          <h3 class="post-title">
+            下一篇：八股-MySql-索引
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
