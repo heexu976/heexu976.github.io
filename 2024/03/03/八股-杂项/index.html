@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-杂项</title>
+<meta name="keywords" content="八股-杂项, HeXu">
+<meta name="description" content="常见的加密算法加密算法主要分为三类：对称加密，非对称加密，单向加密
+1. 对称加密：概念：加密和解密使用相同密钥的加密算法，由于其速度快，对称性加密通常在消息发送方需要加密大量数据时使用。对称性加密也称为密钥加密，所谓对称，就是采用这种加密">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-杂项">
+<meta property="og:description" content="常见的加密算法加密算法主要分为三类：对称加密，非对称加密，单向加密
+1. 对称加密：概念：加密和解密使用相同密钥的加密算法，由于其速度快，对称性加密通常在消息发送方需要加密大量数据时使用。对称性加密也称为密钥加密，所谓对称，就是采用这种加密">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-杂项</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="常见的加密算法"><a href="#常见的加密算法" class="headerlink" title="常见的加密算法"></a>常见的加密算法</h2><p>加密算法主要分为三类：<strong>对称加密</strong>，<strong>非对称加密</strong>，<strong>单向加密</strong></p>
+<h3 id="1-对称加密："><a href="#1-对称加密：" class="headerlink" title="1. 对称加密："></a>1. 对称加密：</h3><p>概念：<br>加密和解密使用<strong>相同密钥的加密算法</strong>，由于其速度快，对称性加密通常在消息发送方需要加密大量数据时使用。对称性加密也称为密钥加密，所谓对称，就是采用这种加密方法的双方使用方式用同样的密钥进行加密和解密。<br>常用算法：<strong>AES</strong>、DES、3DES  </p>
+<h3 id="2-非对称加密："><a href="#2-非对称加密：" class="headerlink" title="2. 非对称加密："></a>2. 非对称加密：</h3><p>概念：<br>与对称加密算法不同，非对称加密算法需要两个密钥：<strong>公开密钥（publickey）和私有密钥</strong>（privatekey）。公开密钥与私有密钥是一对，如果用<strong>公开密钥对数据进行加密，只有用对应的私有密钥才能解密</strong>；如果用私有密钥对数据进行加密，那么只有用对应的公开密钥才能解密。因为加密和解密使用的是两个不同的密钥，所以这种算法叫作非对称加密算法。<br>常用算法：<strong>RSA</strong>、DSA、ECC<br>用途：</p>
+<ol>
+<li><strong>数字签名</strong>：用于<strong>让接收方确认发送方的身份</strong></li>
+<li>密钥交换：发送方用对方公钥加密一个对称密钥，并发送给对方</li>
+<li>数据加密</li>
+</ol>
+<h3 id="3-单向加密："><a href="#3-单向加密：" class="headerlink" title="3. 单向加密："></a>3. 单向加密：</h3><p>概念：<br>单向加密算法只能用于<strong>对数据的加密，无法被解密</strong>，其特点为定长输出、雪崩效应。单向加密算法用于不需要对信息进行解密或读取的场合，比如用来比较两个信息值是否一样而不需要知道信息具体内容，</p>
+<p>在实际中的一个典型应用就是<strong>对数据库中的用户信息进行加密</strong>，比如当创建一个新用户及密码时，将这些信息经过单向加密后再保存到数据库中。</p>
+<p>常用算法：<strong>MD5</strong>、sha1、sha224<br>用途：<strong>数字摘要</strong>、数字签名</p>
+<h3 id="分布式锁有哪些实现方案？"><a href="#分布式锁有哪些实现方案？" class="headerlink" title="分布式锁有哪些实现方案？"></a>分布式锁有哪些实现方案？</h3><ul>
+<li>基于数据库（唯一索引）</li>
+<li>基于缓存（Redis，memcached）</li>
+<li>基于Zookeeper</li>
+</ul>
+<h3 id="什么是堆和栈？"><a href="#什么是堆和栈？" class="headerlink" title="什么是堆和栈？"></a>什么是堆和栈？</h3><ul>
+<li>栈（ stack）是<strong>系统自动分配空间</strong>的，例如我们定义一个 char a；系统会自动在栈上为其开辟空间</li>
+<li>而堆（heap）则是程序员根据需要<strong>自己申请</strong>的空间，例如 malloc（10）；开辟十个字节的空间。</li>
+</ul>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/pCZya7g1RrcMCLShenAtbp/1674994579492.png?auth_key=1709456037-cqzXaSatcRaos29pf5rc9p-0-8b570dbed2d15eaf44825b99ed993c0d"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/pCZya7g1RrcMCLShenAtbp/1674994579492.png?auth_key=1709456037-cqzXaSatcRaos29pf5rc9p-0-8b570dbed2d15eaf44825b99ed993c0d"  lazyload></a></p>
+<h2 id="说说token-jwt-、cookie、session？"><a href="#说说token-jwt-、cookie、session？" class="headerlink" title="说说token(jwt)、cookie、session？"></a><strong>说说token(jwt)、cookie、session？</strong></h2><p>  <strong>cookie</strong>：是一种<strong>存储技术</strong>。由服务器生成，发送给浏览器，浏览器把cookie以kv形式保存到某个目录下的文本文件内，下一次请求同一网站时会把该cookie发送给服务器。</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/uzY7SbdvCjuPajVdtevZ5F/image.png?auth_key=1709456063-5T4MPwH3Z7GCqbj24yAD7e-0-198f61c232b75fa47bbd52cf41377c7d"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/uzY7SbdvCjuPajVdtevZ5F/image.png?auth_key=1709456063-5T4MPwH3Z7GCqbj24yAD7e-0-198f61c232b75fa47bbd52cf41377c7d"  lazyload></a></p>
+<p>  <strong>session</strong>：是一种<strong>能力</strong>，服务器见鬼说鬼话，见人说人话的能力。服务器要知道当前发请求给自己的是谁，就要给每个客户端分配不同的“身份标识”，然后客户端每次向服务器发请求的时候，都带上这个“身份标识”，而这里<strong>发送这个身份标识就会用到cookie</strong>，服务器就知道这个请求来自于谁了。</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/aBKPwGY93YSN7Z5RtSLDVk/1675068181306.png?auth_key=1709456063-f46iq53CBSiHiUrkCTLVMY-0-7974b3f7498b214c99af80c02e4d4198"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/aBKPwGY93YSN7Z5RtSLDVk/1675068181306.png?auth_key=1709456063-f46iq53CBSiHiUrkCTLVMY-0-7974b3f7498b214c99af80c02e4d4198"  lazyload></a></p>
+<p>  <strong>token</strong>（主流方案 json web token）：是一种<strong>字符串凭证</strong>。token生成于服务端，<strong>存储在客户端，服务端不用存储</strong>，用户后面每次登录都携带首次都登录生成的token字符串用于验证。关键就是 <strong>token使用的某种算法根据用户签名和其它一些信息生成的令牌信息是一致的，可以验证通过，</strong> 对于用户量庞大的系统，或者分布式，避免了大量session对象的存储带来的内存消耗，和各服务器之间session的复制或者专门用于存储session的服务器宕机带来的问题</p>
+<h2 id="token本身有加密吗？如何确保安全性？"><a href="#token本身有加密吗？如何确保安全性？" class="headerlink" title="token本身有加密吗？如何确保安全性？"></a>token本身有加密吗？如何确保安全性？</h2><p>  header和token没有加密，都是base64编码，所以base64需要在https中传输。jwt中第三部分就是签名，签名是用来保证token的完整性和可信度的。要创建签名，<strong>你需要使用头部中指定的算法，对头部和有效载荷进行加密，生成一个哈希值</strong>。如果使用HMAC算法，你还需要一个密钥（secret），如果使用RSA或ECDSA算法，你还需要一个私钥。将这个哈希值进行Base64Url编码，得到签名的字符串表示。</p>
+<h2 id="解决哈希冲突的四种方法？"><a href="#解决哈希冲突的四种方法？" class="headerlink" title="解决哈希冲突的四种方法？"></a>解决哈希冲突的四种方法？</h2><ol>
+<li><p><strong>开放定址法</strong>：遇到哈希冲突的时候去寻找一个新的空闲的哈希地址</p>
+<ol>
+<li>线性探测法：当我们的所需要存放值的位置被占了，我们就往后面一直<strong>加1</strong>并对m取模直到存在一个空余的地址供我们存放值</li>
+<li>平方探测法： 当我们的所需要存放值的位置被占了，会前后寻找而不是单独方向的寻找。i依次为 ** +(i^{2}) ** 和 ** -(i^{2}) **。</li>
+</ol>
+</li>
+<li><p><strong>再哈希法</strong>：同时构造<strong>多个</strong>不同的<strong>哈希函数</strong>，等发生哈希冲突时就使用第二个、第三个……等其他的哈希函数计算地址，直到不发生冲突为止。虽然不易发生聚集，但是增加了计算时间。</p>
+</li>
+<li><p><strong>链地址法</strong>：将所有哈希地址相同的记录都链接在同一链表中。</p>
+<p> <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/mvQZGP6AiAVmK4nn987oxk/1675473658121.png?auth_key=1709456204-tQzMZ3sidzfvmUm3ZpMf2m-0-6f59a5284e9ce15276eae5be70bf4731"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/mvQZGP6AiAVmK4nn987oxk/1675473658121.png?auth_key=1709456204-tQzMZ3sidzfvmUm3ZpMf2m-0-6f59a5284e9ce15276eae5be70bf4731"  lazyload></a></p>
+</li>
+<li><p><strong>建立公共溢出区</strong>：将哈希表分为基本表和溢出表，将发生冲突的都存放在溢出表中。</p>
+</li>
+</ol>
+<h2 id="什么是跨域请求？ajax的跨域请求被拒绝怎么办？"><a href="#什么是跨域请求？ajax的跨域请求被拒绝怎么办？" class="headerlink" title="什么是跨域请求？ajax的跨域请求被拒绝怎么办？"></a>什么是跨域请求？ajax的跨域请求被拒绝怎么办？</h2><p>  假设你有两个站点 <a target="_blank" rel="noopener" href="http://www.a.com/">www.a.com</a> 和 <a target="_blank" rel="noopener" href="http://www.b.com/">www.b.com</a> 在 a 中用 ajax 向 b 发送请求，这就是跨域请求了。</p>
+<p>  Access-Control-Allow-Origin:* 添加请求头允许跨域请求</p>
+<h2 id="RPC什么时候会超时？"><a href="#RPC什么时候会超时？" class="headerlink" title="RPC什么时候会超时？"></a>RPC什么时候会超时？</h2><p>  <a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1849591">高并发服务优化篇：详解RPC的一次调用过程-腾讯云开发者社区-腾讯云 (tencent.com)</a></p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/fpojgKWUpxGLY8LiEhXf26/1707104086759.png?auth_key=1709456689-rx9KEkguAs6AMTnBWnu12j-0-bbe2e2a61725e2b2be1c93e43805cb11"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/fpojgKWUpxGLY8LiEhXf26/1707104086759.png?auth_key=1709456689-rx9KEkguAs6AMTnBWnu12j-0-bbe2e2a61725e2b2be1c93e43805cb11"  lazyload></a></p>
+<blockquote>
+<p>对于客户端来说，耗时主要由：<em>建连时间</em> + <em>序列化时间</em> + <em>等待服务端处理时间</em> 组成<br>对于服务端来说，耗时主要由：<em>线程池等待时间 + 服务处理时间 + 结果序列化时间</em> 组成<br>所以，对于我们一线开发，如果要对RPC耗时进行调优，最需要关注的，有客户端的路由寻址、序列化方式，有服务端的服务线程池等待、反序列化、服务端处理速率、结果序列化 这几块</p>
+</blockquote>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%B8%B8%E8%A7%81%E7%9A%84%E5%8A%A0%E5%AF%86%E7%AE%97%E6%B3%95"><span class="top-box-text">常见的加密算法</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#1-%E5%AF%B9%E7%A7%B0%E5%8A%A0%E5%AF%86%EF%BC%9A"><span class="top-box-text">1. 对称加密：</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#2-%E9%9D%9E%E5%AF%B9%E7%A7%B0%E5%8A%A0%E5%AF%86%EF%BC%9A"><span class="top-box-text">2. 非对称加密：</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#3-%E5%8D%95%E5%90%91%E5%8A%A0%E5%AF%86%EF%BC%9A"><span class="top-box-text">3. 单向加密：</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%88%86%E5%B8%83%E5%BC%8F%E9%94%81%E6%9C%89%E5%93%AA%E4%BA%9B%E5%AE%9E%E7%8E%B0%E6%96%B9%E6%A1%88%EF%BC%9F"><span class="top-box-text">分布式锁有哪些实现方案？</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E5%A0%86%E5%92%8C%E6%A0%88%EF%BC%9F"><span class="top-box-text">什么是堆和栈？</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4token-jwt-%E3%80%81cookie%E3%80%81session%EF%BC%9F"><span class="top-box-text">说说token(jwt)、cookie、session？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#token%E6%9C%AC%E8%BA%AB%E6%9C%89%E5%8A%A0%E5%AF%86%E5%90%97%EF%BC%9F%E5%A6%82%E4%BD%95%E7%A1%AE%E4%BF%9D%E5%AE%89%E5%85%A8%E6%80%A7%EF%BC%9F"><span class="top-box-text">token本身有加密吗？如何确保安全性？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%A7%A3%E5%86%B3%E5%93%88%E5%B8%8C%E5%86%B2%E7%AA%81%E7%9A%84%E5%9B%9B%E7%A7%8D%E6%96%B9%E6%B3%95%EF%BC%9F"><span class="top-box-text">解决哈希冲突的四种方法？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E8%B7%A8%E5%9F%9F%E8%AF%B7%E6%B1%82%EF%BC%9Fajax%E7%9A%84%E8%B7%A8%E5%9F%9F%E8%AF%B7%E6%B1%82%E8%A2%AB%E6%8B%92%E7%BB%9D%E6%80%8E%E4%B9%88%E5%8A%9E%EF%BC%9F"><span class="top-box-text">什么是跨域请求？ajax的跨域请求被拒绝怎么办？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#RPC%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E8%B6%85%E6%97%B6%EF%BC%9F"><span class="top-box-text">RPC什么时候会超时？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-sync-%E9%94%81/">
+          <h3 class="post-title">
+            下一篇：Golang-八股-sync-锁
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
