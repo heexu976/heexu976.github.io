@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-MySql-锁</title>
+<meta name="keywords" content="八股-MySql-锁, HeXu">
+<meta name="description" content="- mysql中有哪些锁？
+全局锁
+
+使用全局锁之后整个数据库就处于只读状态了，这时其他线程执行insert、update等操作就会被阻塞
+用途：全局锁主要应用于做全库逻辑备份。
+缺点：备份的时候占着数据库。
+解决方式：如果想备份的时候不开">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-MySql-锁">
+<meta property="og:description" content="- mysql中有哪些锁？
+全局锁
+
+使用全局锁之后整个数据库就处于只读状态了，这时其他线程执行insert、update等操作就会被阻塞
+用途：全局锁主要应用于做全库逻辑备份。
+缺点：备份的时候占着数据库。
+解决方式：如果想备份的时候不开">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-MySql-锁</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="mysql中有哪些锁？"><a href="#mysql中有哪些锁？" class="headerlink" title="- mysql中有哪些锁？"></a>- mysql中有哪些锁？</h2><ol>
+<li><p><strong>全局锁</strong></p>
+<ul>
+<li>使用全局锁之后整个数据库就处于只读状态了，这时其他线程执行insert、update等操作就会被阻塞</li>
+<li><strong>用途</strong>：全局锁主要应用于做<strong>全库逻辑备份</strong>。</li>
+<li><strong>缺点</strong>：备份的时候占着数据库。</li>
+<li>解决方式：如果想备份的时候不开全局锁，可以在备份开启之前开启事务，创建read view（因为Mysql的InnoDB的隔离级别就是可重复读）</li>
+</ul>
+</li>
+<li><p><strong>表级锁</strong></p>
+<ul>
+<li><strong>表锁</strong>：一锁就锁一张表，可以加读锁(read lock)，也可以加写锁(write lock)</li>
+<li>**元数据锁(MDL)**：mysql隐式调用的锁。<ul>
+<li>对一张表进行 CRUD 操作时，加的是 <strong>MDL 读锁</strong>；</li>
+<li>对一张表做结构变更操作的时候，加的是 <strong>MDL 写锁</strong>；<br>MDL 是在事务提交后才会释放，这意味着<strong>事务执行期间，MDL 是一直持有的</strong>。</li>
+</ul>
+</li>
+<li><strong>意向锁</strong>：<ul>
+<li>在使用 InnoDB 引擎的表里对某些记录加上「共享锁」之前，需要先在表级别加上一个「意向共享锁」；</li>
+<li>在使用 InnoDB 引擎的表里对某些纪录加上「独占锁」之前，需要先在表级别加上一个「意向独占锁」；<br>就是快速判断这个表中有没有记录被加锁</li>
+</ul>
+</li>
+<li><strong>AUTO-INC锁</strong>：<br>  为某个字段声明 <code>AUTO_INCREMENT</code> 属性时，确保这个字段正确增加，就是Mysql隐式加锁的，插入完就释放</li>
+</ul>
+</li>
+<li><p><strong>行级锁</strong><br> InnoDB存储引擎支持，MyISAM存储引擎不支持</p>
+</li>
+</ol>
+<pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">&#x2F;&#x2F;对读取的记录加共享锁
+select ... lock in share mode;
+
+&#x2F;&#x2F;对读取的记录加独占锁
+select ... for update;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>其中共享锁（S锁）满足读读共享，读写互斥。独占锁（X锁）满足写写互斥、读写互斥。行级锁的类型主要有三类：</p>
+<p> <strong>记录锁</strong>：把一条记录上锁</p>
+<ul>
+<li><p><strong>间隙锁</strong>：锁定一个范围，不包含记录本身</p>
+<p>  只存在于可重复读隔离级别，目的是为了解决可重复读隔离级别下幻读的现象。<strong>间隙锁之间是兼容的，即两个事务可以同时持有包含共同间隙范围的间隙锁，并不存在互斥关系，因为间隙锁的目的是防止插入幻影记录而提出的</strong>。</p>
+</li>
+<li><p><strong>Next-Key Lock</strong>：前两者的结合，锁定一个范围并且锁定记录本身</p>
+<p>  举个例子：假设，表中有一个范围 id 为（3，5] 的 next-key lock，那么其他事务即不能插入 id &#x3D; 4 记录，也不能修改 id &#x3D; 5 这条记录。</p>
+<p>  所以，next-key lock 即能保护该记录，又能阻止其他事务将新纪录插入到被保护记录前面的间隙中。</p>
+</li>
+<li><p><strong>插入意向锁</strong>：一个事务在插入一条记录的时候，需要判断插入位置是否已被其他事务加了间隙锁（next-key lock 也包含间隙锁）。<br>  如果有的话，插入操作就会发生<strong>阻塞</strong>，直到拥有间隙锁的那个事务提交为止（释放间隙锁的时刻），在此期间会生成一个<strong>插入意向锁</strong>，表明有事务想在某个区间插入新记录，但是现在处于等待状态。插入意向锁名字虽然有意向锁，但是它并<strong>不是意向锁，它是一种特殊的间隙锁，属于行级别锁</strong>。</p>
+<p>  当事务执行 commit 后，事务过程中生成的锁都会被释放</p>
+</li>
+</ul>
+<h2 id="mysql如何进行加行级锁？"><a href="#mysql如何进行加行级锁？" class="headerlink" title="- mysql如何进行加行级锁？"></a>- <strong>mysql如何进行加行级锁？</strong></h2><p>一般来说，<strong>加锁的对象是索引，加锁的基本单位是 next-key lock</strong>，它是由记录锁和间隙锁组合而成的，<strong>next-key lock 是前开后闭区间，而间隙锁是前开后开区间</strong>。</p>
+<p>但是，next-key lock 在一些场景下会退化成记录锁或间隙锁。<strong>在能使用记录锁或者间隙锁就能避免幻读现象的场景下， next-key lock 就会退化成退化成记录锁或间隙锁</strong>。</p>
+<p>注：等值查询就是SQL语句的where子句是 <code>where xxx </code><strong><code>= </code></strong><code>xx</code>的形式，非唯一就是没用主键索引，用的是二级索引</p>
+<ul>
+<li><strong>唯一索引等值查询：</strong><ul>
+<li>存在：如果查询的记录是存在的，那就是<strong>next-key lock 会退化成记录锁。</strong></li>
+<li>不存在：退化成了间隙锁</li>
+</ul>
+</li>
+<li><strong>唯一索引范围查询：</strong><ul>
+<li>情况一：针对「大于等于」的范围查询，因为存在等值查询的条件，那么如果等值查询的记录是存在于表中，那么该记录的索引中的 next-key 锁会<strong>退化成记录锁</strong>。</li>
+<li>情况二：针对「小于或者小于等于」的范围查询，要看条件值的记录是否存在于表中：</li>
+<li>当条件值的记录不在表中，那么不管是「小于」还是「小于等于」条件的范围查询，<strong>扫描到终止范围查询的记录时，该记录的索引的 next-key 锁会退化成间隙锁</strong>，其他扫描到的记录，都是在这些记录的索引上加 next-key 锁。</li>
+<li>当条件值的记录在表中，如果是「小于」条件的范围查询，<strong>扫描到终止范围查询的记录时，该记录的索引的 next-key 锁会退化成间隙锁</strong>，其他扫描到的记录，都是在这些记录的索引上加 next-key 锁；如果「小于等于」条件的范围查询，扫描到终止范围查询的记录时，该记录的索引 next-key 锁不会退化成间隙锁。其他扫描到的记录，都是在这些记录的索引上加 next-key 锁。</li>
+</ul>
+</li>
+<li><strong>非唯一索引等值查询：</strong><ul>
+<li>存在：当查询的记录「存在」时，由于不是唯一索引，所以肯定存在索引值相同的记录，于是非唯一索引等值查询的过程是一个扫描的过程，直到扫描到第一个不符合条件的二级索引记录就停止扫描，然后<strong>在扫描的过程中，对扫描到的二级索引记录加的是 next-key 锁，而对于第一个不符合条件的二级索引记录，该二级索引的 next-key 锁会退化成间隙锁。</strong>还会对<strong>在符合查询条件的记录的主键索引</strong>加记录锁<ul>
+<li>不存在：记录不存在，<strong>扫描到第一条不符合条件的二级索引记录，该二级索引的 next-key 锁会退化成间隙锁。因为不存在满足查询条件的记录，所以不会对主键索引加锁</strong>。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>非唯一索引范围查询：</strong><br>  添加next-key，且不会退化为间隙锁和记录锁，其对应的主键索引添加记录锁</li>
+<li><strong>没有加索引的查询：</strong><br><strong>如果锁定读查询语句，没有使用索引列作为查询条件，或者查询语句没有走索引查询，导致扫描是全表扫描。那么，每一条记录的索引上都会加 next-key 锁，这样就相当于锁住的全表，这时如果其他事务对该表进行增、删、改操作的时候，都会被阻塞</strong>。</li>
+</ul>
+<h2 id="mysql记录锁-间隙锁可以防止删除操作导致的幻读吗？"><a href="#mysql记录锁-间隙锁可以防止删除操作导致的幻读吗？" class="headerlink" title="- mysql记录锁+间隙锁可以防止删除操作导致的幻读吗？"></a>- mysql记录锁+间隙锁可以防止删除操作导致的幻读吗？</h2><p>  在 MySQL 的可重复读隔离级别下，针对当前读的语句会对<strong>索引</strong>加记录锁+间隙锁，这样可以避免其他事务执行增、删、改时导致幻读的问题。</p>
+<h2 id="next-key-lock-是什么？之间会冲突吗？gap-锁会冲突吗？"><a href="#next-key-lock-是什么？之间会冲突吗？gap-锁会冲突吗？" class="headerlink" title="- next-key lock 是什么？之间会冲突吗？gap 锁会冲突吗？"></a>- next-key lock 是什么？之间会冲突吗？gap 锁会冲突吗？</h2><p>  会，因为它包含记录锁。两个事务即使生成的间隙锁的范围是一样的，也不会发生冲突，因为间隙锁目的是为了防止其他事务插入数据，因此间隙锁与间隙锁之间是相互兼容的。</p>
+<h2 id="什么是mysql死锁？"><a href="#什么是mysql死锁？" class="headerlink" title="- 什么是mysql死锁？"></a>- 什么是mysql死锁？</h2><p>  数据库的死锁是指：<strong>不同的事务在获取资源时相互等待，导致无法继续执行的一种情况</strong>。当发生死锁时，数据库系统会自动中断其中一个事务，以解除死锁。在数据库中，事务可以分为读事务和写事务。读事务只需要获取读锁，而写事务需要获取写锁。当多个事务同时操作同一组数据时，可能会引发死锁的出现。</p>
+<h2 id="为什么会出现mysql死锁？"><a href="#为什么会出现mysql死锁？" class="headerlink" title="- 为什么会出现mysql死锁？"></a>- 为什么会出现mysql死锁？</h2><ul>
+<li><p>事务同时更新多个表<br>  当一个事务同时更新多个表并且使用了不同的顺序，可能会导致死锁的发生。例如，事务 A 首先更新表 X，此时获取到了 X 表的锁，并在未释放该锁的情况下尝试更新表 Y；而事务 B 首先更新表Y，此时获取到了 Y 表的锁，并在未释放锁的情况下尝试更新表 X。这种情况下，两个事务会相互等待对方的锁释放，从而形成死锁。</p>
+</li>
+<li><p>事务嵌套<br>  当一个事务内部开启了另一个事务，并在内层事务中更新了某个表，而外层事务也需要更新该表的同一行记录时，就有可能发生死锁。因为外层事务需要等待内层事务释放锁，而内层事务需要等待外层事务释放锁。</p>
+</li>
+<li><p>索引顺序不一致</p>
+<p>  当多个事务按照不同的顺序访问相同的数据行，并且使用了不同的索引时，可能会发生死锁。例如，事务 A 按照索引 1 的顺序访问数据行，事务 B 按照索引 2 的顺序访问同一组数据行，这样两个事务之间就会产生死锁。</p>
+</li>
+<li><p>不同事务同时更新相同的索引<br>  当多个事务同时更新相同的索引时，可能会导致死锁。这是因为事务在更新索引时会获取对应的锁，并在未释放锁的情况下尝试更新其他数据，从而形成死锁。</p>
+</li>
+</ul>
+<h2 id="如何避免mysql死锁？"><a href="#如何避免mysql死锁？" class="headerlink" title="- 如何避免mysql死锁？"></a>- 如何避免mysql死锁？</h2><ol>
+<li><strong>设置事务等待锁的超时时间</strong>。当一个事务的等待时间超过该值后，就对这个事务进行回滚，于是锁就释放了，另一个事务就可以继续执行了。在 InnoDB 中，参数 <code>innodb_lock_wait_timeout</code> 是用来设置超时时间的，默认值时 50 秒。</li>
+<li><strong>开启主动死锁检测</strong>。主动死锁检测在发现死锁后，主动回滚死锁链条中的某一个事务，让其他事务得以继续执行。将参数 <code>innodb_deadlock_detect</code> 设置为 on，表示开启这个逻辑，默认就开启。</li>
+</ol>
+<h2 id="mysql如何实现分布式锁？"><a href="#mysql如何实现分布式锁？" class="headerlink" title="- mysql如何实现分布式锁？"></a>- <strong>mysql如何实现分布式锁？</strong></h2><ul>
+<li>首先是基于数据库表</li>
+</ul>
+<p>直接创建一张锁表，然后通过<strong>操作该表中的数据来实现加锁和解锁</strong>。</p>
+<pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">CREATE TABLE &#96;locks&#96; (
+  &#96;id&#96; int(11) NOT NULL AUTO_INCREMENT,
+  &#96;resource&#96; varchar(255) NOT NULL,
+  &#96;client_id&#96; varchar(255) NOT NULL,
+  &#96;expiration&#96; bigint(20) NOT NULL,
+  PRIMARY KEY (&#96;id&#96;),
+  UNIQUE KEY &#96;resource&#96; (&#96;resource&#96;)
+) ENGINE&#x3D;InnoDB DEFAULT CHARSET&#x3D;utf8;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>其中，<code>resource</code> 字段用于表示被锁定的资源，<code>client_id</code> 字段用于表示持有锁的客户端，<code>expiration</code> 字段用于表示锁的过期时间。每次需要获取锁时，通过向表中插入一条记录来占据锁，获取锁时需要对 <code>resource</code> 字段<strong>添加唯一索引</strong>，以保证同一资源只能被一个客户端获取锁。释放锁时，通过<strong>删除表中的对应记录</strong>来释放锁。</p>
+<p>感觉和redis分布式锁的实现比较像，你可以用你想锁住的资源名称作为唯一的键，多个请求提交到数据库之后只有一个操作可以成功，判定操作成功的线程获得该资源的锁</p>
+<p>缺点：</p>
+<ol>
+<li>数据库是单点的，所以数据库寄了，会导致业务寄</li>
+<li>锁没有失效时间，所以一旦拿到锁的线程解不开锁，其他线程就会获取不到锁</li>
+<li>这把锁只能是非阻塞的，因为insert语句一旦插入失败就报错</li>
+<li>这把锁是非重入的，一个线程获取之后无法再获取这个锁</li>
+</ol>
+<ul>
+<li>基于数据库排他锁</li>
+</ul>
+<p>在 MySQL 中，可以使用 <code>SELECT ... FOR UPDATE </code>语句来获取排他锁。当执行该语句时，MySQL 会将对应的行加上排他锁，其他事务无法对该行进行修改，直到当前事务结束或者显式释放锁。</p>
+<pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">select * from lock where resource_name &#x3D; *** for update;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p><strong>在查询语句后面增加for update</strong>，数据库会在查询过程中给数据库表增加排他锁（InnoDB引擎在加锁的时候，<strong>只有通过索引进行检索的时候才会使用行级锁</strong>，否则会使用表级锁。这里我们希望使用行级锁，就要给<code>resource_name</code>添加索引）当某条记录被加上排他锁之后，其他线程无法再在该行记录上增加排他锁</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#mysql%E4%B8%AD%E6%9C%89%E5%93%AA%E4%BA%9B%E9%94%81%EF%BC%9F"><span class="top-box-text">- mysql中有哪些锁？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#mysql%E5%A6%82%E4%BD%95%E8%BF%9B%E8%A1%8C%E5%8A%A0%E8%A1%8C%E7%BA%A7%E9%94%81%EF%BC%9F"><span class="top-box-text">- mysql如何进行加行级锁？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#mysql%E8%AE%B0%E5%BD%95%E9%94%81-%E9%97%B4%E9%9A%99%E9%94%81%E5%8F%AF%E4%BB%A5%E9%98%B2%E6%AD%A2%E5%88%A0%E9%99%A4%E6%93%8D%E4%BD%9C%E5%AF%BC%E8%87%B4%E7%9A%84%E5%B9%BB%E8%AF%BB%E5%90%97%EF%BC%9F"><span class="top-box-text">- mysql记录锁+间隙锁可以防止删除操作导致的幻读吗？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#next-key-lock-%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F%E4%B9%8B%E9%97%B4%E4%BC%9A%E5%86%B2%E7%AA%81%E5%90%97%EF%BC%9Fgap-%E9%94%81%E4%BC%9A%E5%86%B2%E7%AA%81%E5%90%97%EF%BC%9F"><span class="top-box-text">- next-key lock 是什么？之间会冲突吗？gap 锁会冲突吗？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AFmysql%E6%AD%BB%E9%94%81%EF%BC%9F"><span class="top-box-text">- 什么是mysql死锁？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E5%87%BA%E7%8E%B0mysql%E6%AD%BB%E9%94%81%EF%BC%9F"><span class="top-box-text">- 为什么会出现mysql死锁？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E9%81%BF%E5%85%8Dmysql%E6%AD%BB%E9%94%81%EF%BC%9F"><span class="top-box-text">- 如何避免mysql死锁？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#mysql%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E5%88%86%E5%B8%83%E5%BC%8F%E9%94%81%EF%BC%9F"><span class="top-box-text">- mysql如何实现分布式锁？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E4%BA%8B%E5%8A%A1/">
+          <h3 class="post-title">
+            下一篇：八股-MySql-事务
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+

@@ -79,6 +79,42 @@
 
 <section class="post-item">
     <div class="content">
+      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E9%94%81/">
+        <h2 class="post-title">八股-MySql-锁</h2>
+      </a>
+      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E9%94%81/">
+          <div class="post-abstract">
+            
+			    - mysql中有哪些锁？
+全局锁
+
+使用全局锁之后整个数据库就处于只读状态了，这时其他线程执行insert、update等操作就会被阻塞
+用途：全局锁主要应用于做全库逻辑备份。
+缺点：备份的时候占着数据库。
+解决方式：如果想备份的时候不开
+            
+          </div>
+      </a>
+      <div class="post-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
+        
+          <span>
+            <i class="icon icon-pricetags-outline"></i>
+            
+
+                八股
+                
+            
+          </span>
+        
+      </div>
+    </div>
+  </section>
+
+
+
+<section class="post-item">
+    <div class="content">
       <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E4%BA%8B%E5%8A%A1/">
         <h2 class="post-title">八股-MySql-事务</h2>
       </a>
@@ -351,38 +387,6 @@ Go V1.3 之前普通标记清除（mark and sweep）方法，整体过程需要�
 			    context是什么？有什么作用？  context表示goroutine的上下文，包括了goroutine的运行状态、环境、现场等信息。
   其作用主要就是在goroutine之间传递上下文信息 。
 context有什么作用？（你在你的项
-            
-          </div>
-      </a>
-      <div class="post-info">
-        <span><i class="icon icon-calendar-outline"></i> 2024-03-01</span>
-        
-          <span>
-            <i class="icon icon-pricetags-outline"></i>
-            
-
-                八股
-                
-            
-          </span>
-        
-      </div>
-    </div>
-  </section>
-
-
-
-<section class="post-item">
-    <div class="content">
-      <a href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-channel/">
-        <h2 class="post-title">Golang-八股-channel</h2>
-      </a>
-      <a href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-channel/">
-          <div class="post-abstract">
-            
-			    什么是CSP?  是一种并发编程模型，用于描述两个独立的并发实体通过共享的通讯 channel(管道)进行通信的并发模型
-  CSP中channel是第一类对象，它不关注发送消息的实体，而关注与发送消息时使用的channel
-  而Go语言
             
           </div>
       </a>
