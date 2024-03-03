@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-MySql-杂项</title>
+<meta name="keywords" content="八股-MySql-杂项, HeXu">
+<meta name="description" content="- MyISAM和InnoDB的区别有哪些？  Mysql5.5之前是把 MyISAM 当作默认存储引擎的
+
+行级锁：MyISAM只有表级锁，InnoDB支持行级锁和表级锁
+事务：MyISAM不提供事务支持，InnoDB支持事务
+外键：My">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-MySql-杂项">
+<meta property="og:description" content="- MyISAM和InnoDB的区别有哪些？  Mysql5.5之前是把 MyISAM 当作默认存储引擎的
+
+行级锁：MyISAM只有表级锁，InnoDB支持行级锁和表级锁
+事务：MyISAM不提供事务支持，InnoDB支持事务
+外键：My">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-MySql-杂项</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="MyISAM和InnoDB的区别有哪些？"><a href="#MyISAM和InnoDB的区别有哪些？" class="headerlink" title="- MyISAM和InnoDB的区别有哪些？"></a>- <strong>MyISAM和InnoDB的区别有哪些？</strong></h2><p>  Mysql5.5之前是把 MyISAM 当作默认存储引擎的</p>
+<ul>
+<li>行级锁：MyISAM只有表级锁，InnoDB支持<strong>行级锁和表级锁</strong></li>
+<li>事务：MyISAM不提供事务支持，InnoDB支持<strong>事务</strong></li>
+<li><strong>外键</strong>：MyISAM不支持，InnoDB支持</li>
+<li>安全恢复：MyISAM不支持，InnoDB支持（使用<code>redo log</code>）</li>
+<li><strong>MVCC</strong>：MyISAM不支持，InnoDB支持</li>
+</ul>
+<h2 id="MySQL的四种基本连接方式有哪些？"><a href="#MySQL的四种基本连接方式有哪些？" class="headerlink" title="- MySQL的四种基本连接方式有哪些？"></a>- MySQL的四种基本连接方式有哪些？</h2><ul>
+<li><strong>inner join</strong>：就是内连接，两者<strong>交集</strong></li>
+<li><strong>left join</strong>：左外连接，就是两者的<strong>交集加上左边那个集合的私有</strong></li>
+<li><strong>right join</strong>：右外连接，就是两者的<strong>交集加上右边那个集合的私有</strong></li>
+<li><strong>outer join</strong>：全外连接，就是两者的<strong>交集加上左边和右边集合的私有</strong></li>
+</ul>
+<h2 id="能说下分表和分库吗？"><a href="#能说下分表和分库吗？" class="headerlink" title="能说下分表和分库吗？"></a>能说下分表和分库吗？</h2><ul>
+<li><strong>垂直分表</strong>：一个表三个字段userid，name， age，一个表放userid和name，一个表放userid和age<ul>
+<li>优点：拆分之后业务还是比较清晰，而且可以<strong>把常用的字段放在一起，老是组合在一起的字段放在一起</strong></li>
+<li>缺点：查询所有数据<strong>需要join</strong>，有些表格不能join，需要通过接口聚合实现；<strong>管理冗余列，提高了开发的复杂性</strong>；</li>
+</ul>
+</li>
+<li><strong>水平分表</strong>：就是一个表存一半数据，另一个表存另一半数据<ul>
+<li>优点:可以<strong>平均分配</strong>每个表的数据量和请求压力；<strong>拆分表的结构相同</strong>，代码就不用多写</li>
+<li>缺点：<strong>拆分规则很难抽象出来</strong></li>
+</ul>
+</li>
+<li><strong>垂直分库</strong>，为了<strong>减轻</strong>单个数据库压力，我们可以<strong>按照业务类型</strong>，拆分成多个数据库，比如分布式架构，不同的模块可以有不同的数据库</li>
+<li><strong>水平分库</strong>，我们做了水平分表后，<strong>表数量太多了也会影响数据库查询效率，</strong> 我们可以将这些表分到多个数据库中。</li>
+</ul>
+<h2 id="limit-10000，10问题如何解决（解决MySQL使用limit偏移量较大效率慢的问题）"><a href="#limit-10000，10问题如何解决（解决MySQL使用limit偏移量较大效率慢的问题）" class="headerlink" title="limit 10000，10问题如何解决（解决MySQL使用limit偏移量较大效率慢的问题）"></a>limit 10000，10问题如何解决（解决MySQL使用limit偏移量较大效率慢的问题）</h2><ul>
+<li><p>使用<strong>自增长id</strong>代替offset(<strong>使用索引</strong>)：可以使用 id &gt; 10000000的方式诱导MySQL使用主键索引参数为：pageIndex , pageSize</p>
+  <pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">limit pageIndex , pageSize<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>  改写为</p>
+  <pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">id &gt; idIdex order by id limit pageSize<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>  每次拿到数据之后更新idIndx的至，在进行查询。前提：这里的id字段是自增的，并已作为索引列</p>
+</li>
+<li><p>使用<strong>子查询</strong>：使用子查询来代替”LIMIT”语句进行分页查询，这样可以减少查询的数据量。假设，有一张表保存了学生的名字，然后要执行这样的sql：</p>
+  <pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">select id,name from student limit 1000000,10;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>  这样执行的效率必然会很慢</p>
+<p>  将SQL改写：</p>
+  <pre class="line-numbers language-SQL" data-language="SQL"><code class="language-SQL">SELECT id,name FROM student 
+INNER JOIN (
+    SELECT id FROM student LIMIT 1000000,10
+) stu ON [student.id](http:&#x2F;&#x2F;student.id) &#x3D; [stu.id](http:&#x2F;&#x2F;stu.id);<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>  可以看到，在上述语句的子查询中，“SELECT id FROM student LIMIT 1000000,10”只查询了主键id一个字段，对于这样的索引覆盖情况，查询速度还是可以接受的。就等于说，该子查询只返回了10个id给上级查询。</p>
+</li>
+<li><p><strong>缓存</strong>技术：如果数据不会经常改变，可以将结果缓存起来，以减少数据库查询的次数。可以使用缓存技术如Redis或Memcached，或者在应用程序中缓存查询结果</p>
+</li>
+</ul>
+<h2 id="数据库三大范式是什么？"><a href="#数据库三大范式是什么？" class="headerlink" title="- 数据库三大范式是什么？"></a>- 数据库三大范式是什么？</h2><ol>
+<li>第一范式（1NF）： 第一范式要求数据表中的每个列都是<strong>不可分割的原子值</strong>，即确保每一列都是单一值，并且不可再分。此外，每个表必须有一个唯一的标识符（主键），用于唯一地识别表中的每一行。1NF 的目标是消除重复的数据和列的重复，确保数据的<strong>原子性</strong>。</li>
+<li>第二范式（2NF）： 第二范式在满足第一范式的基础上，要求表中的<strong>非主键列</strong>完全<strong>依赖</strong>于<strong>主键</strong>，即每个非主键列必须完全依赖于整个主键，而不是部分依赖。如果某列的值依赖于部分主键而不是全部主键，就会引入冗余数据。</li>
+<li>第三范式（3NF）： 第三范式在满足第二范式的基础上，要求表中的<strong>非主键列之间不存在传递依赖关系</strong>。</li>
+</ol>
+<h2 id="数据库表的创建的注意事项有哪些？"><a href="#数据库表的创建的注意事项有哪些？" class="headerlink" title="- 数据库表的创建的注意事项有哪些？"></a>- 数据库表的创建的注意事项有哪些？</h2><ol>
+<li>首先设计字段要明确需求，为以后可能的拓展留下空间</li>
+<li>字段命名要有规则及相对应的含义</li>
+<li>给文本字段留足余量</li>
+<li>添加删除标记（例如操作人、删除时间）</li>
+<li>使用varchar类型代替char，因为varchar会动态分配长度，char指定长度是固定的</li>
+<li>给表创建主键，对于没有主键的表，在查询和索引定义上有一定的影响。</li>
+<li>避免表字段运行为null，建议设置默认值（例如：int类型设置默认值为0）在索引查询上</li>
+</ol>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#MyISAM%E5%92%8CInnoDB%E7%9A%84%E5%8C%BA%E5%88%AB%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- MyISAM和InnoDB的区别有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#MySQL%E7%9A%84%E5%9B%9B%E7%A7%8D%E5%9F%BA%E6%9C%AC%E8%BF%9E%E6%8E%A5%E6%96%B9%E5%BC%8F%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- MySQL的四种基本连接方式有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%83%BD%E8%AF%B4%E4%B8%8B%E5%88%86%E8%A1%A8%E5%92%8C%E5%88%86%E5%BA%93%E5%90%97%EF%BC%9F"><span class="top-box-text">能说下分表和分库吗？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#limit-10000%EF%BC%8C10%E9%97%AE%E9%A2%98%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3%EF%BC%88%E8%A7%A3%E5%86%B3MySQL%E4%BD%BF%E7%94%A8limit%E5%81%8F%E7%A7%BB%E9%87%8F%E8%BE%83%E5%A4%A7%E6%95%88%E7%8E%87%E6%85%A2%E7%9A%84%E9%97%AE%E9%A2%98%EF%BC%89"><span class="top-box-text">limit 10000，10问题如何解决（解决MySQL使用limit偏移量较大效率慢的问题）</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%95%B0%E6%8D%AE%E5%BA%93%E4%B8%89%E5%A4%A7%E8%8C%83%E5%BC%8F%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="top-box-text">- 数据库三大范式是什么？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%95%B0%E6%8D%AE%E5%BA%93%E8%A1%A8%E7%9A%84%E5%88%9B%E5%BB%BA%E7%9A%84%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- 数据库表的创建的注意事项有哪些？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/03/%E5%85%AB%E8%82%A1-MQ/">
+          <h3 class="post-title">
+            下一篇：八股-MQ
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
