@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-MQ</title>
+<meta name="keywords" content="八股-MQ, HeXu">
+<meta name="description" content="- MQ为什么会有消费重复？
+生产者端：中间件或者网络出问题，生产者没有收到发送成功的返回，进行了重试
+消费者端：消费者处理完消息之后，中间件不能及时更新投递状态
+
+- 如何解决MQ中的重复消费？
+使消费者处理的是一个幂等逻辑，这样降低了消">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-MQ">
+<meta property="og:description" content="- MQ为什么会有消费重复？
+生产者端：中间件或者网络出问题，生产者没有收到发送成功的返回，进行了重试
+消费者端：消费者处理完消息之后，中间件不能及时更新投递状态
+
+- 如何解决MQ中的重复消费？
+使消费者处理的是一个幂等逻辑，这样降低了消">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-MQ</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="MQ为什么会有消费重复？"><a href="#MQ为什么会有消费重复？" class="headerlink" title="- MQ为什么会有消费重复？"></a>- MQ为什么会有消费重复？</h2><ol>
+<li>生产者端：中间件或者网络出问题，生产者没有收到发送成功的返回，进行了重试</li>
+<li>消费者端：消费者处理完消息之后，中间件不能及时更新投递状态</li>
+</ol>
+<h2 id="如何解决MQ中的重复消费？"><a href="#如何解决MQ中的重复消费？" class="headerlink" title="- 如何解决MQ中的重复消费？"></a>- 如何解决MQ中的重复消费？</h2><ol>
+<li>使消费者处理的是一个幂等逻辑，这样降低了消息中间件的整体复杂性，不过也对于业务场景有限制</li>
+<li>使用多版本并发控制，乐观锁的一种实现，生产者发送消息的时候，进行数据更新，需要带上数据的版本号，消费者更新的时候需要去比较持有数据的版本号，版本号不一样的操作无法成功</li>
+<li>在数据库表上构建唯一性索引，比如用一张日志表记录已经处理成功的消息的ID</li>
+</ol>
+<h2 id="如何解决MQ中的消息积压？"><a href="#如何解决MQ中的消息积压？" class="headerlink" title="- 如何解决MQ中的消息积压？"></a>- 如何解决MQ中的消息积压？</h2><p>  原因在于消息积压反映的是性能问题，解决消息积压问题，可以说明候选者有能力处理高并发场景下的消费能力问题。</p>
+<p>  <strong>你在解答这个问题时，依旧要传递给面试官一个这样的思考过程：</strong> 如果出现积压，那一定是性能问题，想要解决消息从生产到消费上的性能问题，就首先要知道哪些环节可能出现消息积压，然后在考虑如何解决。</p>
+<p>  因为消息发送之后才会出现积压的问题，所以和消息生产端没有关系，又因为绝大部分的消息队列单节点都能达到每秒钟几万的处理能力，相对于业务逻辑来说，性能不会出现在中间件的消息存储上面。毫无疑问，出问题的肯定是消息消费阶段，<strong>那么从消费端入手，如何回答呢？</strong></p>
+<p>  如果是线上突发问题，要临时扩容，增加消费端的数量，与此同时，降级一些非核心的业务。通过扩容和降级承担流量，这是为了表明你对应急问题的处理能力。</p>
+<p>  其次，才是排查解决异常问题，如通过监控，日志等手段分析是否消费端的业务逻辑代码出现了问题，优化消费端的业务处理逻辑。</p>
+<p>  最后，如果是消费端的处理能力不足，可以通过水平扩容来提供消费端的并发处理能力，<strong>但这里有一个考点需要特别注意</strong>， 那就是在扩容消费者的实例数的同时，必须同步扩容主题 Topic 的分区数量，确保消费者的实例数和分区数相等。如果消费者的实例数超过了分区数，由于分区是单线程消费，所以这样的扩容就没有效果。</p>
+<p>  比如在 Kafka 中，一个 Topic 可以配置多个 Partition（分区），数据会被写入到多个分区中，但在消费的时候，Kafka 约定一个分区只能被一个消费者消费，Topic 的分区数量决定了消费的能力，所以，可以通过增加分区来提高消费者的处理能力。</p>
+<h2 id="kafka如何避免重复消费？"><a href="#kafka如何避免重复消费？" class="headerlink" title="- kafka如何避免重复消费？"></a>- kafka如何避免重复消费？</h2><p>  出现重复消费的情况：<br>    1. 消费者自动提交offset到kafka中有5s的间隔，如果这时候宕机或者被kill，可能offset没有提交上去<br>    2. Partition rebalance机制，就是把partition均衡的分配给多个消费者，重新分配还是会从之前没有提交的offset开始消费</p>
+<p>  策略：<br>    1. 采用异步方式处理消息，缩短消费时长<br>    2. 调整消费处理的超时时间<br>    3. 减少一次性拉取的条数<br>    4. 针对消息存储到mysql或者redis中，处理消息之前先判断</p>
+<h2 id="kafka如何保证消息不丢失"><a href="#kafka如何保证消息不丢失" class="headerlink" title="- kafka如何保证消息不丢失"></a>- kafka如何保证消息不丢失</h2><ol>
+<li><strong>复制机制</strong>： Kafka 使用分区的复制机制来确保消息的持久性和可靠性。每个分区可以有多个副本，这些副本分布在不同的 Kafka 服务器上。这样，如果某个服务器出现故障，其他服务器上的副本仍然可用，确保消息的持久性。</li>
+<li><strong>持久性写入</strong>： Kafka 的消息被写入磁盘，以确保即使在发生硬件故障时，数据也不会丢失。Kafka 的生产者将消息写入到日志（log）文件中，而消费者从这些日志文件中读取消息。</li>
+<li><strong>数据复制同步</strong>： Kafka 提供了不同的配置来控制数据的复制同步方式。acks 参数用于配置生产者等待复制的确认程度。更高的确认级别（例如 acks&#x3D;all）会降低吞吐量，但提高数据的可靠性。</li>
+<li>ISR（In-Sync Replicas）： Kafka 使用 ISR 列表（在同步复制中的分区副本列表）来确保只有处于同步状态的副本被认为是可用的。这可以提高系统的可靠性，因为只有已经追赶上主副本的副本才能被视为“活跃”。</li>
+<li>事务性写入： Kafka 支持事务性写入，通过引入事务，可以确保一组消息要么全部写入成功，要么全部失败。这有助于维护数据的一致性。</li>
+<li>持久性消费者位移： 消费者的位移（offset）可以被保存在 Kafka 中，确保即使消费者失败或重新启动，它仍然可以从上次停止的位置开始读取消息，而不会错过任何消息。</li>
+<li>消息过期： Kafka 允许配置消息的过期时间。过期时间到达后，消息将被自动清除，以避免不必要的存储。</li>
+<li>监控和警报： 借助监控工具，可以实时监视 Kafka 集群的健康状况。通过设置警报，可以在出现问题时及时采取措施。</li>
+<li>备份和恢复策略： 定期备份 Kafka 数据，并确保有有效的恢复策略，以便在发生严重故障时迅速恢复。</li>
+</ol>
+<h2 id="kafka如何保证消息不乱序"><a href="#kafka如何保证消息不乱序" class="headerlink" title="- kafka如何保证消息不乱序"></a>- kafka如何保证消息不乱序</h2><ul>
+<li>自定义消息分区的一个路由算法，把指定的key都发送到一个partition里面，去指定一个消费者专门去消费一个partition</li>
+<li>采用一个阻塞队列，然后采用一个异步线程从阻塞队列中去获取消息。来进行消费</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#MQ%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E6%9C%89%E6%B6%88%E8%B4%B9%E9%87%8D%E5%A4%8D%EF%BC%9F"><span class="top-box-text">- MQ为什么会有消费重复？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3MQ%E4%B8%AD%E7%9A%84%E9%87%8D%E5%A4%8D%E6%B6%88%E8%B4%B9%EF%BC%9F"><span class="top-box-text">- 如何解决MQ中的重复消费？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3MQ%E4%B8%AD%E7%9A%84%E6%B6%88%E6%81%AF%E7%A7%AF%E5%8E%8B%EF%BC%9F"><span class="top-box-text">- 如何解决MQ中的消息积压？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#kafka%E5%A6%82%E4%BD%95%E9%81%BF%E5%85%8D%E9%87%8D%E5%A4%8D%E6%B6%88%E8%B4%B9%EF%BC%9F"><span class="top-box-text">- kafka如何避免重复消费？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#kafka%E5%A6%82%E4%BD%95%E4%BF%9D%E8%AF%81%E6%B6%88%E6%81%AF%E4%B8%8D%E4%B8%A2%E5%A4%B1"><span class="top-box-text">- kafka如何保证消息不丢失</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#kafka%E5%A6%82%E4%BD%95%E4%BF%9D%E8%AF%81%E6%B6%88%E6%81%AF%E4%B8%8D%E4%B9%B1%E5%BA%8F"><span class="top-box-text">- kafka如何保证消息不乱序</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/03/%E5%85%AB%E8%82%A1-%E6%9D%82%E9%A1%B9/">
+          <h3 class="post-title">
+            下一篇：八股-杂项
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
