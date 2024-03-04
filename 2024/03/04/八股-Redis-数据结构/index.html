@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-Redis-数据结构</title>
+<meta name="keywords" content="八股-Redis-数据结构, HeXu">
+<meta name="description" content="Redis 数据库结构
+
+redisDb 结构，表示 Redis 数据库的结构，结构体里存放了指向了 dict 结构的指针；
+dict 结构，结构体里存放了 2 个哈希表，正常情况下都是用「哈希表1」，「哈希表2」只有在 rehash 的时">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-Redis-数据结构">
+<meta property="og:description" content="Redis 数据库结构
+
+redisDb 结构，表示 Redis 数据库的结构，结构体里存放了指向了 dict 结构的指针；
+dict 结构，结构体里存放了 2 个哈希表，正常情况下都是用「哈希表1」，「哈希表2」只有在 rehash 的时">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-Redis-数据结构</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-04</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="Redis-数据库结构"><a href="#Redis-数据库结构" class="headerlink" title="Redis 数据库结构"></a>Redis 数据库结构</h1><p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/6Jbdj2xVG4t7gkcTA4nD2R/1674382583377.png?auth_key=1709519710-bCK9phtpjadHtCAsYLKmPt-0-cdf4f23ff9e311c7f2b2bff9d21891b3"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/6Jbdj2xVG4t7gkcTA4nD2R/1674382583377.png?auth_key=1709519710-bCK9phtpjadHtCAsYLKmPt-0-cdf4f23ff9e311c7f2b2bff9d21891b3"  lazyload></a></p>
+<ul>
+<li><strong>redisDb</strong> 结构，表示 Redis 数据库的结构，结构体里存放了指向了 dict 结构的指针；</li>
+<li><strong>dict</strong> 结构，结构体里存放了 2 个哈希表，正常情况下都是用「哈希表1」，「哈希表2」只有在 rehash 的时候才用，具体什么是 rehash，我在本文的哈希表数据结构会讲；</li>
+<li><strong>ditctht</strong> 结构，表示哈希表的结构，结构里存放了哈希表数组，数组中的每个元素都是指向一个哈希表节点结构（dictEntry）的指针；</li>
+<li><strong>dictEntry</strong> 结构，表示哈希表节点的结构，结构里存放了 **void * key 和 void * value 指针， key 指向的是 String 对象，而 value 则可以指向 String 对象，也可以指向集合类型的对象，比如 List 对象、Hash 对象、Set 对象和 Zset 对象。</li>
+</ul>
+<h1 id="SDS（Simple-Dynamic-String）"><a href="#SDS（Simple-Dynamic-String）" class="headerlink" title="SDS（Simple Dynamic String）"></a>SDS（Simple Dynamic String）</h1><h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2><p>（Simple Dynamic String），最简单的key-value类型，比C的原来的字符串相比，它可以存文本还可以存二进制数据，用于作为String的一种底层数据结构</p>
+<h2 id="数据结构"><a href="#数据结构" class="headerlink" title="数据结构"></a>数据结构</h2><p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/ncKvgwDhYLtPt1xXzSHKzV/1674382763283.png?auth_key=1709519710-cxprip6JFjMv958sq1DqiZ-0-b337d8bcb8b3526d262cf82a4d5c6234"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/ncKvgwDhYLtPt1xXzSHKzV/1674382763283.png?auth_key=1709519710-cxprip6JFjMv958sq1DqiZ-0-b337d8bcb8b3526d262cf82a4d5c6234"  lazyload></a></p>
+<ul>
+<li><code>len</code> 字符串长度，这就保证取长度的复杂度为O(1)，并且可以存储 “\0”这种字符 </li>
+<li><code>alloc</code> 分配给字符数组的空间长度（类似于go slice中的容量？）通过<strong>alloc - len</strong>就可以知道还有多少<strong>容量</strong>，<strong>从而进行动态扩容</strong>，<strong>避免了缓冲区溢出</strong></li>
+<li><code>flags</code> 用来表示<strong>不同类型</strong>的SDS，比如<strong>sdshdr16 类型的 len 和 alloc 的数据类型都是 uint16_t</strong>，表示字符数组长度和分配空间大小不能超过 2 的 16 次方，所以这就可以灵活保存不同大小的字符串</li>
+<li><code>buf[]</code> 字符数组，用来保存实际的数据（不仅可以保存字符串，也可以保存二进制数据）</li>
+</ul>
+<h1 id="双向链表（linkedlist）"><a href="#双向链表（linkedlist）" class="headerlink" title="双向链表（linkedlist）"></a>双向链表（linkedlist）</h1><h2 id="简介-1"><a href="#简介-1" class="headerlink" title="简介"></a><strong>简介</strong></h2><p>C中没有，所以Redis实现的自己的链表数据结构，它是一个双向链表，用作list的一种底层数据结构</p>
+<h2 id="数据结构-1"><a href="#数据结构-1" class="headerlink" title="数据结构"></a><strong>数据结构</strong></h2><p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/4gqf1Ys6AE1kqN37ULeMay/1674383648219.png?auth_key=1709519710-3ymZjX64n9WMGmy9Ysg5KX-0-ea54c6e3321a68cf2f4953f9e00fc1c3"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/4gqf1Ys6AE1kqN37ULeMay/1674383648219.png?auth_key=1709519710-3ymZjX64n9WMGmy9Ysg5KX-0-ea54c6e3321a68cf2f4953f9e00fc1c3"  lazyload></a></p>
+<h2 id="链表节点"><a href="#链表节点" class="headerlink" title="链表节点"></a><strong>链表节点</strong></h2><pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct listNode &#123;
+    &#x2F;&#x2F;前置节点
+    struct listNode *prev;
+    &#x2F;&#x2F;后置节点
+    struct listNode *next;
+    &#x2F;&#x2F;节点的值
+    void *value;
+&#125; listNode;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="链表"><a href="#链表" class="headerlink" title="链表"></a><strong>链表</strong></h2><pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct list &#123;
+    &#x2F;&#x2F;链表头节点
+    listNode *head;
+    &#x2F;&#x2F;链表尾节点
+    listNode *tail;
+    &#x2F;&#x2F;节点值复制函数
+    void *(*dup)(void *ptr);
+    &#x2F;&#x2F;节点值释放函数
+    void (*free)(void *ptr);
+    &#x2F;&#x2F;节点值比较函数
+    int (*match)(void *ptr, void *key);
+    &#x2F;&#x2F;链表节点数量
+    unsigned long len;
+&#125; list;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="优点"><a href="#优点" class="headerlink" title="优点"></a>优点</h2><ol>
+<li>因为是双向链表，所以获取<strong>上一个或者后置节点的时间复杂度为O(1)<strong>，而且list结构体里还有head和tail的指针，</strong>获取链头链尾的时间复杂度也是O(1)</strong></li>
+<li>有<strong>成员变量len</strong>，所以获取<strong>链表中节点数量只需要O(1)</strong></li>
+<li>*void类型的指针保存节点值，所以可以保存不同类型的值</li>
+</ol>
+<h2 id="缺点"><a href="#缺点" class="headerlink" title="缺点"></a>缺点</h2><p>占用<strong>内存不连续</strong>，缓存不能很好利用CPU缓存（数组就可以很好利用），且开销较大</p>
+<h1 id="压缩列表（ziplist）"><a href="#压缩列表（ziplist）" class="headerlink" title="压缩列表（ziplist）"></a>压缩列表（ziplist）</h1><h2 id="简介-2"><a href="#简介-2" class="headerlink" title="简介"></a>简介</h2><p>  Redis为了节约内存开发的，由连续内存块组成的<strong>顺序型数据结构</strong>，<strong>类似数组</strong>，用作list或者hash的底层数据结构</p>
+<h2 id="结构体"><a href="#结构体" class="headerlink" title="结构体"></a>结构体</h2><p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/qKLNRpPajeWR4shzj2rMJj/1674385191864.png?auth_key=1709519710-dXjajdUnjtmnjsg4iYgUgr-0-61983623cae4e64d5fba7cc5e972beaa"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/qKLNRpPajeWR4shzj2rMJj/1674385191864.png?auth_key=1709519710-dXjajdUnjtmnjsg4iYgUgr-0-61983623cae4e64d5fba7cc5e972beaa"  lazyload></a></p>
+<h3 id="整体结构"><a href="#整体结构" class="headerlink" title="整体结构"></a><strong>整体结构</strong></h3><ul>
+<li><strong>zlbytes</strong>，记录<strong>整个压缩列表</strong>占用对内存字节数</li>
+<li><strong>zltail</strong>，记录压缩列表「尾部」节点距离起始地址由多少字节，也就是<strong>列表尾的偏移量</strong></li>
+<li><strong>zllen</strong>，记录压缩列表包含的<strong>节点数量</strong></li>
+<li><strong>zlend</strong>，标记压缩列表的<strong>结束点</strong>，固定值 <strong>0xFF</strong>（十进制255）</li>
+</ul>
+<h3 id="节点结构"><a href="#节点结构" class="headerlink" title="节点结构"></a><strong>节点结构</strong></h3><ul>
+<li><strong>prevlen</strong>，记录了<strong>「前一个节点」的长度</strong>，目的是为了实现从后向前遍历</li>
+<li><strong>encoding</strong>，记录了当前节点实际数据的「类型和长度」，类型主要有两种：字符串和整数</li>
+<li><strong>data</strong>，记录了当前节点的实际数据，类型和长度都由 <code>encoding</code> 决定</li>
+</ul>
+<h2 id="优缺点"><a href="#优缺点" class="headerlink" title="优缺点"></a>优缺点</h2><ul>
+<li>优点<ul>
+<li>可以快<strong>速定位第一个和最后一个元素</strong></li>
+<li>节约空间，因为保存<strong>节点不是定长的</strong></li>
+</ul>
+</li>
+<li>缺点<ul>
+<li>除了第一个和最后一个节点，剩下的只能一个一个查，效率低</li>
+<li><strong>连锁更新</strong>会导致访问性能下降</li>
+</ul>
+</li>
+</ul>
+<h2 id="连锁更新"><a href="#连锁更新" class="headerlink" title="连锁更新"></a>连锁更新</h2><p>压缩列表新增某个元素或修改某个元素时，如果空间不不够，压缩列表占用的内存空间就需要重新分配。而当新插入的元素较大时，可能会<strong>导致后续元素的 prevlen 占用空间都发生变化</strong>，从而引起「连锁更新」问题，导致每个元素的空间都要重新分配，造成访问压缩列表性能的下降。</p>
+<h1 id="⭐哈希表（hashtable）"><a href="#⭐哈希表（hashtable）" class="headerlink" title="⭐哈希表（hashtable）"></a>⭐哈希表（hashtable）</h1><p><strong>简介</strong>：用作set或者hash的一种底层数据结构，用的是<strong>链式哈希</strong>解决哈希冲突，随着链表长度的增加，查询这个位置的数据的耗时就会增加，所以就要<strong>rehash</strong></p>
+<h2 id="数据结构-2"><a href="#数据结构-2" class="headerlink" title="数据结构"></a>数据结构</h2><p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/8qLnFNQeY1C7pFvzd5EEbY/1674390443735.png?auth_key=1709519710-fTWvnDJHUsUAVKevyVExCi-0-b76d697ed49357878e3b5abac3ba984e"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/8qLnFNQeY1C7pFvzd5EEbY/1674390443735.png?auth_key=1709519710-fTWvnDJHUsUAVKevyVExCi-0-b76d697ed49357878e3b5abac3ba984e"  lazyload></a></p>
+<pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct dictht &#123;
+    &#x2F;&#x2F;哈希表数组
+    dictEntry **table;
+    &#x2F;&#x2F;哈希表大小
+    unsigned long size;  
+    &#x2F;&#x2F;哈希表大小掩码，用于计算索引值
+    unsigned long sizemask;
+    &#x2F;&#x2F;该哈希表已有的节点数量
+    unsigned long used;
+&#125; dictht;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct dictEntry &#123;
+    &#x2F;&#x2F;键值对中的键
+    void *key;
+  
+    &#x2F;&#x2F;键值对中的值
+    union &#123;
+        void *val;
+        uint64_t u64;
+        int64_t s64;
+        double d;
+    &#125; v;
+    &#x2F;&#x2F;指向下一个哈希表节点，形成链表
+    struct dictEntry *next;
+&#125; dictEntry;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="rehash"><a href="#rehash" class="headerlink" title="rehash"></a>rehash</h2><ul>
+<li><strong>过程</strong><ol>
+<li>使用两张哈希表</li>
+<li>正常服务请求阶段，插入的数据都会写入到哈希表1</li>
+<li>随着数据增多触发rehash操作：<ul>
+<li>给「哈希表 2」 分配空间，一般会比「哈希表 1」 大 2 倍；</li>
+<li>将「哈希表 1 」的数据迁移到「哈希表 2」 中；<br>这里需要使用渐进式rehash，因为数据太多会导致阻塞：<br><strong>每次哈希表元素进行新增、删除、查找或者更新操作时，Redis 除了会执行对应的操作之外，还会顺序将「哈希表 1 」中索引位置上的所有 key-value 迁移到「哈希表 2」 上</strong></li>
+<li>迁移完成后，「哈希表 1 」的空间会被释放，并把「哈希表 2」 设置为「哈希表 1」，然后在「哈希表 2」 新创建一个空白的哈希表，为下次 rehash 做准备。</li>
+</ul>
+</li>
+</ol>
+</li>
+<li><strong>触发条件</strong><br>  <strong>负载因子</strong>：哈希表保存的<strong>节点数量&#x2F;哈希表大小</strong><br>  负载因子<strong>大于等于1</strong>，没有执行RDB快照或者AOF重写的时候就会rehash<br>  负载因子<strong>大于等于5</strong>，强制rehash</li>
+</ul>
+<h1 id="整数集合（intset）"><a href="#整数集合（intset）" class="headerlink" title="整数集合（intset）"></a>整数集合（intset）</h1><h2 id="简介-3"><a href="#简介-3" class="headerlink" title="简介"></a>简介</h2><p>本质上是一块<strong>连续内存空间</strong>，是set的一种底层数据结构</p>
+<h2 id="结构体-1"><a href="#结构体-1" class="headerlink" title="结构体"></a>结构体</h2><pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct intset &#123;
+    &#x2F;&#x2F;编码方式
+    uint32_t encoding;
+    &#x2F;&#x2F;集合包含的元素数量
+    uint32_t length;
+    &#x2F;&#x2F;保存元素的数组
+    int8_t contents[];
+&#125; intset;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="升级操作"><a href="#升级操作" class="headerlink" title="升级操作"></a>升级操作</h2><ul>
+<li>什么是升级操作？<br>int16的数组中插入一个int32，直接把所有的元素都扩成int32类型</li>
+</ul>
+<p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/554MrhUFEvfe83hnEsCN27/1674390946727.png?auth_key=1709519710-b9fzj5Mqs6ZW7srhZWmqNe-0-41efcdb4bb37d1f379ed800ae7009912"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/554MrhUFEvfe83hnEsCN27/1674390946727.png?auth_key=1709519710-b9fzj5Mqs6ZW7srhZWmqNe-0-41efcdb4bb37d1f379ed800ae7009912"  lazyload></a></p>
+<ul>
+<li>这种升级操作的好处是什么？</li>
+</ul>
+<p>就是如果一直向整数集合添加 int16_t 类型的元素，那么整数集合的底层实现就一直是用 int16_t 类型的数组，只有在我们要将 int32_t 类型或 int64_t 类型的元素添加到集合时，才会对数组进行升级操作。所以这就<strong>节约了内存</strong>。</p>
+<ul>
+<li>那么整数数组支持降级操作吗？</li>
+</ul>
+<p>并且不支持降级操作</p>
+<h1 id="⭐跳表（skiplist）"><a href="#⭐跳表（skiplist）" class="headerlink" title="⭐跳表（skiplist）"></a>⭐跳表（skiplist）</h1><h2 id="简介-4"><a href="#简介-4" class="headerlink" title="简介"></a>简介</h2><p>用于作为zset的一种底层数据结构 (<strong>Zset 对象是唯一一个同时使用了两个数据结构来实现的 Redis 对象，这两个数据结构一个是跳表，一个是哈希表。</strong> 这样的好处是既能进行高效的范围查询，也能进行高效单点查询)</p>
+<p>zset 对象会在执行数据更新或者插入的过程中，会依次在跳表和哈希表中插入或更新相应的数据，从而保证了跳表和哈希表中记录的信息一致。</p>
+<h2 id="查找"><a href="#查找" class="headerlink" title="查找"></a>查找</h2><p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/t7GvdkPjUQAVWWgQpBU6R7/1674391962468.png?auth_key=1709519710-2SsP2ygNqbx3rfEutUYDyV-0-fe4c3f30849db1ff841bf357281a5d90"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/t7GvdkPjUQAVWWgQpBU6R7/1674391962468.png?auth_key=1709519710-2SsP2ygNqbx3rfEutUYDyV-0-fe4c3f30849db1ff841bf357281a5d90"  lazyload></a></p>
+<p>图中有三个头节点L0，L1，L2分别指向不同的层级，然后每个层级的节点都通过指针连接起来：</p>
+<ul>
+<li>L0 层级共有 5 个节点，分别是节点1、2、3、4、5</li>
+<li>L1 层级共有 3 个节点，分别是节点 2、3、5</li>
+<li>L2 层级只有 1 个节点，也就是节点 3</li>
+</ul>
+<p>如果查找4，只是链表的话得一个一个顺着找，但是如果是跳表的话，只需要查找 2 次就能定位到节点 4，因为可以在头节点直接从 L2 层级跳到节点 3，然后再往前遍历找到节点 4。</p>
+<h2 id="结构体-2"><a href="#结构体-2" class="headerlink" title="结构体"></a>结构体</h2><p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/pX3ScprHGB8Zx3unD5SbZG/image.png?auth_key=1709519710-6rJwhD9rtggbSRf8ZXjsaQ-0-caefbc35d02a0ff883f76a7d11ae7155"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/pX3ScprHGB8Zx3unD5SbZG/image.png?auth_key=1709519710-6rJwhD9rtggbSRf8ZXjsaQ-0-caefbc35d02a0ff883f76a7d11ae7155"  lazyload></a></p>
+<p>整体结构</p>
+<pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct zset &#123;
+    dict *dict;
+    zskiplist *zsl;
+&#125; zset<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>跳表结构</p>
+<pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct zskiplist &#123;
+    struct zskiplistNode *header, *tail; &#x2F;&#x2F;头尾节点
+    unsigned long length;&#x2F;&#x2F;调表节点数量
+    int level;&#x2F;&#x2F;跳表的最大层数
+&#125; zskiplist;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>跳表节点结构</p>
+<pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct zskiplistNode &#123;
+    &#x2F;&#x2F;Zset 对象的元素值
+    sds ele;
+    &#x2F;&#x2F;元素权重值
+    double score;
+    &#x2F;&#x2F;指向上一个节点
+    struct zskiplistNode *backward;
+  
+    &#x2F;&#x2F;节点的level数组，保存每层上的前向指针和跨度
+    &#x2F;&#x2F;记录这个节点所涉及的所有层的下一个节点的指针
+    struct zskiplistLevel &#123;
+        struct zskiplistNode *forward; &#x2F;&#x2F;指向每层的下一个节点
+        unsigned long span; &#x2F;&#x2F;跨度
+    &#125; level[];
+&#125; zskiplistNode;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+<h2 id="相邻两层节点比"><a href="#相邻两层节点比" class="headerlink" title="相邻两层节点比"></a>相邻两层节点比</h2><p>跳表的相邻两层的节点数量最理想的比例是<strong>2:1</strong>，查找复杂度可以降低到 **O(logN)**。</p>
+<p>如何维持这种比例：</p>
+<p>Redis 则采用一种巧妙的方法是，<strong>跳表在创建节点的时候，随机生成每个节点的层数</strong>，并没有严格维持相邻两层的节点数量比例为 2 : 1 的情况。</p>
+<p><strong>跳表在创建节点时候，会生成范围为[0-1]的一个随机数，如果这个随机数小于 0.25（相当于概率 25%），那么层数就增加 1 层，然后继续生成下一个随机数，直到随机数的结果大于 0.25 结束，最终确定该节点的层数</strong>。</p>
+<p>这样的做法，相当于每增加一层的概率不超过 25%，层数越高，概率越低，层高最大限制是 64。</p>
+<p><strong>为什么不使用二叉平衡树或者红黑树作为zset底层数据结构？</strong></p>
+<ol>
+<li>从内存占用上来比较，跳表比平衡树更灵活一些。</li>
+<li>在做<strong>范围查</strong>找的时候，跳表比平衡树操作<strong>要简单</strong>。</li>
+<li>从<strong>算法实现难度上</strong>来比较，跳表比平衡树要简单得多。</li>
+</ol>
+<h1 id="快表（quicklist）"><a href="#快表（quicklist）" class="headerlink" title="快表（quicklist）"></a>快表（quicklist）</h1><h2 id="简介-5"><a href="#简介-5" class="headerlink" title="简介"></a>简介</h2><p>就是<strong>双向链表+压缩列表</strong>，不过每个节点控制压缩列表大小或者元素个数，是redis3.2之后的List对象的底层数据结构，就是为了防止连锁更新带来的危害</p>
+<h2 id="数据结构-3"><a href="#数据结构-3" class="headerlink" title="数据结构"></a>数据结构</h2><p><strong>quicklist结构体</strong>（类似链表）</p>
+<pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct quicklist &#123;
+    &#x2F;&#x2F;quicklist的链表头
+    quicklistNode *head;      &#x2F;&#x2F;quicklist的链表头
+    &#x2F;&#x2F;quicklist的链表头
+    quicklistNode *tail; 
+    &#x2F;&#x2F;所有压缩列表中的总元素个数
+    unsigned long count;
+    &#x2F;&#x2F;quicklistNodes的个数
+    unsigned long len;       
+    ...
+&#125; quicklist;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>quicklistNode</strong></p>
+<pre class="line-numbers language-C" data-language="C"><code class="language-C">typedef struct quicklistNode &#123;
+    &#x2F;&#x2F;前一个quicklistNode
+    struct quicklistNode *prev;     &#x2F;&#x2F;前一个quicklistNode
+    &#x2F;&#x2F;下一个quicklistNode
+    struct quicklistNode *next;     &#x2F;&#x2F;后一个quicklistNode
+    &#x2F;&#x2F;quicklistNode指向的压缩列表
+    unsigned char *zl;              
+    &#x2F;&#x2F;压缩列表的的字节大小
+    unsigned int sz;                
+    &#x2F;&#x2F;压缩列表的元素个数
+    unsigned int count : 16;        &#x2F;&#x2F;ziplist中的元素个数 
+    ....
+&#125; quicklistNode;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="插入元素过程"><a href="#插入元素过程" class="headerlink" title="插入元素过程"></a>插入元素过程</h2><p>检查插入位置的压缩列表是否能容纳该元素，<strong>如果能容纳就直接保存到 quicklistNode 结构里的压缩列表</strong>，如果不能容纳，才会新建一个新的 quicklistNode 结构。</p>
+<h1 id="紧凑列表-listpack"><a href="#紧凑列表-listpack" class="headerlink" title="紧凑列表(listpack)"></a>紧凑列表(listpack)</h1><h2 id="简介-6"><a href="#简介-6" class="headerlink" title="简介"></a>简介</h2><p>redis在5.0之后有想用这个结构代替压缩列表的趋势</p>
+<p>listpack <strong>没有压缩列表中记录前一个节点长度的字段了</strong>，listpack 只记录当前节点的长度，当我们向 listpack 加入一个新元素的时候，不会影响其他节点的长度字段的变化，从而<strong>避免了压缩列表的连锁更新问题</strong>。</p>
+<h2 id="数据结构-4"><a href="#数据结构-4" class="headerlink" title="数据结构"></a>数据结构</h2><p><a class="simple-lightbox" href="/../images/%E5%85%AB%E8%82%A1-Redis-%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/listpack.png"><img   src="/images/loading.svg" data-src="/../images/%E5%85%AB%E8%82%A1-Redis-%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/listpack.png"  alt="alt text" lazyload></a></p>
+<p>listpack 头包含两个属性，分别记录了 listpack 总字节数和元素数量，然后 listpack 末尾也有个结尾标识。图中的 listpack entry 就是 listpack 的节点了。</p>
+<p>listpack节点主要包含三个方面内容：</p>
+<ul>
+<li>encoding，定义该元素的编码类型，会对不同长度的整数和字符串进行编码；</li>
+<li>data，实际存放的数据；</li>
+<li>len，encoding+data的总长度；</li>
+</ul>
+<h1 id="redis数据类型和底层数据结构对应"><a href="#redis数据类型和底层数据结构对应" class="headerlink" title="redis数据类型和底层数据结构对应"></a>redis数据类型和底层数据结构对应</h1><p><a class="simple-lightbox" href="/../images/%E5%85%AB%E8%82%A1-Redis-%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/all.png"><img   src="/images/loading.svg" data-src="/../images/%E5%85%AB%E8%82%A1-Redis-%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/all.png"  alt="alt text" lazyload></a><br>备注：</p>
+<p>在 Redis 3.0 之前，List 对象的底层数据结构是双向链表或者压缩列表。然后在 Redis 3.2 的时候，List 对象的底层改由 quicklist 数据结构实现。</p>
+<p>Redis 在 5.0 新设计一个数据结构叫 listpack，目的是替代压缩列表，但是暂未有发行版本</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#Redis-%E6%95%B0%E6%8D%AE%E5%BA%93%E7%BB%93%E6%9E%84"><span class="top-box-text">Redis 数据库结构</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#SDS%EF%BC%88Simple-Dynamic-String%EF%BC%89"><span class="top-box-text">SDS（Simple Dynamic String）</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%AE%80%E4%BB%8B"><span class="top-box-text">简介</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="top-box-text">数据结构</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%8F%8C%E5%90%91%E9%93%BE%E8%A1%A8%EF%BC%88linkedlist%EF%BC%89"><span class="top-box-text">双向链表（linkedlist）</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%AE%80%E4%BB%8B-1"><span class="top-box-text">简介</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84-1"><span class="top-box-text">数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%93%BE%E8%A1%A8%E8%8A%82%E7%82%B9"><span class="top-box-text">链表节点</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%93%BE%E8%A1%A8"><span class="top-box-text">链表</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BC%98%E7%82%B9"><span class="top-box-text">优点</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%BC%BA%E7%82%B9"><span class="top-box-text">缺点</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%8E%8B%E7%BC%A9%E5%88%97%E8%A1%A8%EF%BC%88ziplist%EF%BC%89"><span class="top-box-text">压缩列表（ziplist）</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%AE%80%E4%BB%8B-2"><span class="top-box-text">简介</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%BB%93%E6%9E%84%E4%BD%93"><span class="top-box-text">结构体</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E6%95%B4%E4%BD%93%E7%BB%93%E6%9E%84"><span class="top-box-text">整体结构</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%8A%82%E7%82%B9%E7%BB%93%E6%9E%84"><span class="top-box-text">节点结构</span></a></li></ol></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BC%98%E7%BC%BA%E7%82%B9"><span class="top-box-text">优缺点</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%BF%9E%E9%94%81%E6%9B%B4%E6%96%B0"><span class="top-box-text">连锁更新</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E2%AD%90%E5%93%88%E5%B8%8C%E8%A1%A8%EF%BC%88hashtable%EF%BC%89"><span class="top-box-text">⭐哈希表（hashtable）</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84-2"><span class="top-box-text">数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#rehash"><span class="top-box-text">rehash</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E6%95%B4%E6%95%B0%E9%9B%86%E5%90%88%EF%BC%88intset%EF%BC%89"><span class="top-box-text">整数集合（intset）</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%AE%80%E4%BB%8B-3"><span class="top-box-text">简介</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%BB%93%E6%9E%84%E4%BD%93-1"><span class="top-box-text">结构体</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%8D%87%E7%BA%A7%E6%93%8D%E4%BD%9C"><span class="top-box-text">升级操作</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E2%AD%90%E8%B7%B3%E8%A1%A8%EF%BC%88skiplist%EF%BC%89"><span class="top-box-text">⭐跳表（skiplist）</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%AE%80%E4%BB%8B-4"><span class="top-box-text">简介</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%9F%A5%E6%89%BE"><span class="top-box-text">查找</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%BB%93%E6%9E%84%E4%BD%93-2"><span class="top-box-text">结构体</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%9B%B8%E9%82%BB%E4%B8%A4%E5%B1%82%E8%8A%82%E7%82%B9%E6%AF%94"><span class="top-box-text">相邻两层节点比</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%BF%AB%E8%A1%A8%EF%BC%88quicklist%EF%BC%89"><span class="top-box-text">快表（quicklist）</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%AE%80%E4%BB%8B-5"><span class="top-box-text">简介</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84-3"><span class="top-box-text">数据结构</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%8F%92%E5%85%A5%E5%85%83%E7%B4%A0%E8%BF%87%E7%A8%8B"><span class="top-box-text">插入元素过程</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E7%B4%A7%E5%87%91%E5%88%97%E8%A1%A8-listpack"><span class="top-box-text">紧凑列表(listpack)</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E7%AE%80%E4%BB%8B-6"><span class="top-box-text">简介</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84-4"><span class="top-box-text">数据结构</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E6%95%B0%E6%8D%AE%E7%B1%BB%E5%9E%8B%E5%92%8C%E5%BA%95%E5%B1%82%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%AF%B9%E5%BA%94"><span class="top-box-text">redis数据类型和底层数据结构对应</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E6%9D%82%E9%A1%B9/">
+          <h3 class="post-title">
+            下一篇：八股-Redis-杂项
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
