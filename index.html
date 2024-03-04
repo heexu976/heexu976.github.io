@@ -79,6 +79,39 @@
 
 <section class="post-item">
     <div class="content">
+      <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B/">
+        <h2 class="post-title">八股-Redis-线程模型</h2>
+      </a>
+      <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B/">
+          <div class="post-abstract">
+            
+			    - redis到底是不是单线程?目前对于命令的执行，Redis 仍然使用单线程来处理
+
+redis的2.6版本会启动两个后台线程，分别处理关闭文件，AOF刷盘两个任务
+redis的4.0版本之后会新增一个后台线程用来异步释放redis内存，
+            
+          </div>
+      </a>
+      <div class="post-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-04</span>
+        
+          <span>
+            <i class="icon icon-pricetags-outline"></i>
+            
+
+                八股
+                
+            
+          </span>
+        
+      </div>
+    </div>
+  </section>
+
+
+
+<section class="post-item">
+    <div class="content">
       <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">
         <h2 class="post-title">八股-Redis-数据结构</h2>
       </a>
@@ -364,38 +397,6 @@ B+树叶子节点之间相互之间也构成一个双向链表，B
       </a>
       <div class="post-info">
         <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
-        
-          <span>
-            <i class="icon icon-pricetags-outline"></i>
-            
-
-                八股
-                
-            
-          </span>
-        
-      </div>
-    </div>
-  </section>
-
-
-
-<section class="post-item">
-    <div class="content">
-      <a href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-sync-%E9%94%81/">
-        <h2 class="post-title">Golang-八股-sync-锁</h2>
-      </a>
-      <a href="/2024/03/01/Golang-%E5%85%AB%E8%82%A1-sync-%E9%94%81/">
-          <div class="post-abstract">
-            
-			    除了锁之外还有什么方式可以安全读写共享变量？
-gorutine+channel：将共享变量的读写放到一个 goroutine 中，其它 goroutine 通过 channel 进行读写操作。
-信号量：可以用个数为 1 的信号量（semap
-            
-          </div>
-      </a>
-      <div class="post-info">
-        <span><i class="icon icon-calendar-outline"></i> 2024-03-01</span>
         
           <span>
             <i class="icon icon-pricetags-outline"></i>
