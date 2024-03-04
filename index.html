@@ -79,6 +79,40 @@
 
 <section class="post-item">
     <div class="content">
+      <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E6%8C%81%E4%B9%85%E5%8C%96/">
+        <h2 class="post-title">八股-Redis-持久化</h2>
+      </a>
+      <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E6%8C%81%E4%B9%85%E5%8C%96/">
+          <div class="post-abstract">
+            
+			    - redis是如何实现数据不丢失的？redis通过三种持久化的方式防止数据丢失，分别是：
+
+AOF 日志：每执行一条写操作命令，就把该命令以追加的方式写入到一个文件里
+RDB 快照：将某一时刻的内存数据，以二进制的方式写入磁盘
+混合持久化
+            
+          </div>
+      </a>
+      <div class="post-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-04</span>
+        
+          <span>
+            <i class="icon icon-pricetags-outline"></i>
+            
+
+                八股
+                
+            
+          </span>
+        
+      </div>
+    </div>
+  </section>
+
+
+
+<section class="post-item">
+    <div class="content">
       <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E9%9B%86%E7%BE%A4/">
         <h2 class="post-title">八股-Redis-集群</h2>
       </a>
@@ -357,41 +391,6 @@ B+树叶子节点之间相互之间也构成一个双向链表，B
 行级锁：MyISAM只有表级锁，InnoDB支持行级锁和表级锁
 事务：MyISAM不提供事务支持，InnoDB支持事务
 外键：My
-            
-          </div>
-      </a>
-      <div class="post-info">
-        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
-        
-          <span>
-            <i class="icon icon-pricetags-outline"></i>
-            
-
-                八股
-                
-            
-          </span>
-        
-      </div>
-    </div>
-  </section>
-
-
-
-<section class="post-item">
-    <div class="content">
-      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MQ/">
-        <h2 class="post-title">八股-MQ</h2>
-      </a>
-      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MQ/">
-          <div class="post-abstract">
-            
-			    - MQ为什么会有消费重复？
-生产者端：中间件或者网络出问题，生产者没有收到发送成功的返回，进行了重试
-消费者端：消费者处理完消息之后，中间件不能及时更新投递状态
-
-- 如何解决MQ中的重复消费？
-使消费者处理的是一个幂等逻辑，这样降低了消
             
           </div>
       </a>

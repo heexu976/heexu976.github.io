@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-Redis-持久化</title>
+<meta name="keywords" content="八股-Redis-持久化, HeXu">
+<meta name="description" content="- redis是如何实现数据不丢失的？redis通过三种持久化的方式防止数据丢失，分别是：
+
+AOF 日志：每执行一条写操作命令，就把该命令以追加的方式写入到一个文件里
+RDB 快照：将某一时刻的内存数据，以二进制的方式写入磁盘
+混合持久化">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-Redis-持久化">
+<meta property="og:description" content="- redis是如何实现数据不丢失的？redis通过三种持久化的方式防止数据丢失，分别是：
+
+AOF 日志：每执行一条写操作命令，就把该命令以追加的方式写入到一个文件里
+RDB 快照：将某一时刻的内存数据，以二进制的方式写入磁盘
+混合持久化">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-Redis-持久化</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-04</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="redis是如何实现数据不丢失的？"><a href="#redis是如何实现数据不丢失的？" class="headerlink" title="- redis是如何实现数据不丢失的？"></a>- redis是如何实现数据不丢失的？</h2><p>redis通过三种持久化的方式防止数据丢失，分别是：</p>
+<ul>
+<li><strong>AOF 日志</strong>：每执行一条写操作命令，就把该<strong>命令以追加的方式</strong>写入到一个文件里</li>
+<li><strong>RDB 快照</strong>：将某一时刻的内存数据，以<strong>二进制的方式</strong>写入磁盘</li>
+<li><strong>混合持久化方式</strong>：Redis 4.0 新增的方式，集成了 AOF 和 RDB的优点</li>
+</ul>
+<h2 id="AOF日志是如何实现的"><a href="#AOF日志是如何实现的" class="headerlink" title="- AOF日志是如何实现的?"></a>- AOF日志是如何实现的?</h2><p>Redis 在执行完一条写操作命令后，就会把该命令以追加的方式写入到一个文件里，然后 Redis 重启时，会读取该文件记录的命令，然后逐一执行命令的方式来进行数据恢复。</p>
+<h2 id="那你刚才说AOF日志是先执行命令再把数据写入日记，这是为什么呢？"><a href="#那你刚才说AOF日志是先执行命令再把数据写入日记，这是为什么呢？" class="headerlink" title="- 那你刚才说AOF日志是先执行命令再把数据写入日记，这是为什么呢？"></a>- <strong>那你刚才说AOF日志是先执行命令再把数据写入日记，这是为什么呢？</strong></h2><ul>
+<li><strong>避免额外的检查开销</strong>：因为如果先将写操作命令记录到 AOF 日志里，再执行该命令的话，如果当前的命令语法有问题，那么如果不进行命令语法检查，该错误的命令记录到 AOF 日志里后，Redis 在使用日志恢复数据时，就可能会出错。</li>
+<li><strong>不会阻塞当前写操作命令的执行</strong>：因为当写操作命令执行成功后，才会将命令记录到 AOF 日志。</li>
+</ul>
+<h2 id="那这种顺序会有什么风险呢？"><a href="#那这种顺序会有什么风险呢？" class="headerlink" title="- 那这种顺序会有什么风险呢？"></a>- 那这种顺序会有什么风险呢？</h2><ul>
+<li><strong>数据可能会丢失：</strong> 执行写操作命令和记录日志是两个过程，那当 Redis 在还没来得及将命令写入到硬盘时，服务器发生宕机了，这个数据就会有丢失的风险。</li>
+<li><strong>可能阻塞其他操作：</strong> 由于写操作命令执行成功后才记录到 AOF 日志，所以不会阻塞当前命令的执行，但因为 AOF 日志也是在主线程中执行，所以当 Redis 把日志文件写入磁盘的时候，还是会阻塞后续的操作无法执行。</li>
+</ul>
+<h2 id="AOF是怎么写回的？写回策略有哪些？能说说这些策略的优缺点吗？"><a href="#AOF是怎么写回的？写回策略有哪些？能说说这些策略的优缺点吗？" class="headerlink" title="- AOF是怎么写回的？写回策略有哪些？能说说这些策略的优缺点吗？"></a>- AOF是怎么写回的？写回策略有哪些？能说说这些策略的优缺点吗？</h2><ol>
+<li>Redis 执行完写操作命令后，会将 <strong>命令追加到 server.aof_buf 缓冲区</strong></li>
+<li>然后通过<strong>write() 系统调用</strong>，将 aof_buf 缓冲区的数据<strong>写入到 AOF 文件</strong>，此时数据并没有写入到硬盘，而是<strong>拷贝到了内核缓冲区 page cache</strong>，等待内核将数据写入硬盘</li>
+<li>具体内核缓冲区的数据什么时候写入到硬盘，由内核决定。</li>
+</ol>
+<p>下面是写回策略</p>
+<p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/guA8pmNgXMKqPpT3kXZprR/1674399372547.png?auth_key=1709532625-6HHFKbCFv9UsuwVTiGG5SC-0-5c201ccc845f878a6588936e4714e1a1"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/guA8pmNgXMKqPpT3kXZprR/1674399372547.png?auth_key=1709532625-6HHFKbCFv9UsuwVTiGG5SC-0-5c201ccc845f878a6588936e4714e1a1"  lazyload></a></p>
+<h2 id="AOF日志过大会触发什么机制？"><a href="#AOF日志过大会触发什么机制？" class="headerlink" title="- AOF日志过大会触发什么机制？"></a>- <strong>AOF日志过大会触发什么机制？</strong></h2><p>当 AOF 文件的大小超过所设定的阈值后，Redis 就会启用 <strong>AOF 重写机制</strong>，来压缩 AOF 文件。</p>
+<p>AOF 重写机制是在重写时，读取当前数据库中的所有键值对，然后将每一个键值对用一条命令记录到「新的 AOF 文件」，等到全部记录完后，就将新的 AOF 文件替换掉现有的 AOF 文件。</p>
+<p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/6odMgoudYcCjuC6fEArMSr/image.png?auth_key=1709532674-4BLajyQygZssJLoN64NEDn-0-7bd6439e0bfb9cfc870dba9995e8312c"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/6odMgoudYcCjuC6fEArMSr/image.png?auth_key=1709532674-4BLajyQygZssJLoN64NEDn-0-7bd6439e0bfb9cfc870dba9995e8312c"  lazyload></a></p>
+<h2 id="那你能说说重写AOF日志的过程是怎么样的吗？"><a href="#那你能说说重写AOF日志的过程是怎么样的吗？" class="headerlink" title="- 那你能说说重写AOF日志的过程是怎么样的吗？"></a>- 那你能说说重写AOF日志的过程是怎么样的吗？</h2><p>  Redis 的重写 AOF 过程是由后台子**进程 bgrewriteaof **来完成的</p>
+<ol>
+<li>触发重写机制后，主进程就会<strong>创建重写 AOF 的子进程</strong>，此时父子进程共享物理内存，重写子进程只会对这个内存进行只读，重写 AOF 子进程会读取数据库里的所有数据，并<strong>逐一把内存数据的键值对转换成一条命令，再将命令记录到重写日志</strong>（新的 AOF 文件）。</li>
+<li>在重写 AOF 期间，当 Redis 执行完一个写命令之后，它会<strong>同时将这个写命令写入到 「AOF 缓冲区」和 「AOF 重写缓冲区」</strong>。</li>
+<li>当子进程完成 AOF 重写工作（扫描数据库中所有数据，逐一把内存数据的键值对转换成一条命令，再将命令记录到重写日志）后，会向主进程发送一条信号，信号是进程间通讯的一种方式，且是异步的。</li>
+<li>主进程收到该信号后，会调用一个信号处理函数，该函数主要做以下工作：<ol>
+<li><strong>将 AOF 重写缓冲区中的所有内容追加到新的 AOF 的文件中，</strong> 使得新旧两个 AOF 文件所保存的数据库状态一致；</li>
+<li>新的 AOF 的文件进行改名，覆盖现有的 AOF 文件。</li>
+</ol>
+</li>
+</ol>
+<h2 id="了解RDB快照吗？说说RDB快照是怎么实现的？"><a href="#了解RDB快照吗？说说RDB快照是怎么实现的？" class="headerlink" title="- 了解RDB快照吗？说说RDB快照是怎么实现的？"></a>- 了解RDB快照吗？说说RDB快照是怎么实现的？</h2><p>如果用AOF做故障恢复，那么一条一条执行会非常慢，而<strong>RDB 快照就是记录某一个瞬间的内存数据</strong>，记录的是实际数据，而 AOF 文件记录的是命令操作的日志，而不是实际的数据。</p>
+<p>因此在 Redis 恢复数据时， <strong>RDB 恢复数据的效率会比 AOF 高</strong>些，因为直接将 RDB 文件读入内存就可以，不需要像 AOF 那样还需要额外执行操作命令的步骤才能恢复数据。</p>
+<h2 id="RDB做快照会阻塞线程吗？"><a href="#RDB做快照会阻塞线程吗？" class="headerlink" title="- RDB做快照会阻塞线程吗？"></a>- RDB做快照会阻塞线程吗？</h2><p>有两个生成RDB文件的命令，分别是 <strong>save <strong>和</strong> bgsave</strong>，他们的区别就在于是否在「主线程」里执行：</p>
+<ul>
+<li>执行了 save 命令，就会在主线程生成 RDB 文件，由于和执行操作命令在同一个线程，所以如果写入 RDB 文件的时间太长，<strong>会阻塞主线程</strong>；</li>
+<li>执行了 bgsave 命令，会创建一个子进程来生成 RDB 文件，这样可以<strong>避免主线程的阻塞</strong>；</li>
+</ul>
+<p>可以通过配置文件的选项来实现每隔一段时间自动执行依次bgsave命令</p>
+<pre class="line-numbers language-C" data-language="C"><code class="language-C">save 900 1
+save 300 10
+save 60 10000<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<ul>
+<li>900 秒之内，对数据库进行了至少 1 次修改；</li>
+<li>300 秒之内，对数据库进行了至少 10 次修改；</li>
+<li>60 秒之内，对数据库进行了至少 10000 次修改。</li>
+</ul>
+<h2 id="RDB在执行快照的时候，数据可以修改吗？"><a href="#RDB在执行快照的时候，数据可以修改吗？" class="headerlink" title="- RDB在执行快照的时候，数据可以修改吗？"></a>- <strong>RDB在执行快照的时候，数据可以修改吗？</strong></h2><p>  关键的技术就在于<strong>写时复制技术（Copy-On-Write, COW）。</strong></p>
+<p>  执行 bgsave 命令的时候，会通过 <strong>fork() 创建子进程</strong>，此时子进程和父进程是<strong>共享同一片内存数据</strong>的，因为创建子进程的时候，会复制父进程的页表，但是页表指向的物理内存还是一个，此时如果主线程执行读操作，则主线程和 bgsave 子进程互相不影响。</p>
+<p>  如果主线程执行写操作，则被修改的数据<strong>会复制一份副本</strong>，然后 <strong>bgsave 子进程会把该副本数据写入 RDB 文件</strong>，在这个过程中，主线程仍然可以<strong>直接修改原来的数据</strong>。</p>
+<h2 id="RDB的缺点有哪些？"><a href="#RDB的缺点有哪些？" class="headerlink" title="- RDB的缺点有哪些？"></a>- RDB的缺点有哪些？</h2><ul>
+<li>数据丢失：RDB使用周期性快照来保存数据，因此在发生故障时，最多会丢失上一次快照和最后一次快照之间的所有数据。</li>
+<li>不适合实时应用程序：在保存快照时，Redis需要将整个数据集写入磁盘，这可能需要较长的时间。如果需要高性能的实时应用程序，这种延迟可能是不可接受的。</li>
+</ul>
+<h2 id="AOF缺点有哪些？"><a href="#AOF缺点有哪些？" class="headerlink" title="- AOF缺点有哪些？"></a>- AOF缺点有哪些？</h2><ul>
+<li>大文件：AOF日志文件可能会变得非常大，因为它记录了每个写操作。如果文件太大，会影响磁盘性能并占用过多的磁盘空间。</li>
+<li>写入延迟：每个写操作都需要在AOF日志中记录，这可能会影响性能，特别是在磁盘性能较差的情况下。此外，AOF日志可能需要定期重写，这也会影响性能。</li>
+<li>数据丢失：与RDB相比，AOF日志记录的数据更加实时。但是，在写入日志文件之前，如果Redis发生崩溃，可能会丢失一些数据。</li>
+</ul>
+<h2 id="那你知道什么是混合持久化吗？"><a href="#那你知道什么是混合持久化吗？" class="headerlink" title="- 那你知道什么是混合持久化吗？"></a>- 那你知道什么是混合持久化吗？</h2><p>为了集成了AOF和RDB的优点， Redis 4.0 提出了<strong>混合使用 AOF 日志和内存快照</strong>，也叫混合持久化，既保证了 Redis 重启速度，又降低数据丢失风险。</p>
+<p>混合持久化工作在 <strong>AOF 日志重写过程</strong>，当开启了混合持久化时，在 AOF 重写日志时，fork 出来的重写子进程会先将与主线程共享的内存数据以 RDB 方式写入到 AOF 文件，然后主线程处理的操作命令会被记录在重写缓冲区里，重写缓冲区里的增量命令会以 AOF 方式写入到 AOF 文件，写入完成后通知主进程将新的含有 RDB 格式和 AOF 格式的 AOF 文件替换旧的的 AOF 文件。</p>
+<p>也就是说，使用了混合持久化，AOF 文件的<strong>前半部分是 RDB 格式的全量数据，后半部分是 AOF 格式的增量数据</strong>。</p>
+<ul>
+<li><p>那你说说混合持久化的优缺点吧？<br>优点：</p>
+<ul>
+<li>混合持久化结合了 RDB 和 AOF 持久化的优点，开头为 RDB 的格式，使得 Redis 可以更快的启动，同时结合 AOF 的优点，有减低了大量数据丢失的风险。</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>AOF 文件中添加了 RDB 格式的内容，使得 AOF 文件的<strong>可读性</strong>变得很差；</li>
+<li><strong>兼容性</strong>差，如果开启混合持久化，那么此混合持久化 AOF 文件，就不能用在 Redis 4.0 之前版本了。</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E6%98%AF%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%95%B0%E6%8D%AE%E4%B8%8D%E4%B8%A2%E5%A4%B1%E7%9A%84%EF%BC%9F"><span class="top-box-text">- redis是如何实现数据不丢失的？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#AOF%E6%97%A5%E5%BF%97%E6%98%AF%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E7%9A%84"><span class="top-box-text">- AOF日志是如何实现的?</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%82%A3%E4%BD%A0%E5%88%9A%E6%89%8D%E8%AF%B4AOF%E6%97%A5%E5%BF%97%E6%98%AF%E5%85%88%E6%89%A7%E8%A1%8C%E5%91%BD%E4%BB%A4%E5%86%8D%E6%8A%8A%E6%95%B0%E6%8D%AE%E5%86%99%E5%85%A5%E6%97%A5%E8%AE%B0%EF%BC%8C%E8%BF%99%E6%98%AF%E4%B8%BA%E4%BB%80%E4%B9%88%E5%91%A2%EF%BC%9F"><span class="top-box-text">- 那你刚才说AOF日志是先执行命令再把数据写入日记，这是为什么呢？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%82%A3%E8%BF%99%E7%A7%8D%E9%A1%BA%E5%BA%8F%E4%BC%9A%E6%9C%89%E4%BB%80%E4%B9%88%E9%A3%8E%E9%99%A9%E5%91%A2%EF%BC%9F"><span class="top-box-text">- 那这种顺序会有什么风险呢？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#AOF%E6%98%AF%E6%80%8E%E4%B9%88%E5%86%99%E5%9B%9E%E7%9A%84%EF%BC%9F%E5%86%99%E5%9B%9E%E7%AD%96%E7%95%A5%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F%E8%83%BD%E8%AF%B4%E8%AF%B4%E8%BF%99%E4%BA%9B%E7%AD%96%E7%95%A5%E7%9A%84%E4%BC%98%E7%BC%BA%E7%82%B9%E5%90%97%EF%BC%9F"><span class="top-box-text">- AOF是怎么写回的？写回策略有哪些？能说说这些策略的优缺点吗？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#AOF%E6%97%A5%E5%BF%97%E8%BF%87%E5%A4%A7%E4%BC%9A%E8%A7%A6%E5%8F%91%E4%BB%80%E4%B9%88%E6%9C%BA%E5%88%B6%EF%BC%9F"><span class="top-box-text">- AOF日志过大会触发什么机制？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%82%A3%E4%BD%A0%E8%83%BD%E8%AF%B4%E8%AF%B4%E9%87%8D%E5%86%99AOF%E6%97%A5%E5%BF%97%E7%9A%84%E8%BF%87%E7%A8%8B%E6%98%AF%E6%80%8E%E4%B9%88%E6%A0%B7%E7%9A%84%E5%90%97%EF%BC%9F"><span class="top-box-text">- 那你能说说重写AOF日志的过程是怎么样的吗？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BA%86%E8%A7%A3RDB%E5%BF%AB%E7%85%A7%E5%90%97%EF%BC%9F%E8%AF%B4%E8%AF%B4RDB%E5%BF%AB%E7%85%A7%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E7%9A%84%EF%BC%9F"><span class="top-box-text">- 了解RDB快照吗？说说RDB快照是怎么实现的？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#RDB%E5%81%9A%E5%BF%AB%E7%85%A7%E4%BC%9A%E9%98%BB%E5%A1%9E%E7%BA%BF%E7%A8%8B%E5%90%97%EF%BC%9F"><span class="top-box-text">- RDB做快照会阻塞线程吗？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#RDB%E5%9C%A8%E6%89%A7%E8%A1%8C%E5%BF%AB%E7%85%A7%E7%9A%84%E6%97%B6%E5%80%99%EF%BC%8C%E6%95%B0%E6%8D%AE%E5%8F%AF%E4%BB%A5%E4%BF%AE%E6%94%B9%E5%90%97%EF%BC%9F"><span class="top-box-text">- RDB在执行快照的时候，数据可以修改吗？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#RDB%E7%9A%84%E7%BC%BA%E7%82%B9%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- RDB的缺点有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#AOF%E7%BC%BA%E7%82%B9%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- AOF缺点有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%82%A3%E4%BD%A0%E7%9F%A5%E9%81%93%E4%BB%80%E4%B9%88%E6%98%AF%E6%B7%B7%E5%90%88%E6%8C%81%E4%B9%85%E5%8C%96%E5%90%97%EF%BC%9F"><span class="top-box-text">- 那你知道什么是混合持久化吗？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E9%9B%86%E7%BE%A4/">
+          <h3 class="post-title">
+            下一篇：八股-Redis-集群
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
