@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-Redis-过期删除和内存淘汰</title>
+<meta name="keywords" content="八股-Redis-过期删除和内存淘汰, HeXu">
+<meta name="description" content="- redis如何判断数据是否过期？  Redis通过一个叫做过期字典的hash表来判断，过期字典的键指向Redis数据库中的某个key，过期字典的值是一个long long类型的整数
+- redis过期数据的删除策略有哪些？  惰性删除：">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-Redis-过期删除和内存淘汰">
+<meta property="og:description" content="- redis如何判断数据是否过期？  Redis通过一个叫做过期字典的hash表来判断，过期字典的键指向Redis数据库中的某个key，过期字典的值是一个long long类型的整数
+- redis过期数据的删除策略有哪些？  惰性删除：">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-Redis-过期删除和内存淘汰</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-04</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="redis如何判断数据是否过期？"><a href="#redis如何判断数据是否过期？" class="headerlink" title="- redis如何判断数据是否过期？"></a>- redis如何判断数据是否过期？</h2><p>  Redis通过一个叫做<strong>过期字典的hash表</strong>来判断，过期字典的键指向Redis数据库中的某个key，过期字典的值是一个long long类型的整数</p>
+<h2 id="redis过期数据的删除策略有哪些？"><a href="#redis过期数据的删除策略有哪些？" class="headerlink" title="- redis过期数据的删除策略有哪些？"></a>- redis过期数据的删除策略有哪些？</h2><p>  惰性删除：只会取出key的时候对数据进行过期检查</p>
+<p>  定期删除：每个一段时间抽一批key来执行删除过期key操作</p>
+<p>  Redis采用的是<strong>定期删除+惰性删除</strong></p>
+<h2 id="说说惰性删除和定期删除策略的优缺点？"><a href="#说说惰性删除和定期删除策略的优缺点？" class="headerlink" title="- 说说惰性删除和定期删除策略的优缺点？"></a>- <strong>说说惰性删除和定期删除策略的优缺点？</strong></h2><p>惰性删除策略的<strong>优点</strong>：</p>
+<ul>
+<li>因为每次访问时，才会检查 key 是否过期，所以此策略只会使用很少的系统资源，因此，惰性删除策略对 CPU 时间最友好。</li>
+</ul>
+<p>惰性删除策略的<strong>缺点</strong>：</p>
+<ul>
+<li>如果一个 key 已经过期，而这个 key 又仍然保留在数据库中，那么只要这个过期 key 一直没有被访问，它所占用的内存就不会释放，造成了一定的内存空间浪费。所以，惰性删除策略对内存不友好。</li>
+</ul>
+<p>定期删除策略的<strong>优点</strong>：</p>
+<ul>
+<li>通过限制删除操作执行的时长和频率，来减少删除操作对 CPU 的影响，同时也能删除一部分过期的数据减少了过期键对空间的无效占用。</li>
+</ul>
+<p>定期删除策略的<strong>缺点</strong>：</p>
+<ul>
+<li>难以确定删除操作执行的时长和频率。如果执行的太频繁，就会对 CPU 不友好；如果执行的太少，那又和惰性删除一样了，过期 key 占用的内存不会及时得到释放。</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E5%A6%82%E4%BD%95%E5%88%A4%E6%96%AD%E6%95%B0%E6%8D%AE%E6%98%AF%E5%90%A6%E8%BF%87%E6%9C%9F%EF%BC%9F"><span class="top-box-text">- redis如何判断数据是否过期？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E8%BF%87%E6%9C%9F%E6%95%B0%E6%8D%AE%E7%9A%84%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- redis过期数据的删除策略有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E6%83%B0%E6%80%A7%E5%88%A0%E9%99%A4%E5%92%8C%E5%AE%9A%E6%9C%9F%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5%E7%9A%84%E4%BC%98%E7%BC%BA%E7%82%B9%EF%BC%9F"><span class="top-box-text">- 说说惰性删除和定期删除策略的优缺点？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E6%8C%81%E4%B9%85%E5%8C%96/">
+          <h3 class="post-title">
+            下一篇：八股-Redis-持久化
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+

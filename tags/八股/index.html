@@ -85,6 +85,37 @@
 
 <section class="post-item">
     <div class="content">
+      <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E8%BF%87%E6%9C%9F%E5%88%A0%E9%99%A4%E5%92%8C%E5%86%85%E5%AD%98%E6%B7%98%E6%B1%B0/">
+        <h2 class="post-title">八股-Redis-过期删除和内存淘汰</h2>
+      </a>
+      <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E8%BF%87%E6%9C%9F%E5%88%A0%E9%99%A4%E5%92%8C%E5%86%85%E5%AD%98%E6%B7%98%E6%B1%B0/">
+          <div class="post-abstract">
+            
+			    - redis如何判断数据是否过期？  Redis通过一个叫做过期字典的hash表来判断，过期字典的键指向Redis数据库中的某个key，过期字典的值是一个long long类型的整数
+- redis过期数据的删除策略有哪些？  惰性删除：
+            
+          </div>
+      </a>
+      <div class="post-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-04</span>
+        
+          <span>
+            <i class="icon icon-pricetags-outline"></i>
+            
+
+                八股
+                
+            
+          </span>
+        
+      </div>
+    </div>
+  </section>
+
+
+
+<section class="post-item">
+    <div class="content">
       <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E6%8C%81%E4%B9%85%E5%8C%96/">
         <h2 class="post-title">八股-Redis-持久化</h2>
       </a>
@@ -363,40 +394,6 @@ I 隔离性：防止并发事务执行
 B+叶子节点有所有索引的冗余和其对应的数据，非叶子节点没有数据，B树没有冗余，非叶子节点有数据
 B+树最后肯定会查询到底，且其叶子节点都排好序了B树可能只查询到中间
 B+树叶子节点之间相互之间也构成一个双向链表，B
-            
-          </div>
-      </a>
-      <div class="post-info">
-        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
-        
-          <span>
-            <i class="icon icon-pricetags-outline"></i>
-            
-
-                八股
-                
-            
-          </span>
-        
-      </div>
-    </div>
-  </section>
-
-
-
-<section class="post-item">
-    <div class="content">
-      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E6%9D%82%E9%A1%B9/">
-        <h2 class="post-title">八股-MySql-杂项</h2>
-      </a>
-      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E6%9D%82%E9%A1%B9/">
-          <div class="post-abstract">
-            
-			    - MyISAM和InnoDB的区别有哪些？  Mysql5.5之前是把 MyISAM 当作默认存储引擎的
-
-行级锁：MyISAM只有表级锁，InnoDB支持行级锁和表级锁
-事务：MyISAM不提供事务支持，InnoDB支持事务
-外键：My
             
           </div>
       </a>
