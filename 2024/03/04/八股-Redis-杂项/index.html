@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-Redis-杂项</title>
+<meta name="keywords" content="八股-Redis-杂项, HeXu">
+<meta name="description" content="- 介绍下redis现在最受欢迎的NoSQL数据库之一，它用C语言编写，速度快，基于内存，包含多种数据结构，是可选持久性的键值对存储数据库
+- 为什么要使用redis？
+高性能：数据在内存中，它的速度比磁盘快的多的多
+高并发：直接操作缓存能">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-Redis-杂项">
+<meta property="og:description" content="- 介绍下redis现在最受欢迎的NoSQL数据库之一，它用C语言编写，速度快，基于内存，包含多种数据结构，是可选持久性的键值对存储数据库
+- 为什么要使用redis？
+高性能：数据在内存中，它的速度比磁盘快的多的多
+高并发：直接操作缓存能">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-Redis-杂项</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-04</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h2 id="介绍下redis"><a href="#介绍下redis" class="headerlink" title="- 介绍下redis"></a>- 介绍下redis</h2><p>现在最受欢迎的NoSQL数据库之一，它用C语言编写，速度快，<strong>基于内存</strong>，包含多种数据结构，是可选持久性的<strong>键值对</strong>存储数据库</p>
+<h2 id="为什么要使用redis？"><a href="#为什么要使用redis？" class="headerlink" title="- 为什么要使用redis？"></a>- 为什么要使用redis？</h2><ul>
+<li><strong>高性能</strong>：数据在内存中，它的速度比磁盘快的多的多</li>
+<li><strong>高并发</strong>：直接操作缓存能够承受的请求是远远大于直接访问数据库的，所以可以考虑把一部分数据放到缓存中去</li>
+</ul>
+<h2 id="你说说redis的使用场景吧？（通过数据类型来记忆应用场景）"><a href="#你说说redis的使用场景吧？（通过数据类型来记忆应用场景）" class="headerlink" title="- 你说说redis的使用场景吧？（通过数据类型来记忆应用场景）"></a>- <strong>你说说redis的使用场景吧？（通过数据类型来记忆应用场景）</strong></h2><ul>
+<li>String 类型的应用场景：<strong>缓存对象</strong>、常规计数、<strong>分布式锁</strong>、共享 session 信息等。</li>
+<li>List 类型的应用场景：<strong>消息队列</strong>（但是有两个问题：1. 生产者需要自行实现全局唯一 ID；2. 不能以消费组形式消费数据）等。</li>
+<li>Hash 类型：缓存对象、<strong>购物车</strong>等。</li>
+<li>Set 类型：<strong>聚合计算（并集、交集、差集）场景</strong>，比如<strong>点赞</strong>、<strong>共同关注</strong>、抽奖活动等。</li>
+<li>Zset 类型：<strong>排序场景</strong>，比如<strong>排行榜</strong>、电话和姓名排序等。</li>
+</ul>
+<p>随着redis的版本更新，后续又增加了四种数据类型</p>
+<ul>
+<li>BitMap（2.2 版新增）：二值状态统计的场景，比如签到、判断用户登陆状态、连续签到用户总数等。</li>
+<li>HyperLogLog（2.8 版新增）：海量数据基数统计的场景，比如百万级网页 UV 计数等。</li>
+<li>GEO（3.2 版新增）：存储地理位置信息的场景，比如滴滴叫车。</li>
+<li>Stream（5.0 版新增）：消息队列，相比于基于 List 类型实现的消息队列，有这两个特有的特性：自动生成全局唯一消息ID，支持以消费组形式消费数据。</li>
+</ul>
+<h2 id="Memcached和Redis做分布式缓存的区别和共同点"><a href="#Memcached和Redis做分布式缓存的区别和共同点" class="headerlink" title="- Memcached和Redis做分布式缓存的区别和共同点"></a>- <strong>Memcached和Redis做分布式缓存的区别和共同点</strong></h2><p>共同点：<br>都在内存里，性能好，都有过期策略<br>区别：</p>
+<ol>
+<li>redis支持的<strong>数据类型更丰富</strong>，memcached只支持<strong>最简单的K&#x2F;V数据类型</strong></li>
+<li>redis支持<strong>数据的持久化</strong>（所以有灾难恢复机制），重启再次加载就行，memcached全存内存中</li>
+<li>Redis内存不够存，硬盘来凑（把不用的数据放到硬盘上），memcached直接报错</li>
+<li>Redis<strong>原生支持集群模式</strong></li>
+<li>memcached是多线程网络模型，Redis是单线程的IO多路复用模型</li>
+<li>memcached过期数据的删除策略只用了惰性删除，而Redis同时能用<strong>惰性删除和定期删除</strong></li>
+</ol>
+<h2 id="为什么Redis这么快"><a href="#为什么Redis这么快" class="headerlink" title="- 为什么Redis这么快"></a>- 为什么Redis这么快</h2><ol>
+<li>基于<strong>内存</strong>，就好比<strong>HashMap的优势</strong>就是查找和操作的时间复杂度都是<strong>O(1)</strong></li>
+<li><strong>数据结构简单</strong></li>
+<li>采用<strong>单线程</strong>，也就是没有上下文切换和竞争条件，考虑各种锁，不存在加锁释放操作，更不会有死锁</li>
+<li>使用<strong>多路I&#x2F;O复用</strong>，非阻塞IO</li>
+</ol>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BB%8B%E7%BB%8D%E4%B8%8Bredis"><span class="top-box-text">- 介绍下redis</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E4%BD%BF%E7%94%A8redis%EF%BC%9F"><span class="top-box-text">- 为什么要使用redis？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%BD%A0%E8%AF%B4%E8%AF%B4redis%E7%9A%84%E4%BD%BF%E7%94%A8%E5%9C%BA%E6%99%AF%E5%90%A7%EF%BC%9F%EF%BC%88%E9%80%9A%E8%BF%87%E6%95%B0%E6%8D%AE%E7%B1%BB%E5%9E%8B%E6%9D%A5%E8%AE%B0%E5%BF%86%E5%BA%94%E7%94%A8%E5%9C%BA%E6%99%AF%EF%BC%89"><span class="top-box-text">- 你说说redis的使用场景吧？（通过数据类型来记忆应用场景）</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#Memcached%E5%92%8CRedis%E5%81%9A%E5%88%86%E5%B8%83%E5%BC%8F%E7%BC%93%E5%AD%98%E7%9A%84%E5%8C%BA%E5%88%AB%E5%92%8C%E5%85%B1%E5%90%8C%E7%82%B9"><span class="top-box-text">- Memcached和Redis做分布式缓存的区别和共同点</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88Redis%E8%BF%99%E4%B9%88%E5%BF%AB"><span class="top-box-text">- 为什么Redis这么快</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-log/">
+          <h3 class="post-title">
+            下一篇：八股-MySql-log
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+
