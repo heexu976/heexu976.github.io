@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-Redis-缓存</title>
+<meta name="keywords" content="八股-Redis-缓存, HeXu">
+<meta name="description" content="存雪崩含义当大量缓存数据在同一时间过期（失效）或者 Redis 故障宕机时，如果此时有大量的用户请求，就会全部请求访问数据库，造成数据库的压力骤增，严重的会造成数据库宕机
+解决措施针对大量数据同时过期
+均匀设置过期的时间（给数据过期时间加上">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-Redis-缓存">
+<meta property="og:description" content="存雪崩含义当大量缓存数据在同一时间过期（失效）或者 Redis 故障宕机时，如果此时有大量的用户请求，就会全部请求访问数据库，造成数据库的压力骤增，严重的会造成数据库宕机
+解决措施针对大量数据同时过期
+均匀设置过期的时间（给数据过期时间加上">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-Redis-缓存</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-05</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="存雪崩"><a href="#存雪崩" class="headerlink" title="存雪崩"></a>存雪崩</h1><h2 id="含义"><a href="#含义" class="headerlink" title="含义"></a>含义</h2><p>当<strong>大量缓存数据在同一时间过期（失效）或者 Redis 故障宕机</strong>时，如果此时有大量的用户请求，就会全部请求访问数据库，造成数据库的压力骤增，严重的会造成数据库宕机</p>
+<h2 id="解决措施"><a href="#解决措施" class="headerlink" title="解决措施"></a>解决措施</h2><h3 id="针对大量数据同时过期"><a href="#针对大量数据同时过期" class="headerlink" title="针对大量数据同时过期"></a>针对大量数据同时过期</h3><ol>
+<li>均匀设置过期的时间（给数据过期时间加上一个随机数）</li>
+<li>互斥锁（如果缓存未命中，就加锁保证同一时间只能由一个请求来构建缓存，这时也要给锁设置好超时时间）</li>
+<li>双key策略（就是给一个key做一个备份，且这个备份不设置过期时间，更新缓存同时更新这个副本key）</li>
+<li>后台更新缓存（让缓存永久有效，并将更新缓存的工作交由后台线程定时更新）</li>
+</ol>
+<p>但是<strong>当系统内存紧张的时候，有些缓存数据会被“淘汰”</strong>，所以解决这个问题的方式就有两个</p>
+<ul>
+<li>后台线程不仅负责定时更新缓存，而且也负责频繁的检测缓存是否有效</li>
+<li>线程发现缓存数据失效后，通过消息队列发送消息到后台线程让它更新缓存</li>
+</ul>
+<h3 id="针对Redis故障宕机"><a href="#针对Redis故障宕机" class="headerlink" title="针对Redis故障宕机"></a>针对Redis故障宕机</h3><ol>
+<li>服务熔断或者请求限流机制（暂停业务对缓存服务的访问，直接返回错误，不让用户访问数据库，或者请求限流，只将部分请求发送到数据库进行处理）</li>
+<li>构建Redis缓存高可用集群<br> 也就是通过主从节点方式构建Redis缓存高可靠集群</li>
+</ol>
+<h1 id="缓存击穿"><a href="#缓存击穿" class="headerlink" title="缓存击穿"></a>缓存击穿</h1><h2 id="含义-1"><a href="#含义-1" class="headerlink" title="含义"></a>含义</h2><p>热点数据过期，可以理解为缓存雪崩的子集</p>
+<h2 id="解决措施-1"><a href="#解决措施-1" class="headerlink" title="解决措施"></a>解决措施</h2><ol>
+<li>互斥锁</li>
+<li>singleFight</li>
+<li>不给热点数据设置过期时间，由后台异步更新缓存</li>
+</ol>
+<h1 id="缓存穿透"><a href="#缓存穿透" class="headerlink" title="缓存穿透"></a>缓存穿透</h1><h2 id="含义-2"><a href="#含义-2" class="headerlink" title="含义"></a>含义</h2><p>当用户访问的数据，<strong>既不在缓存中，也不在数据库中</strong>时，并且没办法构建缓存数据，来服务后续的请求，当有大量这种请求到来时数据库压力骤增，这就是缓存穿透</p>
+<h2 id="应对措施"><a href="#应对措施" class="headerlink" title="应对措施"></a>应对措施</h2><ol>
+<li><p>限制非法请求，API入口处让前端做点验证，或者后端拿到请求参数之后也做做验证</p>
+</li>
+<li><p>缓存空值或者默认值，针对查询的数据设置控制或者默认值再缓存中，后续相同请求就可以直接从缓存中读到空值或者默认值</p>
+</li>
+<li><p>使用<strong>布隆过滤器</strong>快速判断数据是否存在，避免通过查询数据库来判断数据是否存在</p>
+<p> 在我们写入数据库数据时，在布隆过滤器中做个标记，这样就可以快速判断数据</p>
+<p> 标记过程</p>
+<ul>
+<li>第一步，使用 N 个哈希函数分别对数据做哈希计算，得到 N 个哈希值；</li>
+<li>第二步，将第一步得到的 N 个哈希值对位图数组的长度取模，得到每个哈希值在位图数组的对应位置。</li>
+<li>第三步，将每个哈希值在位图数组的对应位置的值设置为 1；</li>
+</ul>
+<p> 但是布隆说数据存在，可能数据也不一定存在数据库中，但是要是查询数据不存在，数据库中就一定不存在这个数据</p>
+</li>
+</ol>
+<h1 id="如何设计一个缓存策略，可以动态缓存热点数据？"><a href="#如何设计一个缓存策略，可以动态缓存热点数据？" class="headerlink" title="- 如何设计一个缓存策略，可以动态缓存热点数据？"></a>- 如何设计一个缓存策略，可以动态缓存热点数据？</h1><p><strong>通过数据最新访问时间来做排名，并过滤掉不常访问的数据，只留下经常访问的数据</strong>。举个例子：</p>
+<p>以电商平台场景中的例子，现在要求只缓存用户经常访问的 Top 1000 的商品。具体细节如下：</p>
+<ul>
+<li>先通过缓存系统做一个排序队列（比如存放 1000 个商品），系统会根据商品的访问时间，更新队列信息，越是最近访问的商品排名越靠前；</li>
+<li>同时系统会定期过滤掉队列中排名最后的 200 个商品，然后再从数据库中随机读取出 200 个商品加入队列中；</li>
+<li>这样当请求每次到达的时候，会先从队列中获取商品 ID，如果命中，就根据 ID 再从另一个缓存数据结构中读取实际的商品信息，并返回。</li>
+</ul>
+<p>在 Redis 中可以用 zadd 方法和 zrange 方法来完成排序队列和获取 200 个商品的操作。</p>
+<h3 id="说说常见的缓存更新策略？"><a href="#说说常见的缓存更新策略？" class="headerlink" title="- 说说常见的缓存更新策略？"></a>- 说说常见的缓存更新策略？</h3><p>常见的缓存更新策略共有3种：</p>
+<ul>
+<li><p><strong>Cache Aside（旁路缓存）策略</strong>（就是redis和mysql最常用的策略）</p>
+<p>  写策略先更新数据库中的数据，再删除缓存中的数据<br>  读策略就是先读缓存，缓存没有再读数据库，</p>
+</li>
+<li><p><strong>Read&#x2F;Write Through（读穿 &#x2F; 写穿）策略</strong></p>
+<ul>
+<li><p>读穿：先查询缓存中数据是否存在，如果存在则直接返回，如果不存在，则由缓存组件负责从数据库查询数据，并将结果写入到缓存组件，最后缓存组件将数据返回给应用。</p>
+</li>
+<li><p>写穿当有数据更新的时候，先查询要写入的数据在缓存中是否已经存在：</p>
+<ul>
+<li>如果缓存中数据已经存在，则更新缓存中的数据，并且由缓存组件同步更新到数据库中，然后缓存组件告知应用程序更新完成。</li>
+<li>如果缓存中数据不存在，直接更新数据库，然后返回；</li>
+</ul>
+<p>Read Through&#x2F;Write Through 策略的特点是由缓存节点而非应用程序来和数据库打交道，在我们开发过程中相比 Cache Aside 策略要少见一些，原因是我们经常使用的分布式缓存组件，无论是 Memcached 还是 Redis 都不提供写入数据库和自动加载数据库中的数据的功能。而我们在使用本地缓存的时候可以考虑使用这种策略</p>
+</li>
+</ul>
+</li>
+<li><p><strong>Write Back（写回）策略</strong><br>Write Back（写回）策略在更新数据的时候，只更新缓存，同时将缓存数据设置为脏的，然后立马返回，并不会更新数据库。对于数据库的更新，会通过批量异步更新的方式进行。<br>Write Back 策略特别适合写多的场景，但是带来的问题是，数据不是强一致性的，而且会有数据丢失的风险。</p>
+</li>
+</ul>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%AD%98%E9%9B%AA%E5%B4%A9"><span class="top-box-text">存雪崩</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%90%AB%E4%B9%89"><span class="top-box-text">含义</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%A7%A3%E5%86%B3%E6%8E%AA%E6%96%BD"><span class="top-box-text">解决措施</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%92%88%E5%AF%B9%E5%A4%A7%E9%87%8F%E6%95%B0%E6%8D%AE%E5%90%8C%E6%97%B6%E8%BF%87%E6%9C%9F"><span class="top-box-text">针对大量数据同时过期</span></a></li><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E9%92%88%E5%AF%B9Redis%E6%95%85%E9%9A%9C%E5%AE%95%E6%9C%BA"><span class="top-box-text">针对Redis故障宕机</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E7%BC%93%E5%AD%98%E5%87%BB%E7%A9%BF"><span class="top-box-text">缓存击穿</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%90%AB%E4%B9%89-1"><span class="top-box-text">含义</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%A7%A3%E5%86%B3%E6%8E%AA%E6%96%BD-1"><span class="top-box-text">解决措施</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E7%BC%93%E5%AD%98%E7%A9%BF%E9%80%8F"><span class="top-box-text">缓存穿透</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%90%AB%E4%B9%89-2"><span class="top-box-text">含义</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%BA%94%E5%AF%B9%E6%8E%AA%E6%96%BD"><span class="top-box-text">应对措施</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E4%B8%80%E4%B8%AA%E7%BC%93%E5%AD%98%E7%AD%96%E7%95%A5%EF%BC%8C%E5%8F%AF%E4%BB%A5%E5%8A%A8%E6%80%81%E7%BC%93%E5%AD%98%E7%83%AD%E7%82%B9%E6%95%B0%E6%8D%AE%EF%BC%9F"><span class="top-box-text">- 如何设计一个缓存策略，可以动态缓存热点数据？</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E5%B8%B8%E8%A7%81%E7%9A%84%E7%BC%93%E5%AD%98%E6%9B%B4%E6%96%B0%E7%AD%96%E7%95%A5%EF%BC%9F"><span class="top-box-text">- 说说常见的缓存更新策略？</span></a></li></ol></li></ol></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E8%BF%87%E6%9C%9F%E5%88%A0%E9%99%A4%E5%92%8C%E5%86%85%E5%AD%98%E6%B7%98%E6%B1%B0/">
+          <h3 class="post-title">
+            下一篇：八股-Redis-过期删除和内存淘汰
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-Redis-实战</title>
+<meta name="keywords" content="八股-Redis-实战, HeXu">
+<meta name="description" content="- 如何实现延迟队列？  延迟队列指的是：
+
+在淘宝、京东等购物平台上下单，超过一定时间未付款，订单会自动取消；
+打车的时候，在规定时间没有车主接单，平台会取消你的单并提醒你暂时没有车主接单；
+点外卖的时候，如果商家在10分钟还没接单，就会">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-Redis-实战">
+<meta property="og:description" content="- 如何实现延迟队列？  延迟队列指的是：
+
+在淘宝、京东等购物平台上下单，超过一定时间未付款，订单会自动取消；
+打车的时候，在规定时间没有车主接单，平台会取消你的单并提醒你暂时没有车主接单；
+点外卖的时候，如果商家在10分钟还没接单，就会">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-Redis-实战</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-05</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="如何实现延迟队列？"><a href="#如何实现延迟队列？" class="headerlink" title="- 如何实现延迟队列？"></a>- 如何实现延迟队列？</h1><p>  延迟队列指的是：</p>
+<ul>
+<li>在淘宝、京东等购物平台上下单，超过一定时间未付款，订单会自动取消；</li>
+<li>打车的时候，在规定时间没有车主接单，平台会取消你的单并提醒你暂时没有车主接单；</li>
+<li>点外卖的时候，如果商家在10分钟还没接单，就会自动取消订单</li>
+</ul>
+<p>  <strong>在 Redis 可以使用有序集合（ZSet）的方式来实现延迟消息队列的，ZSet 有一个 Score 属性可以用来存储延迟执行的时间。</strong></p>
+<p>  使用 zadd score1 value1 命令就可以一直往内存中生产消息。再利用 zrangebysocre 查询符合条件的所有待处理的任务， 通过循环执行队列任务即可。</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/g6vu66MLBgnbnKytwUWaPC/1674442299649.png?auth_key=1709607028-xpzgw6ygrG2aM5yABbjaep-0-1e2c3fd1cbf148469d43dc20f7fa35b5"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/g6vu66MLBgnbnKytwUWaPC/1674442299649.png?auth_key=1709607028-xpzgw6ygrG2aM5yABbjaep-0-1e2c3fd1cbf148469d43dc20f7fa35b5"  lazyload></a></p>
+<h1 id="redis事务支持回滚吗？"><a href="#redis事务支持回滚吗？" class="headerlink" title="- redis事务支持回滚吗？"></a>- redis事务支持回滚吗？</h1><p>  <strong>Redis 中并没有提供回滚机制</strong>，虽然 Redis 提供了 DISCARD 命令，但是这个命令只能用来主动放弃事务执行，把暂存的命令队列清空，起不到回滚的效果。所以<strong>Redis 并不一定保证原子性</strong>。</p>
+<h1 id="redis中的管道有什么作用？"><a href="#redis中的管道有什么作用？" class="headerlink" title="- redis中的管道有什么作用？"></a>- redis中的管道有什么作用？</h1><p>管道技术（Pipeline）是客户端提供的一种批处理技术，用于一次处理多个 Redis 命令，从而提高整个交互的性能。</p>
+<p>使用<strong>管道技术可以解决多个命令执行时的网络等待</strong>，它是把多个命令整合到一起发送给服务器端处理之后统一返回给客户端，这样就免去了每条命令执行后都要等待的情况，从而有效地提高了程序的执行效率。</p>
+<h1 id="redis中大key有什么危害？"><a href="#redis中大key有什么危害？" class="headerlink" title="- redis中大key有什么危害？"></a>- redis中大key有什么危害？</h1><ul>
+<li><strong>客户端超时阻塞</strong>。由于 Redis 执行命令是单线程处理，然后在操作大 key 时会比较耗时，那么就会阻塞 Redis，从客户端这一视角看，就是很久很久都没有响应。</li>
+<li><strong>引发网络阻塞</strong>。每次获取大 key 产生的网络流量较大，如果一个 key 的大小是 1 MB，每秒访问量为 1000，那么每秒会产生 1000MB 的流量，这对于普通千兆网卡的服务器来说是灾难性的。</li>
+<li><strong>阻塞工作线程</strong>。如果使用 del 删除大 key 时，会阻塞工作线程，这样就没办法处理后续的命令。</li>
+<li><strong>内存分布不均</strong>。集群模型在 slot 分片均匀情况下，会出现数据和查询倾斜情况，部分有大 key 的 Redis 节点占用内存多，QPS 也会比较大。</li>
+</ul>
+<h1 id="如何解决大key这个问题？"><a href="#如何解决大key这个问题？" class="headerlink" title="- 如何解决大key这个问题？"></a>- <strong>如何解决大key这个问题？</strong></h1><ol>
+<li><p><strong>对大key进行拆分</strong>。将value按照一定的规则拆分开来，按照key-value的方式存储起来，然后在将这些key按照一定的规则替换掉我们大key中的value，这样其实就是变相的将大key拆分了，我们存储的只是多个key。</p>
+<p> 这样，拿到了大key的值后，在遍历获取对应的value即可</p>
+</li>
+<li><p>对<strong>大key的value值进行压缩处理</strong>。可以使用序列化技术对我们的value进行压缩处理，这样便可缩小value的空间</p>
+</li>
+<li><p>对<strong>大key做有效的时间优化</strong>。使其在超过了自己的失效，自动释放，来减少大key的危害。</p>
+</li>
+</ol>
+<ul>
+<li>如何删除大key？</li>
+</ul>
+<ol>
+<li><p>分批次删除</p>
+<p> 对于<strong>删除大 Hash</strong>，使用 <code>hscan</code> 命令，每次获取 100 个字段，再用 <code>hdel</code> 命令，每次删除 1 个字段。</p>
+<p> 对于<strong>删除大 List</strong>，通过 <code>ltrim</code> 命令，每次删除少量元素。</p>
+<p> 对于<strong>删除大 Set</strong>，使用 <code>sscan</code> 命令，每次扫描集合中 100 个元素，再用 <code>srem</code> 命令每次删除一个键。</p>
+<p> 对于<strong>删除大 ZSet</strong>，使用 <code>zremrangebyrank</code> 命令，每次删除 top 100个元素。</p>
+</li>
+<li><p>异步删除</p>
+<p> 从 Redis 4.0 版本开始，可以采用<strong>异步删除</strong>法，<strong>用 unlink 命令代替 del 来删除</strong>。</p>
+<p> 这样 Redis 会将这个 key 放入到一个异步线程中进行删除，这样不会阻塞主线程。</p>
+</li>
+</ol>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E5%BB%B6%E8%BF%9F%E9%98%9F%E5%88%97%EF%BC%9F"><span class="top-box-text">- 如何实现延迟队列？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%BA%8B%E5%8A%A1%E6%94%AF%E6%8C%81%E5%9B%9E%E6%BB%9A%E5%90%97%EF%BC%9F"><span class="top-box-text">- redis事务支持回滚吗？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%B8%AD%E7%9A%84%E7%AE%A1%E9%81%93%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F"><span class="top-box-text">- redis中的管道有什么作用？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%B8%AD%E5%A4%A7key%E6%9C%89%E4%BB%80%E4%B9%88%E5%8D%B1%E5%AE%B3%EF%BC%9F"><span class="top-box-text">- redis中大key有什么危害？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3%E5%A4%A7key%E8%BF%99%E4%B8%AA%E9%97%AE%E9%A2%98%EF%BC%9F"><span class="top-box-text">- 如何解决大key这个问题？</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/05/%E5%85%AB%E8%82%A1-Redis-%E7%BC%93%E5%AD%98/">
+          <h3 class="post-title">
+            下一篇：八股-Redis-缓存
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+

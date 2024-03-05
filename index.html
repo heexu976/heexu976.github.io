@@ -79,6 +79,72 @@
 
 <section class="post-item">
     <div class="content">
+      <a href="/2024/03/05/%E5%85%AB%E8%82%A1-Redis-%E5%AE%9E%E6%88%98/">
+        <h2 class="post-title">八股-Redis-实战</h2>
+      </a>
+      <a href="/2024/03/05/%E5%85%AB%E8%82%A1-Redis-%E5%AE%9E%E6%88%98/">
+          <div class="post-abstract">
+            
+			    - 如何实现延迟队列？  延迟队列指的是：
+
+在淘宝、京东等购物平台上下单，超过一定时间未付款，订单会自动取消；
+打车的时候，在规定时间没有车主接单，平台会取消你的单并提醒你暂时没有车主接单；
+点外卖的时候，如果商家在10分钟还没接单，就会
+            
+          </div>
+      </a>
+      <div class="post-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-05</span>
+        
+          <span>
+            <i class="icon icon-pricetags-outline"></i>
+            
+
+                八股
+                
+            
+          </span>
+        
+      </div>
+    </div>
+  </section>
+
+
+
+<section class="post-item">
+    <div class="content">
+      <a href="/2024/03/05/%E5%85%AB%E8%82%A1-Redis-%E7%BC%93%E5%AD%98/">
+        <h2 class="post-title">八股-Redis-缓存</h2>
+      </a>
+      <a href="/2024/03/05/%E5%85%AB%E8%82%A1-Redis-%E7%BC%93%E5%AD%98/">
+          <div class="post-abstract">
+            
+			    存雪崩含义当大量缓存数据在同一时间过期（失效）或者 Redis 故障宕机时，如果此时有大量的用户请求，就会全部请求访问数据库，造成数据库的压力骤增，严重的会造成数据库宕机
+解决措施针对大量数据同时过期
+均匀设置过期的时间（给数据过期时间加上
+            
+          </div>
+      </a>
+      <div class="post-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-05</span>
+        
+          <span>
+            <i class="icon icon-pricetags-outline"></i>
+            
+
+                八股
+                
+            
+          </span>
+        
+      </div>
+    </div>
+  </section>
+
+
+
+<section class="post-item">
+    <div class="content">
       <a href="/2024/03/04/%E5%85%AB%E8%82%A1-Redis-%E8%BF%87%E6%9C%9F%E5%88%A0%E9%99%A4%E5%92%8C%E5%86%85%E5%AD%98%E6%B7%98%E6%B1%B0/">
         <h2 class="post-title">八股-Redis-过期删除和内存淘汰</h2>
       </a>
@@ -322,72 +388,6 @@ UPDATE t_user SET name &#x3D; &#39;xiaolin&#39; WHERE id &#x3D; 1;
 用途：全局锁主要应用于做全库逻辑备份。
 缺点：备份的时候占着数据库。
 解决方式：如果想备份的时候不开
-            
-          </div>
-      </a>
-      <div class="post-info">
-        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
-        
-          <span>
-            <i class="icon icon-pricetags-outline"></i>
-            
-
-                八股
-                
-            
-          </span>
-        
-      </div>
-    </div>
-  </section>
-
-
-
-<section class="post-item">
-    <div class="content">
-      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E4%BA%8B%E5%8A%A1/">
-        <h2 class="post-title">八股-MySql-事务</h2>
-      </a>
-      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E4%BA%8B%E5%8A%A1/">
-          <div class="post-abstract">
-            
-			    - 说说ACID是什么意思？
-A 原子性：要寄一块寄，要提交一块提交。通过undo log日志保证
-C 一致性：事务操作前和操作后，数据满足完整性约束，数据库保持一致性状态。 通过保证原子性、一致性、隔离性保证
-I 隔离性：防止并发事务执行
-            
-          </div>
-      </a>
-      <div class="post-info">
-        <span><i class="icon icon-calendar-outline"></i> 2024-03-03</span>
-        
-          <span>
-            <i class="icon icon-pricetags-outline"></i>
-            
-
-                八股
-                
-            
-          </span>
-        
-      </div>
-    </div>
-  </section>
-
-
-
-<section class="post-item">
-    <div class="content">
-      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E7%B4%A2%E5%BC%95/">
-        <h2 class="post-title">八股-MySql-索引</h2>
-      </a>
-      <a href="/2024/03/03/%E5%85%AB%E8%82%A1-MySql-%E7%B4%A2%E5%BC%95/">
-          <div class="post-abstract">
-            
-			    - B树和B+树的区别？
-B+叶子节点有所有索引的冗余和其对应的数据，非叶子节点没有数据，B树没有冗余，非叶子节点有数据
-B+树最后肯定会查询到底，且其叶子节点都排好序了B树可能只查询到中间
-B+树叶子节点之间相互之间也构成一个双向链表，B
             
           </div>
       </a>
