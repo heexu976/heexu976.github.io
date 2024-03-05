@@ -115,11 +115,62 @@
 <ul>
 <li>难以确定删除操作执行的时长和频率。如果执行的太频繁，就会对 CPU 不友好；如果执行的太少，那又和惰性删除一样了，过期 key 占用的内存不会及时得到释放。</li>
 </ul>
+<h2 id="redis持久化的时候会对过期键如何进行处理呢？"><a href="#redis持久化的时候会对过期键如何进行处理呢？" class="headerlink" title="- redis持久化的时候会对过期键如何进行处理呢？"></a>- <strong>redis持久化的时候会对过期键如何进行处理呢？</strong></h2><ul>
+<li>RDB 文件分为两个阶段，RDB 文件生成阶段和加载阶段。<ul>
+<li><strong>RDB 文件生成阶段</strong>：从内存状态持久化成 RDB（文件）的时候，会对 key 进行过期检查，<strong>过期的键「不会」被保存到新的 RDB 文件中</strong>。</li>
+<li><strong>RDB 加载阶段</strong>：RDB 加载阶段时，要看服务器是主服务器还是从服务器，分别对应以下两种情况：<ul>
+<li><strong>如果 Redis 是「主服务器」运行模式的话，在载入 RDB 文件时，程序会对文件中保存的键进行检查，过期键「不会」被载入到数据库中</strong>。所以过期键不会对载入 RDB 文件的主服务器造成影响；</li>
+<li><strong>如果 Redis 是「从服务器」运行模式的话，在载入 RDB 文件时，不论键是否过期都会被载入到数据库中</strong>。但由于主从服务器在进行数据同步时，从服务器的数据会被清空。所以一般来说，过期键对载入 RDB 文件的从服务器也不会造成影响。</li>
+</ul>
+</li>
+<li>AOF 文件分为两个阶段，AOF 文件写入阶段和 AOF 重写阶段。<ul>
+<li><strong>AOF 文件写入阶段</strong>：当 Redis 以 AOF 模式持久化时，<strong>如果数据库某个过期键还没被删除，那么 AOF 文件会保留此过期键，当此过期键被删除后，Redis 会向 AOF 文件追加一条 DEL 命令来显式地删除该键值</strong>。</li>
+<li><strong>AOF 重写阶段</strong>：执行 AOF 重写时，会对 Redis 中的键值对进行检查，<strong>已过期的键不会被保存到重写后的 AOF 文件中</strong>，因此不会对 AOF 重写造成任何影响。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="redis主从模式中对过期键是如何处理的？"><a href="#redis主从模式中对过期键是如何处理的？" class="headerlink" title="- redis主从模式中对过期键是如何处理的？"></a>- redis主从模式中对过期键是如何处理的？</h2><p>  当 Redis 运行在主从模式下时，<strong>从库不会进行过期扫描，从库对过期的处理是被动的</strong>。也就是即使从库中的 key 过期了，如果有客户端访问从库时，依然可以得到 key 对应的值，像未过期的键值对一样返回。</p>
+<p>  从库的过期键处理依靠主服务器控制，<strong>主库在 key 到期时，会在 AOF 文件里增加一条 del 指令，同步到所有的从库</strong>，从库通过执行这条 del 指令来删除过期的 key。</p>
+<h2 id="redis内存满了会发生什么"><a href="#redis内存满了会发生什么" class="headerlink" title="- redis内存满了会发生什么?"></a>- redis内存满了会发生什么?</h2><p>  在 Redis 的运行内存达到了某个阀值，就会触发<strong>内存淘汰机制</strong>，这个阀值就是我们设置的最大运行内存，此值在 Redis 的配置文件中可以找到，配置项为 maxmemory。</p>
+<h2 id="redis内存淘汰策略有哪些？"><a href="#redis内存淘汰策略有哪些？" class="headerlink" title="- redis内存淘汰策略有哪些？"></a>- <strong>redis内存淘汰策略有哪些？</strong></h2><p><strong>noeviction</strong>：不再提供服务，不删除任何数据，直接返回错误</p>
+<p>在设置过期时间的key里挑：</p>
+<ul>
+<li><strong>volatile-random</strong>：随机淘汰设置了过期时间的任意键值；</li>
+<li><strong>volatile-ttl</strong>：优先淘汰更早过期的键值。</li>
+<li><strong>volatile-lru</strong>（Redis3.0 之前，默认的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最久未使用的键值；</li>
+<li><strong>volatile-lfu</strong>（Redis 4.0 后新增的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最少使用的键值；</li>
+</ul>
+<p>在所有数据范围里挑：</p>
+<ul>
+<li><strong>allkeys-random</strong>：随机淘汰任意键值;</li>
+<li><strong>allkeys-lru</strong>：淘汰整个键值中最久未使用的键值；</li>
+<li><strong>allkeys-lfu</strong>（Redis 4.0 后新增的内存淘汰策略）：淘汰整个键值中最少使用的键值。</li>
+</ul>
+<h2 id="说说LRU和LFU两种算法？"><a href="#说说LRU和LFU两种算法？" class="headerlink" title="- 说说LRU和LFU两种算法？"></a>- 说说LRU和LFU两种算法？</h2><ul>
+<li><p><strong>LRU</strong> 全称是 Least Recently Used 翻译为<strong>最近最少使用</strong>，会选择淘汰最近最少使用的数据。</p>
+<p>  传统 LRU 算法的实现是基于「链表」结构，链表中的元素按照操作顺序从前往后排列，最新操作的键会被移动到表头，当需要内存淘汰时，只需要删除链表尾部的元素即可，因为链表尾部的元素就代表最久未被使用的元素。</p>
+<p>  redis并没有这么实现lru算法，Redis 实现的是一种<strong>近似 LRU 算法</strong>，目的是为了更好的节约内存，它的<strong>实现方式是在 Redis 的对象结构体中添加一个额外的字段，用于记录此数据的最后一次访问时间</strong>。</p>
+<p>  当 Redis 进行内存淘汰时，会使用<strong>随机采样的方式来淘汰数据</strong>，它是随机取 5 个值（此值可配置），然后<strong>淘汰最久没有使用的那个</strong>。</p>
+<p>  Redis 实现的 LRU 算法的优点：</p>
+<ul>
+<li><p>不用为所有的数据维护一个大链表，节省了空间占用；</p>
+</li>
+<li><p>不用在每次数据访问时都移动链表项，提升了缓存的性能；</p>
+<p>但是 LRU 算法有一个问题，<strong>无法解决缓存污染问题</strong>，比如应用一次读取了大量的数据，而这些数据只会被读取这一次，那么这些数据会留存在 Redis 缓存中很长一段时间，造成缓存污染。</p>
+</li>
+</ul>
+</li>
+<li><p><strong>LFU</strong> 全称是 Least Frequently Used 翻译为<strong>最近最不常用的</strong>，LFU 算法是根据数据访问次数来淘汰数据的，它的核心思想是“如果数据过去被访问多次，那么将来被访问的频率也更高”。</p>
+</li>
+</ul>
+<p>所以，<strong>LFU 算法会记录每个数据的访问次数</strong>。当一个数据被再次访问时，就会增加该数据的访问次数。这样就解决了偶尔被访问一次之后，数据留存在缓存中很长一段时间的问题，相比于 LRU 算法也更合理一些。</p>
 
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E5%A6%82%E4%BD%95%E5%88%A4%E6%96%AD%E6%95%B0%E6%8D%AE%E6%98%AF%E5%90%A6%E8%BF%87%E6%9C%9F%EF%BC%9F"><span class="top-box-text">- redis如何判断数据是否过期？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E8%BF%87%E6%9C%9F%E6%95%B0%E6%8D%AE%E7%9A%84%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- redis过期数据的删除策略有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E6%83%B0%E6%80%A7%E5%88%A0%E9%99%A4%E5%92%8C%E5%AE%9A%E6%9C%9F%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5%E7%9A%84%E4%BC%98%E7%BC%BA%E7%82%B9%EF%BC%9F"><span class="top-box-text">- 说说惰性删除和定期删除策略的优缺点？</span></a></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E5%A6%82%E4%BD%95%E5%88%A4%E6%96%AD%E6%95%B0%E6%8D%AE%E6%98%AF%E5%90%A6%E8%BF%87%E6%9C%9F%EF%BC%9F"><span class="top-box-text">- redis如何判断数据是否过期？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E8%BF%87%E6%9C%9F%E6%95%B0%E6%8D%AE%E7%9A%84%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- redis过期数据的删除策略有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4%E6%83%B0%E6%80%A7%E5%88%A0%E9%99%A4%E5%92%8C%E5%AE%9A%E6%9C%9F%E5%88%A0%E9%99%A4%E7%AD%96%E7%95%A5%E7%9A%84%E4%BC%98%E7%BC%BA%E7%82%B9%EF%BC%9F"><span class="top-box-text">- 说说惰性删除和定期删除策略的优缺点？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E6%8C%81%E4%B9%85%E5%8C%96%E7%9A%84%E6%97%B6%E5%80%99%E4%BC%9A%E5%AF%B9%E8%BF%87%E6%9C%9F%E9%94%AE%E5%A6%82%E4%BD%95%E8%BF%9B%E8%A1%8C%E5%A4%84%E7%90%86%E5%91%A2%EF%BC%9F"><span class="top-box-text">- redis持久化的时候会对过期键如何进行处理呢？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E4%B8%BB%E4%BB%8E%E6%A8%A1%E5%BC%8F%E4%B8%AD%E5%AF%B9%E8%BF%87%E6%9C%9F%E9%94%AE%E6%98%AF%E5%A6%82%E4%BD%95%E5%A4%84%E7%90%86%E7%9A%84%EF%BC%9F"><span class="top-box-text">- redis主从模式中对过期键是如何处理的？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E5%86%85%E5%AD%98%E6%BB%A1%E4%BA%86%E4%BC%9A%E5%8F%91%E7%94%9F%E4%BB%80%E4%B9%88"><span class="top-box-text">- redis内存满了会发生什么?</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#redis%E5%86%85%E5%AD%98%E6%B7%98%E6%B1%B0%E7%AD%96%E7%95%A5%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- redis内存淘汰策略有哪些？</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E8%AF%B4%E8%AF%B4LRU%E5%92%8CLFU%E4%B8%A4%E7%A7%8D%E7%AE%97%E6%B3%95%EF%BC%9F"><span class="top-box-text">- 说说LRU和LFU两种算法？</span></a></li></ol>
         </div>
           
       </div>
