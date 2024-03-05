@@ -143,11 +143,35 @@
 <p> 这样 Redis 会将这个 key 放入到一个异步线程中进行删除，这样不会阻塞主线程。</p>
 </li>
 </ol>
+<h1 id="Redis-实现分布式锁"><a href="#Redis-实现分布式锁" class="headerlink" title="- Redis 实现分布式锁"></a>- Redis 实现分布式锁</h1><p>Redis 本身可以被多个客户端共享访问，正好就是一个共享存储系统，可以用来保存分布式锁，而且 Redis 的读写性能高，可以应对高并发的锁操作场景。</p>
+<p>Redis 的 SET 命令有个 NX 参数可以实现「key不存在才插入」，所以可以用它来实现分布式锁：</p>
+<ul>
+<li>如果 key 不存在，则显示插入成功，可以用来表示加锁成功；</li>
+<li>如果 key 存在，则会显示插入失败，可以用来表示加锁失败。</li>
+</ul>
+<p><strong>三个要保证的问题</strong></p>
+<ol>
+<li>互斥性：任何时刻都只有一个客户端持有锁</li>
+<li>不能出现死锁：一个客户端持有锁然后寄了，这个客户端崩溃也要保证后面的其它客户端可以上锁</li>
+</ol>
+<p>设置超时机制，超过时间了自动失效，就不会出现死锁，至于超时时间如何确定：</p>
+<p>在Redisson框架实现分布式锁的思路，就使用<strong>watchDog机制</strong>实现锁的续期。当加锁成功后，同时开启守护线程，默认有效期是30秒，每隔10秒就会给锁续期到30秒，只要持有锁的客户端没有宕机，就能保证一直持有锁，直到业务代码执行完毕由客户端自己解锁，如果宕机了自然就在有效期失效后自动解锁。</p>
+<ol start="3">
+<li>保证上锁和解锁都是同一个客户端</li>
+</ol>
+<p>setnx的key可以根据业务需要调整，value可以使用uuid保证唯一，用于标识加锁的客户端，保证加锁解锁都是一个客户端</p>
+<p><strong>如何实现可重入锁</strong></p>
+<p>用Redis的哈希表存储可重入次数，当加锁成功后，使用<code>hset</code>命令，value(重入次数)则是1。如果同一个客户端再次加锁成功，则使用<code>hincrby</code>自增加一。</p>
+<p>解锁时，先判断可重复次数是否大于0，大于0则减一，否则删除键值，释放锁资源。</p>
+<p><strong>解决获取锁失败后的轮询性能问题</strong></p>
+<p>当加锁失败后，订阅锁释放的消息，自身进入阻塞状态。</p>
+<p>当持有锁的客户端释放锁的时候，发布锁释放的消息。</p>
+<p>当进入阻塞等待的其他客户端收到锁释放的消息后，解除阻塞等待状态，再次尝试加锁。</p>
 
         </div>
           
         <div class="top-div">
-          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E5%BB%B6%E8%BF%9F%E9%98%9F%E5%88%97%EF%BC%9F"><span class="top-box-text">- 如何实现延迟队列？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%BA%8B%E5%8A%A1%E6%94%AF%E6%8C%81%E5%9B%9E%E6%BB%9A%E5%90%97%EF%BC%9F"><span class="top-box-text">- redis事务支持回滚吗？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%B8%AD%E7%9A%84%E7%AE%A1%E9%81%93%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F"><span class="top-box-text">- redis中的管道有什么作用？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%B8%AD%E5%A4%A7key%E6%9C%89%E4%BB%80%E4%B9%88%E5%8D%B1%E5%AE%B3%EF%BC%9F"><span class="top-box-text">- redis中大key有什么危害？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3%E5%A4%A7key%E8%BF%99%E4%B8%AA%E9%97%AE%E9%A2%98%EF%BC%9F"><span class="top-box-text">- 如何解决大key这个问题？</span></a></li></ol>
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E5%BB%B6%E8%BF%9F%E9%98%9F%E5%88%97%EF%BC%9F"><span class="top-box-text">- 如何实现延迟队列？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%BA%8B%E5%8A%A1%E6%94%AF%E6%8C%81%E5%9B%9E%E6%BB%9A%E5%90%97%EF%BC%9F"><span class="top-box-text">- redis事务支持回滚吗？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%B8%AD%E7%9A%84%E7%AE%A1%E9%81%93%E6%9C%89%E4%BB%80%E4%B9%88%E4%BD%9C%E7%94%A8%EF%BC%9F"><span class="top-box-text">- redis中的管道有什么作用？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#redis%E4%B8%AD%E5%A4%A7key%E6%9C%89%E4%BB%80%E4%B9%88%E5%8D%B1%E5%AE%B3%EF%BC%9F"><span class="top-box-text">- redis中大key有什么危害？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3%E5%A4%A7key%E8%BF%99%E4%B8%AA%E9%97%AE%E9%A2%98%EF%BC%9F"><span class="top-box-text">- 如何解决大key这个问题？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#Redis-%E5%AE%9E%E7%8E%B0%E5%88%86%E5%B8%83%E5%BC%8F%E9%94%81"><span class="top-box-text">- Redis 实现分布式锁</span></a></li></ol>
         </div>
           
       </div>

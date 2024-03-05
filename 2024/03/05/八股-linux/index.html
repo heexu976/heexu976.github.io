@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-linux</title>
+<meta name="keywords" content="八股-linux, HeXu">
+<meta name="description" content="- 你都接触过哪些linux命令？
+较常用的就是一些目录切换的命令比如cd..，cd ~，cd &#x2F;
+还有一些目录操作命令比如，ls，ll，mkdir，pwd等
+还有就是一些文件操作命令，比如touch，cgat，vim等（引申到平">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-linux">
+<meta property="og:description" content="- 你都接触过哪些linux命令？
+较常用的就是一些目录切换的命令比如cd..，cd ~，cd &#x2F;
+还有一些目录操作命令比如，ls，ll，mkdir，pwd等
+还有就是一些文件操作命令，比如touch，cgat，vim等（引申到平">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-linux</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-05</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="你都接触过哪些linux命令？"><a href="#你都接触过哪些linux命令？" class="headerlink" title="- 你都接触过哪些linux命令？"></a>- <strong>你都接触过哪些linux命令？</strong></h1><ul>
+<li>较常用的就是一些<strong>目录切换</strong>的命令比如cd..，cd ~，cd &#x2F;</li>
+<li>还有一些<strong>目录操作</strong>命令比如，ls，ll，mkdir，pwd等</li>
+<li>还有就是一些<strong>文件操作</strong>命令，比如touch，cgat，vim等（引申到平时工作使用的<code>tail -n filename</code>查看日志），还有就是修改文件的权限chmod（一般都是直接<code>chmod filename 777</code>），还有就是结合别的命令使用的grep(引申到在日志中查找关键词附近的日志<code>cat -n filename | grep —C 5 &quot;关键字&quot;</code>，其中-C 5表示匹配字符串的前后5行)</li>
+<li>还有一些<strong>查看系统状态</strong>的命令，如top（实时查看系统的cpu使用率，内存使用率，进程信息等），free（查看系统的内存使用情况），ps（于查看系统中的进程信息，包括进程的 ID、状态、资源使用情况等），ps -aux查看当前系统运行的进程</li>
+<li>还有一些<strong>网络通信</strong>的命令，比如ping，ifconfig（查看系统的网络接口信息，包括网络接口的 IP 地址、MAC 地址、状态等），netstat（可以查看当前的网络连接情况、监听端口、网络协议等）</li>
+<li>还有一些常用的比如，sudo+其它命令，<code>kill -9 pid</code>（杀死进程）</li>
+</ul>
+<h1 id="top和tail命令是什么意思？"><a href="#top和tail命令是什么意思？" class="headerlink" title="- top和tail命令是什么意思？"></a>- <strong>top</strong>和<strong>tail</strong>命令是什么意思？</h1><p>  top就是查看正在运行的进程的性能信息</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/68HacxXmcUWoGCLRRRapX8/1675053109244.png?auth_key=1709608084-dVVtNcT7D3nrLc4NxMPrHj-0-5fdbb4126ca3fc0f0d4d5e5abf95cdfd"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/68HacxXmcUWoGCLRRRapX8/1675053109244.png?auth_key=1709608084-dVVtNcT7D3nrLc4NxMPrHj-0-5fdbb4126ca3fc0f0d4d5e5abf95cdfd"  lazyload></a></p>
+<p>  tail就是查看文件的内容，<strong>不断刷新文件</strong>的最后内容</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/2QfdtyWJTXRgb1cnBM2c9/1675053205927.png?auth_key=1709608084-g95QnwEBErrbPHSuMpMDUj-0-8417cf6c45a8ef94b3789f7e5106724b"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/2QfdtyWJTXRgb1cnBM2c9/1675053205927.png?auth_key=1709608084-g95QnwEBErrbPHSuMpMDUj-0-8417cf6c45a8ef94b3789f7e5106724b"  lazyload></a></p>
+<h1 id="netstat什么意思？"><a href="#netstat什么意思？" class="headerlink" title="- netstat什么意思？"></a>- <strong>netstat</strong>什么意思？</h1><p>  显示当前的网络情况，比如网卡设备，统计信息啥的</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/96HxP6uxe3ARQVKsi8Ndbe/1675053254726.png?auth_key=1709608111-bsbug8aBZc7MNfDGqULo4f-0-f976120538ffbc9102aa7a277c27dce2"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/96HxP6uxe3ARQVKsi8Ndbe/1675053254726.png?auth_key=1709608111-bsbug8aBZc7MNfDGqULo4f-0-f976120538ffbc9102aa7a277c27dce2"  lazyload></a></p>
+<h1 id="NAT是什么？"><a href="#NAT是什么？" class="headerlink" title="- NAT是什么？"></a>- <strong>NAT</strong>是什么？</h1><p>  是用于在本地网络中使用<strong>私有地址</strong>，在连接互联网时转而<strong>使用全局 IP 地址</strong>的<strong>技术</strong></p>
+<h1 id="知道pid怎么查这个进程"><a href="#知道pid怎么查这个进程" class="headerlink" title="- 知道pid怎么查这个进程"></a>- 知道pid怎么查这个进程</h1><p>  <code>ps aux | grep pid</code> 其中pid是要查的进程的pid</p>
+<h1 id="怎么查看内存使用情况？"><a href="#怎么查看内存使用情况？" class="headerlink" title="- 怎么查看内存使用情况？"></a>- 怎么查看内存使用情况？</h1><p>  <code>free</code>命令</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/mEvBs1nWYGajrSPMBZuaix/1675053340798.png?auth_key=1709608163-8iGXLXF4mLbQrQ9Yi1ogE-0-f6705a61ea3e53ce4c8266ad93000a39"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/mEvBs1nWYGajrSPMBZuaix/1675053340798.png?auth_key=1709608163-8iGXLXF4mLbQrQ9Yi1ogE-0-f6705a61ea3e53ce4c8266ad93000a39"  lazyload></a></p>
+<h1 id="lsof怎么用？如何查看端口被哪个进程占用？"><a href="#lsof怎么用？如何查看端口被哪个进程占用？" class="headerlink" title="- lsof怎么用？如何查看端口被哪个进程占用？"></a>- <strong>lsof怎么用？如何查看端口被哪个进程占用？</strong></h1><p><code>lsof ［options］ filename </code><strong>显示打开指定文件的所有进程</strong></p>
+<p><code>lsof -i:端口号</code> 查看某一端口的占用情况</p>
+<h1 id="查看磁盘占用情况，哪个目录用的磁盘空间最多？"><a href="#查看磁盘占用情况，哪个目录用的磁盘空间最多？" class="headerlink" title="- 查看磁盘占用情况，哪个目录用的磁盘空间最多？"></a>- 查看磁盘占用情况，哪个目录用的磁盘空间最多？</h1><p>  <code>df -h</code>查看磁盘占用情况</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/pSM2TLEE2wbgsnTpy2ZYdY/1675394262393.png?auth_key=1709608226-v1uBfQvVLBZsJU9Ngj5JTi-0-8b948e8cf896b10edf703b46c5daded5"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/pSM2TLEE2wbgsnTpy2ZYdY/1675394262393.png?auth_key=1709608226-v1uBfQvVLBZsJU9Ngj5JTi-0-8b948e8cf896b10edf703b46c5daded5"  lazyload></a></p>
+<p>  <code>du -s /* | sort -nr</code> 看那个目录占用空间大</p>
+<p>  <a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/7jVo4q7KWCdUKBHnYhAEcE/1675394279640.png?auth_key=1709608226-fbfMp8fjtPdgmKzRu8USPH-0-758a9e7b89ed802cdad4097ec6536c26"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/7jVo4q7KWCdUKBHnYhAEcE/1675394279640.png?auth_key=1709608226-fbfMp8fjtPdgmKzRu8USPH-0-758a9e7b89ed802cdad4097ec6536c26"  lazyload></a></p>
+<p>  然后再用<code>du -s /root/* | sort -nr</code>一层一层排查</p>
+<ul>
+<li><p><strong>ps</strong>什么意思？（如何根据进程名查找进程，通过进程ID查找进程？）</p>
+<p>查看<strong>正在运行</strong>的<strong>进程</strong>， <code>ps aux</code>查看所有的进程</p>
+<p><a class="simple-lightbox" target="_blank" rel="noopener" href="https://secure2.wostatic.cn/static/2qZfzFjBBdULaL9Se8kcPV/1675053390465.png?auth_key=1709608242-7bbuV7WoEotd1d1LNjfPkK-0-98cf78cc7849bbc4c0d46eeddf70a248"><img   src="/images/loading.svg" data-src="https://secure2.wostatic.cn/static/2qZfzFjBBdULaL9Se8kcPV/1675053390465.png?auth_key=1709608242-7bbuV7WoEotd1d1LNjfPkK-0-98cf78cc7849bbc4c0d46eeddf70a248"  lazyload></a></p>
+</li>
+</ul>
+<pre class="line-numbers language-Bash" data-language="Bash"><code class="language-Bash">ps -ef | grep &quot;进程名称&quot;
+
+ps -p &lt;PID&gt;
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="linux常见的文件类型有哪些？"><a href="#linux常见的文件类型有哪些？" class="headerlink" title="- linux常见的文件类型有哪些？"></a>- linux常见的文件类型有哪些？</h1><ul>
+<li><strong>普通文件</strong>：文本文件或者二进制文件</li>
+<li><strong>目录文件</strong>：文件夹</li>
+<li><strong>链接文件</strong>：类似于windows中的快捷方式，包括硬链接、软链接等等</li>
+<li><strong>套接字文件</strong>：socket</li>
+<li>字符设备文件</li>
+<li>设备块文件</li>
+<li><strong>管道文件</strong>：命名管道将文件保留在文件系统中，它也称为FIFO，也就是first in first out。虽然命名管道文件保留在文件系统中，但是这个文件只是使用命名管道的一个入口，在使用命名管道传输数据的时候，仍然是在内存中进行的。</li>
+</ul>
+<h1 id="Linux常用查看日志的命令有哪些？"><a href="#Linux常用查看日志的命令有哪些？" class="headerlink" title="- Linux常用查看日志的命令有哪些？"></a>- Linux常用查看日志的命令有哪些？</h1><ol>
+<li>查看实时变化的日志：<code>tail -n filename</code>（可以指定显示行数，默认是最后10行）</li>
+<li>搜索关键字附近的日志：<code>cat -n filename | grep &quot;关键字&quot;</code></li>
+<li>直接进入vim模式，输入<code>/关键字</code>，然后按<code>enter</code>查找，查找下一个就按<code>n</code></li>
+</ol>
+<h1 id="find命令如何使用？（查看某个文件在哪）"><a href="#find命令如何使用？（查看某个文件在哪）" class="headerlink" title="- find命令如何使用？（查看某个文件在哪）"></a>- find命令如何使用？（查看某个文件在哪）</h1><pre class="line-numbers language-Bash" data-language="Bash"><code class="language-Bash">find &#x2F;path&#x2F;to&#x2F;search -name &quot;filename&quot;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E4%BD%A0%E9%83%BD%E6%8E%A5%E8%A7%A6%E8%BF%87%E5%93%AA%E4%BA%9Blinux%E5%91%BD%E4%BB%A4%EF%BC%9F"><span class="top-box-text">- 你都接触过哪些linux命令？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#top%E5%92%8Ctail%E5%91%BD%E4%BB%A4%E6%98%AF%E4%BB%80%E4%B9%88%E6%84%8F%E6%80%9D%EF%BC%9F"><span class="top-box-text">- top和tail命令是什么意思？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#netstat%E4%BB%80%E4%B9%88%E6%84%8F%E6%80%9D%EF%BC%9F"><span class="top-box-text">- netstat什么意思？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#NAT%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="top-box-text">- NAT是什么？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E7%9F%A5%E9%81%93pid%E6%80%8E%E4%B9%88%E6%9F%A5%E8%BF%99%E4%B8%AA%E8%BF%9B%E7%A8%8B"><span class="top-box-text">- 知道pid怎么查这个进程</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E6%80%8E%E4%B9%88%E6%9F%A5%E7%9C%8B%E5%86%85%E5%AD%98%E4%BD%BF%E7%94%A8%E6%83%85%E5%86%B5%EF%BC%9F"><span class="top-box-text">- 怎么查看内存使用情况？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#lsof%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F%E5%A6%82%E4%BD%95%E6%9F%A5%E7%9C%8B%E7%AB%AF%E5%8F%A3%E8%A2%AB%E5%93%AA%E4%B8%AA%E8%BF%9B%E7%A8%8B%E5%8D%A0%E7%94%A8%EF%BC%9F"><span class="top-box-text">- lsof怎么用？如何查看端口被哪个进程占用？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E6%9F%A5%E7%9C%8B%E7%A3%81%E7%9B%98%E5%8D%A0%E7%94%A8%E6%83%85%E5%86%B5%EF%BC%8C%E5%93%AA%E4%B8%AA%E7%9B%AE%E5%BD%95%E7%94%A8%E7%9A%84%E7%A3%81%E7%9B%98%E7%A9%BA%E9%97%B4%E6%9C%80%E5%A4%9A%EF%BC%9F"><span class="top-box-text">- 查看磁盘占用情况，哪个目录用的磁盘空间最多？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#linux%E5%B8%B8%E8%A7%81%E7%9A%84%E6%96%87%E4%BB%B6%E7%B1%BB%E5%9E%8B%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- linux常见的文件类型有哪些？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#Linux%E5%B8%B8%E7%94%A8%E6%9F%A5%E7%9C%8B%E6%97%A5%E5%BF%97%E7%9A%84%E5%91%BD%E4%BB%A4%E6%9C%89%E5%93%AA%E4%BA%9B%EF%BC%9F"><span class="top-box-text">- Linux常用查看日志的命令有哪些？</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#find%E5%91%BD%E4%BB%A4%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8%EF%BC%9F%EF%BC%88%E6%9F%A5%E7%9C%8B%E6%9F%90%E4%B8%AA%E6%96%87%E4%BB%B6%E5%9C%A8%E5%93%AA%EF%BC%89"><span class="top-box-text">- find命令如何使用？（查看某个文件在哪）</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/05/%E5%85%AB%E8%82%A1-Redis-%E5%AE%9E%E6%88%98/">
+          <h3 class="post-title">
+            下一篇：八股-Redis-实战
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
