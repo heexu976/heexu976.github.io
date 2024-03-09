@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>八股-ElasticSearch</title>
+<meta name="keywords" content="八股-ElasticSearch, HeXu">
+<meta name="description" content="ES 基础
+什么是 Elastic SearchElasticsearch是一个开源的分布式搜索和分析引擎，用于实时存储、搜索和分析大规模数据集。 
+Elasticsearch 故名思议，Elastic Search 一个分布式搜索中间件。">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="八股-ElasticSearch">
+<meta property="og:description" content="ES 基础
+什么是 Elastic SearchElasticsearch是一个开源的分布式搜索和分析引擎，用于实时存储、搜索和分析大规模数据集。 
+Elasticsearch 故名思议，Elastic Search 一个分布式搜索中间件。">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">八股-ElasticSearch</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-05</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/%E5%85%AB%E8%82%A1/">
+              八股
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <p><a target="_blank" rel="noopener" href="https://www.ruanyifeng.com/blog/2017/08/elasticsearch.html">ES 基础</a></p>
+<h1 id="什么是-Elastic-Search"><a href="#什么是-Elastic-Search" class="headerlink" title="什么是 Elastic Search"></a>什么是 Elastic Search</h1><p>Elasticsearch是一个开源的分布式搜索和分析引擎，用于实时存储、搜索和分析大规模数据集。 </p>
+<p>Elasticsearch 故名思议，Elastic Search 一个分布式搜索中间件。据说是创始人给妻子开发搜索食谱的应用时，顺手做的中间件。果然，爱情的力量是伟大的，否则也不会有至今广受使用的 Elasticsearch 了。</p>
+<p>分布式、高性能、近实时是 Elasticsearch 的特点。它可以对几乎所有类型的数据（基本值类型、地理空间、IP 等）进行搜索，这依赖于针对不同的类型建立合适的索引结构，后面的系列我们将详细分析索引部分，本次我们分析 Elasticsearch 的系统概念与读写流程。</p>
+<p>平时我们通常把 ElasticSearch 称为 ES。</p>
+<h1 id="集群-Cluster"><a href="#集群-Cluster" class="headerlink" title="集群 Cluster"></a><strong>集群 Cluster</strong></h1><p>作为一个分布式系统，肯定是需要由多个 ES 实例节点组成集群的。集群需要被管理，ES 中通过 master 来管理集群。集群为了保障高可用，避免单点故障，master 是经过选举选出来的。ES 中，并不是所有的节点都能作为 master 的候选者。</p>
+<h1 id="节点-Node"><a href="#节点-Node" class="headerlink" title="节点 Node"></a>节点 Node</h1><p>单个 ES 实例，既称为一个<strong>节点</strong>。ES 中节点可以有以下一个或多个角色：</p>
+<h2 id="候选主节点（Master-Eligible-Node）"><a href="#候选主节点（Master-Eligible-Node）" class="headerlink" title="候选主节点（Master Eligible Node）"></a>候选主节点（Master Eligible Node）</h2><p>用来选主，只有候选主节点才有选举权和被选举权，其它节点不参与选主。</p>
+<p>选举出的主节点负责创建索引、删除索引、跟踪哪些节点是群集的一部分，并决定哪些分片分配给相关的节点、追踪集群中节点的状态等，稳定的主节点对集群的健康是非常重要的。</p>
+<p>通常，为了稳定性，最好使用低配置机器创建独立的候选主节点，且不小于3个。</p>
+<h2 id="数据节点-Date-Node"><a href="#数据节点-Date-Node" class="headerlink" title="数据节点-Date Node"></a>数据节点-Date Node</h2><p>负责数据的存储和相关的操作，例如对数据进行增、删、改、查和聚合等操作，所以数据节点（Data 节点）对机器配置要求比较高，对 CPU、内存和 I&#x2F;O 的消耗很大。</p>
+<p>数据节点是集群中压力很大的节点，最好将数据节点和主节点分开，以免影响主节点稳定性，导致脑裂，造成索引、数据不一致等。</p>
+<ol>
+<li>使用 SSD ，提升磁盘读写能力</li>
+<li>除了 JVM heap 本身使用的内存外，预留一定的内存给文件缓存，能加快文件访问，避免每次都要访问磁盘</li>
+<li>禁用 swap 机制</li>
+</ol>
+<h2 id="协调节点-Coordinating-Node"><a href="#协调节点-Coordinating-Node" class="headerlink" title="协调节点-Coordinating Node"></a>协调节点-Coordinating Node</h2><p>一般来说，每个节点都可承担协调节点的角色。通常，哪个节点接收客户端请求，就是本次请求的协调节点。协调节点用来处理客户端请求，进行请求分发，结果合并，并返回给客户端。</p>
+<p>协调节点的压力介于主节点和数据节点之间，不需要很高的 io 能力。将协调节点独立，有助于降低数据节点的压力，避免互相影响。</p>
+<p>ES 集群除了可以有以上常见节点角色外，还有：Ingest node、Remote-eligible node、Machine learning node、Transform node ，感兴趣的可以取官网了解，本文就不一一介绍了。</p>
+<h1 id="分片-Shard"><a href="#分片-Shard" class="headerlink" title="分片 Shard"></a>分片 Shard</h1><p>一个 data 节点可包含多个 shard 。一个 shard 就是一个 Lucene 实例，索引由一系列 shard 组成。ES 之所以称作分布式搜索，既是可以将数据分散在多个 shard 上，提供更高的性能。</p>
+<p>因为写入时，需要通过路由，确定写在哪一个 shard 上，所以需要在索引创建时，确定好 shard 数，一旦设置后将不可变。</p>
+<h1 id="副本分片-Replica-Shard"><a href="#副本分片-Replica-Shard" class="headerlink" title="副本分片 Replica Shard"></a>副本分片 Replica Shard</h1><p>一个主 shard 可以有0个或多个副本 shard。默认每个主 shard 都有一个副本 shard，副本 shard 永远不会和主 shard 在同一节点上。主要作用：</p>
+<p>1、故障转移：当主 shard 出现故障时，可以将副本 shard 提升为主 shard。</p>
+<p>2、提高性能：get、search 请求可以交给主 shard 或副本 shard 处理。</p>
+<h1 id="Lucene"><a href="#Lucene" class="headerlink" title="Lucene"></a>Lucene</h1><p>Lucene 是一个全文检索库，ES 基于 lucene 来建立。一个 lucene 索引里有很多个 segemnt，每个 segment 都是一个索引结构。在搜索时，会搜索所有的 segment。segment 内部会构建倒排索引，用来检索。</p>
+<p>segment 不可变，所以：</p>
+<ol>
+<li>当文档删除时：lucene 将文档额外标记为删除</li>
+<li>当更新时：先删除，再插入（新的 segmeng ）</li>
+</ol>
+<h1 id="倒排索引"><a href="#倒排索引" class="headerlink" title="倒排索引"></a>倒排索引</h1><p>倒排索引（Inverted index），个人理解倒排的意思是说，普通的搜索算法，是<strong>从文档里搜索一个关键词（文档→关键词）</strong>，而倒排索引是首先知道了每个关键词都出现在了哪些文档里，<strong>从关键词搜文档（关键词→文档）</strong>，正好目的反过来，和“颠倒搜索”没什么关系。</p>
+<h3 id="倒排索引的好处"><a href="#倒排索引的好处" class="headerlink" title="倒排索引的好处"></a><strong>倒排索引的好处</strong></h3><p>想象一个场景，你要对一个很大的文件搜索其中是否有一个关键词，常规的做法是遍历整个文档，那么如果关键词在文档最后，就会非常慢</p>
+<p>倒排索引先记录了每个关键词出现在了哪些文档里，需要哪个关键词，把含有的文档直接拎出来就可以，这样就快多了</p>
+<p>主流的搜索工具，ElasticSearch都是基于倒排索引的方式</p>
+<h1 id="写入"><a href="#写入" class="headerlink" title="写入"></a>写入</h1><p><a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1531723">深入理解Elasticsearch写入过程-腾讯云开发者社区-腾讯云</a></p>
+<p>当协调节点收到写请求后，通过 routing 找到对应的主 shard，将写请求转发给主 shard，主 shard 写完之后，将写入并发发送给副本 shard，待副本 shard 写入后，返回给主 shard，当所有副本 shard 写完后，主 shard 返回请求给协调节点。</p>
+<p>当节点接收到写入请求时，先将数据写入到 index buffer 之中，此时，写入的数据还不能被搜索到，直到数据被 refresh 机制（默认1秒）刷到文件系统缓存，形成不可变的 segment 小索引，此时才能被搜索（近实时搜索）。数据被 refresh 之后，是写入到文件缓存的，并不会立刻持久化到磁盘，而是通过 flush 机制刷到磁盘。</p>
+<p>数据写入到 index buffer 中的同时，还会写入到 translog，防止数据丢失。translog 默认5秒会 fsync 到磁盘，所以理论上5秒之内写入的数据，还是有丢失的可能。translog 并不会无限增大，当数据 flush 到磁盘后，translog 就可以进行清理了。</p>
+<p>segment flush 时机：</p>
+<p>1、5分钟内没有对索引的请求</p>
+<p>2、translog 到达一定大小，默认 512m</p>
+<p>3、调用 flush api</p>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF-Elastic-Search"><span class="top-box-text">什么是 Elastic Search</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E9%9B%86%E7%BE%A4-Cluster"><span class="top-box-text">集群 Cluster</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E8%8A%82%E7%82%B9-Node"><span class="top-box-text">节点 Node</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%80%99%E9%80%89%E4%B8%BB%E8%8A%82%E7%82%B9%EF%BC%88Master-Eligible-Node%EF%BC%89"><span class="top-box-text">候选主节点（Master Eligible Node）</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E6%95%B0%E6%8D%AE%E8%8A%82%E7%82%B9-Date-Node"><span class="top-box-text">数据节点-Date Node</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%8D%8F%E8%B0%83%E8%8A%82%E7%82%B9-Coordinating-Node"><span class="top-box-text">协调节点-Coordinating Node</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%88%86%E7%89%87-Shard"><span class="top-box-text">分片 Shard</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%89%AF%E6%9C%AC%E5%88%86%E7%89%87-Replica-Shard"><span class="top-box-text">副本分片 Replica Shard</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#Lucene"><span class="top-box-text">Lucene</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%80%92%E6%8E%92%E7%B4%A2%E5%BC%95"><span class="top-box-text">倒排索引</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-3"><a class="top-box-link" href="#%E5%80%92%E6%8E%92%E7%B4%A2%E5%BC%95%E7%9A%84%E5%A5%BD%E5%A4%84"><span class="top-box-text">倒排索引的好处</span></a></li></ol></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%86%99%E5%85%A5"><span class="top-box-text">写入</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/05/%E5%85%AB%E8%82%A1-linux/">
+          <h3 class="post-title">
+            下一篇：八股-linux
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  </body>
+</html>
+

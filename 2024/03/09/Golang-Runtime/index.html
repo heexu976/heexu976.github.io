@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    
+
+    
+<script>!function(){var e=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,t=localStorage.getItem("use-color-scheme")||"auto";("dark"===t||e&&"light"!==t)&&document.documentElement.classList.toggle("dark",!0)}()</script>
+    
+
+<meta charset="utf-8" >
+
+<title>Golang-Runtime</title>
+<meta name="keywords" content="Golang-Runtime, HeXu">
+<meta name="description" content="0 前言Go 语言在运行时有两个组成部分，一部分是程序代码，另外一部分是 runtime。
+runtime 的作用是为了实现额外的功能，在程序运行时自动加载&#x2F;运行的的一些模块，runtime由4部分组成：
+
+Scheduler: ">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Golang-Runtime">
+<meta property="og:description" content="0 前言Go 语言在运行时有两个组成部分，一部分是程序代码，另外一部分是 runtime。
+runtime 的作用是为了实现额外的功能，在程序运行时自动加载&#x2F;运行的的一些模块，runtime由4部分组成：
+
+Scheduler: ">
+
+<link rel="shortcut icon" href="/source/images/favicon.ico">
+<link rel="stylesheet" href="/style/main.css">
+
+  <link rel="stylesheet" href="/style/simple-lightbox.min.css"><meta name="generator" content="Hexo 6.3.0"></head>
+  <body>
+    <div id="app" class="main">
+
+<div class="site-header-container">
+  <div class="site-header">
+    <div class="left">
+      <a href="https://heexu976.github.io">
+        <img class="avatar" src="/images/avatar.png" alt="logo" width="32px" height="32px">
+      </a>
+      <a href="https://heexu976.github.io">
+        <h1 class="site-title">HeXu</h1>
+      </a>
+    </div>
+    <div class="right">
+        <i class="icon menu-switch icon-menu-outline" ></i>
+    </div>
+  </div>
+</div>
+
+<div class="menu-container" style="height: 0;opacity: 0;">
+<nav class="menu-list">
+  
+    
+      <a href="/" class="menu purple-link">
+        首页
+      </a>
+    
+  
+    
+      <a href="/tags" class="menu purple-link">
+        标签
+      </a>
+    
+  
+    
+      <a href="/archives" class="menu purple-link">
+        归档
+      </a>
+    
+  
+    
+      <a href="/about" class="menu purple-link">
+        关于
+      </a>
+    
+  
+</nav>
+</div>
+
+
+
+  <div class="content-container">
+    <div class="post-detail">
+      
+      <h2 class="post-title">Golang-Runtime</h2>
+      <div class="post-info post-detail-info">
+        <span><i class="icon icon-calendar-outline"></i> 2024-03-09</span>
+        
+          <span>
+          <i class="icon icon-pricetags-outline"></i>
+            
+              <a href="/tags/Golang/">
+              Golang
+                
+              </a>
+            
+          </span>
+        
+      </div>
+      <div class="post-content-wrapper">
+        <div class="post-content">
+          <h1 id="0-前言"><a href="#0-前言" class="headerlink" title="0 前言"></a>0 前言</h1><p>Go 语言在运行时有两个组成部分，一部分是<strong>程序代码</strong>，另外一部分是 <strong>runtime</strong>。</p>
+<p>runtime 的作用是为了实现额外的功能，在程序运行时自动加载&#x2F;运行的的一些模块，runtime由4部分组成：</p>
+<ul>
+<li>Scheduler: 调度器管理所有的GMP，在后台执行调度循环。</li>
+<li>Memory Management: 当代码需要内存时，负责内存分配工作。</li>
+<li>Garbage Collector: 当内存不再需要时，负责回收内存。</li>
+<li>Netpoll: 网络轮询负责管理网络FD相关的读写、就绪事件。</li>
+</ul>
+<h1 id="1-调度器"><a href="#1-调度器" class="headerlink" title="1 调度器"></a>1 调度器</h1><h2 id="协程调度机制-GMP"><a href="#协程调度机制-GMP" class="headerlink" title="协程调度机制 GMP"></a>协程调度机制 GMP</h2><p>调度器本质是一个生产-消费流程，用户在程序中执行go func{}生成一个协程实体，提交到协程调度器，线程来执行(消费)。</p>
+<ul>
+<li><strong>G: goroutine</strong>，一个计算任务。由需要执行的代码和其上下文组成，上下文包括：当前代码位置，栈顶、栈底地址，状态等。</li>
+<li><strong>M: machine</strong>，系统线程，执行实体，想要在CPU上执行代码，必须有线程，与C语⾔中的线程相同，通过系统调⽤clone来创建。</li>
+<li><strong>P: processor</strong>，虚拟处理器，M必须获得P才能执行代码，否则必须陷入休眠(后台监控线程除外)，你也可以将其理解为⼀种token ，有这个token，才有在物理CPU核心上执行的权力。</li>
+</ul>
+<p><a class="simple-lightbox" href="/../images/Golang-Runtime/GMP%E7%9A%84%E5%8D%8F%E7%A8%8B%E4%BA%A7%E7%94%9F.jpg"><img   src="/images/loading.svg" data-src="/../images/Golang-Runtime/GMP%E7%9A%84%E5%8D%8F%E7%A8%8B%E4%BA%A7%E7%94%9F.jpg"  alt="alt text" lazyload></a></p>
+<p>上图左边是表示协程生产过程，包括虚拟处理器部分P和队列部分，每个P下面有 <strong>runnext</strong> 和<strong>local run quene</strong>，而<strong>global run quene</strong>是全局链表，所有P都可以共享，G执行优先级别最高是runnext，其次是本地队列，最后是全局队列。</p>
+<p><strong>runnext</strong>: 下一个执行的G，类型是一个值。<br><strong>local run quene</strong>：每个P自己队列，类型是数组，最大长度为256。<br><strong>global run quene</strong>，全局队列，类型是链表，长度没有限制。</p>
+<blockquote>
+<p><strong>为什么队列要分为本地队列和全局队列？</strong><br>为了在性能上达到更好目标，每个P执行自己的本地队列，不需要枷锁，而不同P之间频繁从全局队列获取G时要加锁的，队列分级就是避免频繁加锁，提高并发性能。<br><strong>为什么最新创建的协程会被放到runnext去优先执行？</strong><br>在计算机执行过程中，程序分为代码的局部性和数据的局部性，根据局部性原理，最近调用的代码，很大概率需要再一次调用，优先级更高，程序执行到当前时刻，变量和数据很大概率在当前CPU访问的cache里，因此访问效率也是最高的。刚刚创建的G很大概率是高优先级的G，因此放到runnext去优先执行。</p>
+</blockquote>
+<p>上图的右边是协程的消费端，包括系统线程部分，工作的线程绑定P后一直调度循环，线程是按需创建的，空闲的线程在队列里，需要时再拿出来。</p>
+<h2 id="协程生产端"><a href="#协程生产端" class="headerlink" title="协程生产端"></a>协程生产端</h2><p>新创建的协程加入队列的流程图</p>
+<p><a class="simple-lightbox" href="/../images/Golang-Runtime/%E5%8D%8F%E7%A8%8B%E5%8A%A0%E5%85%A5%E9%98%9F%E5%88%97%E6%B5%81%E7%A8%8B.jpg"><img   src="/images/loading.svg" data-src="/../images/Golang-Runtime/%E5%8D%8F%E7%A8%8B%E5%8A%A0%E5%85%A5%E9%98%9F%E5%88%97%E6%B5%81%E7%A8%8B.jpg"  alt="alt text" lazyload></a></p>
+<p>使用<strong>go func()<strong>函数，通过 <strong>newproc</strong> 打包生产一个 G，</strong>newproc</strong> 里面做了申请栈、判断当前runnext、本地队列、全局队列是否需要对已存在的G进行转移，有三种情况：</p>
+<p>第一种情况：runnext为空，新创建的G直接放到runnext去执行。<br>第二种情况：runnext为不空，本地队列未满(最大256)，把runnext旧的G转移到本地队列，新创建的G放到runnext去执行。<br>第三种情况：runnext为不空，本地队列已满(最大256)，把runnext旧的G和和本地队列的一半G放到全局队列(全局队列时链表，理论是无限大)，新创建的G放到runnext去执行。</p>
+<h2 id="协程消费端"><a href="#协程消费端" class="headerlink" title="协程消费端"></a>协程消费端</h2><p>协程消费端框架图</p>
+<p><a class="simple-lightbox" href="/../images/Golang-Runtime/%E5%8D%8F%E7%A8%8B%E6%B6%88%E8%B4%B9%E7%AB%AF.jpg"><img   src="/images/loading.svg" data-src="/../images/Golang-Runtime/%E5%8D%8F%E7%A8%8B%E6%B6%88%E8%B4%B9%E7%AB%AF.jpg"  alt="alt text" lazyload></a></p>
+<p>消费过程：</p>
+<p>每循环调度一次 <strong>schedtick</strong> 值加1，每轮询 <strong>60</strong> 次本地队列，就去全局队列获取，目的是让全局队列的G也有机会被执行。</p>
+<p><strong>schedtick</strong> 对 <strong>60</strong> 取模等于 0 的消费过程</p>
+<p>全局队列不为空，本地队列不为空情况，从全局队列获取一个 <strong>G</strong> 来执行</p>
+<p><strong>schedtick 对60取模不为0的消费过程：</strong></p>
+<ul>
+<li>当 runnext 有G，直接从 runnext 获取G执行。</li>
+<li>当 runnext 为空，本地队列有 G，从本地队列中获取G执行</li>
+<li>当 runnext 为空，本地队列为空，全局队列有 G，从全局队列获一批G来执行，从全局队列获取G数量规则是从全局队列获取一半，如果数量超过128，最大值取128，获取的是全局队列的尾部。<br>当runnext为空，本地队列为空，全局队列为空，查询其他线程的本地队列是否有G，如果其他P的本地队列有G，就从其他P的本地队列偷取一半(后半部分)到本地队列执行，如果其他P的本地队列也为空，则挣扎一下再查询一遍，如果全局和其他P都为空，然后进入休眠状态。</li>
+</ul>
+<h2 id="阻塞"><a href="#阻塞" class="headerlink" title="阻塞"></a>阻塞</h2><p>上面的goroutine都是正常执行，当goroutine出现阻塞怎么处理呢。有些阻塞可以被runtime拦截，有些阻塞不能被runtime拦截。</p>
+<p><strong>runtime可以拦截的阻塞</strong></p>
+<p>常见会出现阻塞场景：</p>
+<ol>
+<li>调用time.Sleep函数</li>
+<li>一直往channel写数据，另一端没来得及读取channel</li>
+<li>一直读取channel数据，另一端没来得及写数据到channel</li>
+<li>使用select，如果都没有出发channel，会阻塞</li>
+</ol>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go">selct <span class="token punctuation">&#123;</span>
+    <span class="token keyword">case</span> <span class="token operator">&lt;-</span>c1<span class="token punctuation">:</span>
+        fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"c1 read"</span><span class="token punctuation">)</span>
+    <span class="token keyword">case</span> <span class="token operator">&lt;-</span>c2<span class="token punctuation">:</span>
+        fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"c2 read"</span><span class="token punctuation">)</span>    
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="5">
+<li>锁，当资源被锁了，还没释放，另一个goroutine获取不到锁，出现阻塞</li>
+<li>网络读写</li>
+</ol>
+<pre class="line-numbers language-go" data-language="go"><code class="language-go"><span class="token keyword">var</span> conn net<span class="token punctuation">.</span>Conn
+<span class="token keyword">var</span> buf <span class="token operator">=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">byte</span><span class="token punctuation">,</span> <span class="token number">1024</span><span class="token punctuation">)</span>
+
+<span class="token comment">// 读，没数据时阻塞</span>
+conn<span class="token punctuation">.</span><span class="token function">Read</span><span class="token punctuation">(</span>buf<span class="token punctuation">)</span>
+
+<span class="token comment">// 写，缓冲满时阻塞</span>
+conn<span class="token punctuation">.</span><span class="token function">Write</span><span class="token punctuation">(</span>buf<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>runtime 不能拦截的阻塞</strong></p>
+<p>有些阻塞runtime不能被捕获到，例如cgo、系统调用，执行c代码或系统调用时，如果长时间运行需要剥离P执行，单独占用⼀个线程。</p>
+<h2 id="阻塞处理"><a href="#阻塞处理" class="headerlink" title="阻塞处理"></a>阻塞处理</h2><p><strong>如果一个8核处理器的8个线程同时都执行系统调用，而且都阻塞了，怎么办？</strong></p>
+<p>需要一个专有线程 <strong>sysmon(system monitor)</strong> 专门处理这个问题，<strong>sysmon</strong> 线程拥有优高先级，而且不需要绑定P就可以执行。</p>
+<p><strong>sysmon</strong> 主要功能有三个：</p>
+<ul>
+<li><strong>checkdead</strong>: 检查所有线程是否都已经被阻塞了，如果是，则抛出异常，如果只是网络服务，这个检测不起作用，因为accept是正常运行的，不要被字面意思误解为可以检查死锁。</li>
+<li><strong>netpoll</strong>: 将g列表注入全局运行队列。</li>
+<li><strong>retake</strong>: 如果是syscall卡了很久，那就把p剥离(handoffp)，如果是用户g运行很久了(10ms)，那么发信号SIGURG抢占。</li>
+</ul>
+<h1 id="内存管理-Memory-Management"><a href="#内存管理-Memory-Management" class="headerlink" title="内存管理 Memory Management"></a>内存管理 Memory Management</h1><p>内存管理的三个角色</p>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Mutator</td>
+<td>fancy(花哨的) word for application ，其实就是你写的应用程序，它会不断地修改对象的引用关系，即对象图。</td>
+</tr>
+<tr>
+<td>Allocator</td>
+<td>内存分配器，负责管理从操作系统中分配出的内存空间，malloc 其实底层就有⼀个内存分配器的实现(glibc中)，tcmalloc是malloc多线程改进版。 Go中的实现类似tcmalloc 。</td>
+</tr>
+<tr>
+<td>Collector</td>
+<td>垃圾收集器，负责清理死对象，释放内存空间。</td>
+</tr>
+</tbody></table>
+
+        </div>
+          
+        <div class="top-div">
+          <ol class="top-box"><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#0-%E5%89%8D%E8%A8%80"><span class="top-box-text">0 前言</span></a></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#1-%E8%B0%83%E5%BA%A6%E5%99%A8"><span class="top-box-text">1 调度器</span></a><ol class="top-box-child"><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%8D%8F%E7%A8%8B%E8%B0%83%E5%BA%A6%E6%9C%BA%E5%88%B6-GMP"><span class="top-box-text">协程调度机制 GMP</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%8D%8F%E7%A8%8B%E7%94%9F%E4%BA%A7%E7%AB%AF"><span class="top-box-text">协程生产端</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E5%8D%8F%E7%A8%8B%E6%B6%88%E8%B4%B9%E7%AB%AF"><span class="top-box-text">协程消费端</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%98%BB%E5%A1%9E"><span class="top-box-text">阻塞</span></a></li><li class="top-box-item top-box-level-2"><a class="top-box-link" href="#%E9%98%BB%E5%A1%9E%E5%A4%84%E7%90%86"><span class="top-box-text">阻塞处理</span></a></li></ol></li><li class="top-box-item top-box-level-1"><a class="top-box-link" href="#%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86-Memory-Management"><span class="top-box-text">内存管理 Memory Management</span></a></li></ol>
+        </div>
+          
+      </div>
+    </div>
+
+    
+      <div class="next-post">
+        <a class="purple-link" href="/2024/03/05/%E5%85%AB%E8%82%A1-ElasticSearch/">
+          <h3 class="post-title">
+            下一篇：八股-ElasticSearch
+          </h3>
+        </a>
+      </div>
+    
+  </div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+<div class="site-footer">
+  <div class="social-container">
+    
+      
+        <a aria-label="跳转至github" href="https://github.com/heexu976" target="_blank">
+          <i class="icon icon-github"></i>
+        </a>
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+  
+  
+  
+  
+  
+  
+</div>
+</footer>
+
+
+      </div>
+    </div>
+    
+<script id="hexo-configurations"> window.theme_config = {"image":{"lazyload_enable":true,"photo_zoom":"simple-lightbox"}}; window.is_post = true; </script>
+
+<script src="/js/main.js"></script>
+
+
+
+    <script async src="https://hm.baidu.com/hm.js?b4e7880ffb5b09f08a8941a64e7d79f4"></script>
+
+
+
+
+  <script src="/js/simple-lightbox.min.js"></script><script>document.addEventListener('DOMContentLoaded', function() {new SimpleLightbox('.post-detail .simple-lightbox', {fileExt: false,captionsData:'alt'});});</script></body>
+</html>
+
